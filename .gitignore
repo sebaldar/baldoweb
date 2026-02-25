@@ -1,0 +1,18 @@
+# Segreti e configurazioni
+.env
+ssl/
+
+# Dati temporanei e sessioni
+session/
+server/logs/*.log
+server/logs/out*
+server/logs/err*
+server/*.tar.gz
+server/config.json
+
+# Cartelle di sistema o documentazione privata
+documentazione/ 
+node_modules/
+www/public/
+
+data/

@@ -1,0 +1,50 @@
+#include <iostream>
+#include <iterator>
+#include <list>
+#include <stdio.h>
+
+#include "tmysql.hpp"
+
+using namespace std;
+int main()
+{
+	
+        
+	TConnection connessione ;
+
+	connessione.Host = "localhost";
+	connessione.User = "root";
+	connessione.Password = "";
+	connessione.Db = "gestionale";
+cout << (string) connessione.Host << endl;
+cout << (string) connessione.User << endl;
+cout << (string) connessione.Password << endl;
+cout << (string) connessione.Db << endl;
+
+	connessione.Active = true;
+
+	TQuery q ("localhost", "root", "", "gestionale") ;
+	q.SQL.Add("select * from merci limit 10");
+	q.Open();
+	string val = q.FieldByName ( "codice_fornitore" );
+	cout <<  val << endl;
+
+/*
+        TmCampo nome ;
+        nome=true;
+        
+        TmQuery query("localhost","root","","gestionale");
+        query.Add("select * from merci");
+        query.Add("where codice_fornitore=\"PLA\"");
+
+        query.Open();
+        query.First();
+        while (!query.Eof()) {
+                string codice = query.Field("codice_merce") ;
+                string descrizione = query.Field("descrizione") ;
+                cout << codice << " " << descrizione << endl;
+                query.Next();
+        }
+*/
+}
+

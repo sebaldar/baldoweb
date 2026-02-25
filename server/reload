@@ -1,0 +1,1 @@
+pm2 reload ecosystem.config.cjs --update-env

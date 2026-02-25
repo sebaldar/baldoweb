@@ -1,0 +1,59 @@
+#include <iostream>
+#include <fstream>
+#include <list>
+#include <vector>
+#include <map>
+
+//#include <globals.hpp>
+
+using namespace std;
+
+int Split (const string& input, const string& delimiter, vector<string>& results,
+       bool includeEmpties);
+
+class CGI
+{
+protected:
+
+	string the_query_string ;
+	long int length;
+
+	list<string> fHeader;
+	list<string> fBody;
+
+	map<string, string> query_map;
+
+public:
+
+	string document_root;
+	string method;
+
+	enum TIPOFORM
+	{
+		STANDARD,
+		DB
+	};
+
+
+	CGI ( string tag = "" );
+	virtual ~CGI ( ) {}
+
+	string value ( string key ) ;
+	string query_string ( string key );
+
+	string query_string ( ) {
+		return the_query_string ;
+	}
+
+	void get_query_string ( string & query ) {
+		the_query_string = query ;
+	}
+
+	void header  (string type, string value);
+	void body (string row);
+
+	virtual void print ();
+
+};
+
+

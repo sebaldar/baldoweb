@@ -1,0 +1,27 @@
+CC=g++
+CFLAGS=-g
+APPNAME=curva
+DIR=$(HOME)/programmi/c++
+
+INCLUDE=	-I./ 						\
+		-I$(DIR)/Utils				\
+		-I$(DIR)/xml/include		\
+		-I$(DIR)/Curva/include			
+
+SRCFILES=$(DIR)/Curva/source/Curva.cpp			\
+		$(DIR)/Curva/matrice.cpp					\
+		$(DIR)/Utils/field.cpp						\
+		$(DIR)/Utils/Utils.cpp						\
+		$(DIR)/xml/source/xml.cpp					\
+		$(DIR)/xml/source/parser.cpp				\
+		main.cpp
+
+
+$(APPNAME) : $(SRCFILES)
+	   $(CC) $(CFLAGS) $(INCLUDE) $(SRCFILES) -o $(HOME)/bin/$(APPNAME)
+
+Debug : $(SRCFILES)
+	   $(CC) $(CFLAGS) $(INCLUDE) $(SRCFILES) -o $(HOME)/bin/$(APPNAME)
+
+install:
+	cp $(DIR)/Interprete/$(APPNAME)	/var/www/cgi-bin

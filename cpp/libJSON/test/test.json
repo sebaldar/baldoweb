@@ -1,0 +1,41 @@
+{
+	"turboWeblab":"RCX_CHECKOUT_TURBO_DESKTOP_NONPRIME_87784",
+	"strings":
+		{
+			"TURBO_CHECKOUT_HEADER":"Acquista ora: Justice League DWM50 Batman Nero",
+			"TURBO_LOADING_TEXT":"Caricamento del riepilogo degli ordini"
+		},
+	"inputs":
+		{
+			"a":"B01IKOZ6NS",
+			"quantity":"1",
+			"requestId":"PQ59VX9BAJ9FZFZV31MS",
+			"oid":"WvClEVZ0EM2mmmiMZj8g5n05FgTHgCPBZtChgILgENuTJer1Gqhk6iPDrz9HY9uLyoqwkKuJSO9BmuN5E3q0Bfzj%2FPdA51DqqkdgHOhwdKMi%2FpYibX2lsSFlZvyWr%2F7R",
+			"sessionId":"257-1496621-5859147",
+			"addressId":"add-new"
+		},
+	"configurations":
+		{
+			"isSignInEnabled":true,
+			"initiateSelector":"#buy-now-button",
+			"prefetchEnabled":true
+		},
+	"buttonID":"buy-now",
+	"eligibility":
+		{
+			"prime":false,
+			"canOneClick":false,
+			"preOrder":false,
+			"stockOnHand":503,
+			"isEligible":false,
+			"primeShipping":true,
+			"customerDefaults":false,
+			"canBuyNow":true
+		},
+	"turboWeblabTreatment":"T1",
+	"timeout":"5000",
+	"array" :
+		[
+			1,2,3
+		]
+}

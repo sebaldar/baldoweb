@@ -1,0 +1,21 @@
+int main()
+{
+	
+        
+        TmCampo nome ;
+        nome=false;
+        
+        TmQuery query("localhost","root","","gestionale");
+        query.sql.Add("select * from merci");
+        query.sql.Add("where codice_fornitore=\"PLA\"");
+
+        query.Open();
+        query.First();
+        while (!query.Eof()) {
+                string codice = query.Field("codice_merce") ;
+                string descrizione = query.Field("descrizione") ;
+                cout << codice << " " << descrizione << endl;
+                query.Next();
+        }
+}
+

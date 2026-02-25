@@ -1,0 +1,14 @@
+<processo dir="/home/sergio/programmi/c++/Simulatore" errore="0.0000000001">
+
+	<componente ident="C1">
+		<equazione>
+			<iniz>
+				y=10 const, x=5
+			</iniz>
+			x=y-ln(k)
+			k=x^2-1
+			z=sin(k)+cos(x)
+		</equazione>
+	</componente>
+
+</processo>

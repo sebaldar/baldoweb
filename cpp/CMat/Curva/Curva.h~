@@ -1,0 +1,82 @@
+#ifndef _curva_
+#define _curva_
+
+#include <string>
+#include <stdio.h>
+
+#ifndef _TYPEDEF_
+   #include <typedef.h>
+#endif
+
+#ifndef __xml__
+	#include "xml.hpp"
+#endif
+
+struct TPunto {
+	REAL x, y;
+};
+
+// una struttura di base delle curva
+class TCurvaBase {
+
+protected :
+
+	int El ;		// numero degli elementi presenti
+	const int minMem ;	// minima memoria richiesta
+
+	int fSize ;		// dimensione massima
+
+	TPunto * punto ;
+
+	// chiede nuova memoria al sistema operativo
+	void GetNewMemory () ;
+
+	// cerca in curva se esiste x, nel caso ritorna il suo indice
+	// altrimenti < 0
+	int LookUp ( float x ) ;
+
+	// ordina i punti della curva
+	void Sort( int left, int right ) ;
+
+	// scambia due elementi della curva
+	void Swap(int i, int j) ;
+
+	// interpola il valore x
+	float Interpola (float x);
+	// inverte x<->y dell'array p
+	void Invert();
+
+public :
+
+	TCurvaBase () ;
+	~TCurvaBase ();
+
+	// aggiunge un nuovo punto alla struttura Point
+	// ritorna un puntatore alla struttura creata,
+	// altrimenti NULL
+	void *add ( REAL x, REAL y );
+
+	// ricava y per interpolazione data x
+	REAL value ( REAL x );
+	// ricava x per intrepolazione data y
+	REAL Xvalue ( REAL y );
+
+} ;
+
+class Curva : public TCurvaBase {
+
+	string nome;
+	string descrizione;
+
+public:
+
+	Curva () ;
+	// crea la curva dai dati in formato xml o
+	// da un file contenente i dati in formato xml
+	Curva ( const char * xml ) ;
+	// crea la curva da un nodo della struttura xml
+	Curva ( XMLElement * root ) ;
+
+};
+
+#endif

@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planetarium 3D</title>
+    <!-- v2.4 - Clickable keyboard commands for mobile support -->
+    <link rel="stylesheet" href="planetarium.css">
+    
+    <!-- OpenLayers for map -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.5.2/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.5.2/dist/ol.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <!-- Info Panel -->
+    <div id="info-panel">
+        <div id="info-panel-header">
+            <h2>📡 Dati Simulazione</h2>
+            <span id="toggle-info-icon">▼</span>
+        </div>
+        <div id="info-panel-content">
+            <div class="info-row">
+                <span class="label">Data:</span>
+                <input type="date" id="sim-date" class="value-input" title="Formato: gg-mm-aaaa">
+            </div>
+            <div class="info-row">
+                <span class="label">Ora UT:</span>
+                <input type="time" id="sim-time" class="value-input" step="1" title="Formato: hh:mm:ss">
+            </div>
+            <div class="info-row"><span class="label">Julian Day:</span><span class="value" id="julian-day">--</span></div>
+            <div class="info-row clickable-location" onclick="openLocationDialog()" style="cursor:pointer;" title="Click per cambiare posizione">
+                <span class="label">🌍 Latitudine:</span><span class="value" id="latitude">--</span>
+            </div>
+            <div class="info-row clickable-location" onclick="openLocationDialog()" style="cursor:pointer;" title="Click per cambiare posizione">
+                <span class="label">🌍 Longitudine:</span><span class="value" id="longitude">--</span>
+            </div>
+            <div class="info-row"><span class="label">Azimut:</span><span class="value" id="azimut">--</span></div>
+            <div class="info-row"><span class="label">Altezza:</span><span class="value" id="height">--</span></div>
+            <div class="info-row"><span class="label">Oggetti visibili:</span><span class="value" id="object-count">0</span></div>
+            <div class="info-row" style="border-bottom:none;padding-top:15px;">
+                <label style="display:flex;align-items:center;cursor:pointer;user-select:none;">
+                    <input type="checkbox" id="orbit-control-toggle" style="margin-right:8px;cursor:pointer;width:16px;height:16px;">
+                    <span class="label" style="margin:0;">Controllo orbita</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection status -->
+    <div id="connection-status" class="disconnected">⚫ Disconnesso</div>
+
+    <!-- Controls -->
+    <div id="controls">
+        <button id="toggle-console">📋 Console</button>
+        <button id="toggle-help">❓ Tastiera</button>
+        <label>Zoom: <span id="zoom-value">1.0</span></label>
+        <input type="range" id="zoom-slider" min="0.1" max="3" step="0.1" value="1.0">
+    </div>
+
+    <!-- Keyboard help panel -->
+    <div id="keyboard-help">
+        <h3>⌨️ Comandi Tastiera</h3>
+        <div class="kb-grid">
+            <button class="kb-key kb-clickable" data-action="move-up">↑</button><span>Altezza +1°</span>
+            <button class="kb-key kb-clickable" data-action="move-down">↓</button><span>Altezza -1°</span>
+            <button class="kb-key kb-clickable" data-action="move-left">←</button><span>Azimut -1°</span>
+            <button class="kb-key kb-clickable" data-action="move-right">→</button><span>Azimut +1°</span>
+            <button class="kb-key kb-clickable" data-action="zoom-in">+</button><span>Zoom in</span>
+            <button class="kb-key kb-clickable" data-action="zoom-out">-</button><span>Zoom out</span>
+            <button class="kb-key kb-clickable" data-action="view-N">N</button><span>Nord</span>
+            <button class="kb-key kb-clickable" data-action="view-S">S</button><span>Sud</span>
+            <button class="kb-key kb-clickable" data-action="view-E">E</button><span>Est</span>
+            <button class="kb-key kb-clickable" data-action="view-W">W</button><span>Ovest</span>
+            <button class="kb-key kb-clickable" data-action="view-Z">Z</button><span>Zenit</span>
+            <button class="kb-key kb-clickable" data-action="toggle-horizont">H</button><span>Toggle orizzonte</span>
+            <button class="kb-key kb-clickable" data-action="toggle-light">L</button><span>Toggle luce ambiente</span>
+            <button class="kb-key kb-clickable" data-action="toggle-console">C</button><span>Mostra/nascondi console</span>
+            <button class="kb-key kb-clickable" data-action="reset">R</button><span>Reset camera</span>
+        </div>
+        <div class="kb-note">
+            ⚠️ Controlli inibiti quando focus su casella comandi o orbita attiva<br>
+            🖱️ Mouse: click → info oggetto | doppio click → naviga | scroll → zoom<br>
+            📱 Touch: tap sui comandi qui sopra per usarli
+        </div>
+    </div>
+
+    <!-- Dialog Popup -->
+    <div id="dialog-popup">
+        <button class="dialog-close" onclick="closeDialog()">×</button>
+        <div class="dialog-arrow"></div>
+        <div class="dialog-content"></div>
+    </div>
+
+    <!-- Location Dialog with Map -->
+    <div id="location-dialog" style="display:none;">
+        <div class="location-dialog-content">
+            <div class="location-dialog-header">
+                <h3>🌍 Seleziona Posizione e Vista</h3>
+                <button class="dialog-close" onclick="closeLocationDialog()">×</button>
+            </div>
+            
+            <div id="location-map" style="width:100%;height:400px;margin:15px 0;border-radius:8px;"></div>
+            
+            <div class="location-inputs">
+                <div class="input-group">
+                    <label>Longitudine:</label>
+                    <input type="number" id="location-lon" step="0.0001" min="-180" max="180">
+                </div>
+                <div class="input-group">
+                    <label>Latitudine:</label>
+                    <input type="number" id="location-lat" step="0.0001" min="-90" max="90">
+                </div>
+                <div class="input-group">
+                    <label>Direzione Vista:</label>
+                    <select id="location-direction" name="direzione">
+                        <option value="N">North</option>
+                        <option value="NE">North-East</option>
+                        <option value="E">East</option>
+                        <option value="SE">South-East</option>
+                        <option value="S">South</option>
+                        <option value="SW">South-West</option>
+                        <option value="W">West</option>
+                        <option value="NW">North-West</option>
+                        <option value="sun">Sun</option>
+                        <option value="moon">Moon</option>
+                        <option value="mercury">Mercury</option>
+                        <option value="venus">Venus</option>
+                        <option value="mars">Mars</option>
+                        <option value="jupiter">Jupiter</option>
+                        <option value="saturn">Saturn</option>
+                        <option value="uranus">Uranus</option>
+                        <option value="neptune">Neptune</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="location-dialog-footer">
+                <button class="btn-cancel" onclick="closeLocationDialog()">Annulla</button>
+                <button class="btn-confirm" onclick="confirmLocationChange()">Conferma</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Console log -->
+    <div id="console-log">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.2);padding-bottom:8px;">
+            <h3 style="margin:0;font-size:14px;">📋 Console</h3>
+            <div style="display:flex;gap:8px;">
+                <button onclick="clearConsole()" style="background:#f44336;border:none;color:white;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;">Pulisci</button>
+                <button onclick="toggleConsole()" style="background:rgba(255,255,255,0.1);border:none;color:white;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:16px;line-height:1;width:24px;height:24px;">×</button>
+            </div>
+        </div>
+        <div id="console-messages"></div>
+        <div style="display:flex;align-items:center;margin-top:10px;">
+            <span style="color:#4a9eff;font-weight:bold;margin-right:8px;font-size:14px;">&gt;</span>
+            <input type="text" id="command-input" placeholder="Invia comando al server..."
+                   onkeypress="if(event.key==='Enter') sendCommandToServer()">
+        </div>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Moduli applicazione -->
+    <script src="planetarium-webgl.js"></script>
+    <script src="planetarium-controls.js"></script>
+
+    <script>
+        // ── Configurazione ────────────────────────────────────────────────────
+
+        const WS_URL = 'wss://planetarium.baldoweb.it/ws';
+
+        let ws;
+        let deviceLatitude  = 45.46;
+        let deviceLongitude = 9.19;
+
+        // ── API init (per impostare cookies) ─────────────────────────────────
+        async function initAPI() {
+            try {
+                const response = await fetch('/api/session', {
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('📄 API Response:', data);
+                    
+                    if (data.session) {
+                        // ← FIX: Usa sessionStorage invece di cookie
+                        // Funziona sempre, anche cross-origin
+                        sessionStorage.setItem('SESSIONID', data.session);
+                        console.log('✅ SESSIONID salvato in sessionStorage:', data.session);
+                        
+                        // Verifica
+                        const saved = sessionStorage.getItem('SESSIONID');
+                        console.log('🔍 Verifica lettura:', saved);
+                        
+                        logToPage('✅ Session ID salvato', 'success');
+                        
+                        // settiamo anche il cookie
+                        // Imposta cookie con expire tra 24 ora
+                        const expires = new Date();
+                        expires.setHours(expires.getHours() + 24);
+                                
+                        document.cookie = `SESSIONID=${data.session}; expires=${expires.toUTCString()}; path=/; SameSite=None; Secure`;
+                    
+                    } else {
+                        console.error('❌ Response non contiene campo "session"');
+                        logToPage('⚠️ API: session mancante', 'warning');
+                    }
+                    
+                } else {
+                    logToPage(`⚠️ API risposta: ${response.status}`, 'warning');
+                }
+            } catch (error) {
+                logToPage('⚠️ API non disponibile', 'warning');
+                console.error('API error:', error);
+            }
+        }
+
+        // ── WebSocket helpers ─────────────────────────────────────────────────
+        function wsIsOpen() { return ws && ws.readyState === WebSocket.OPEN; }
+
+        function wsSend(obj) {
+            if (!wsIsOpen()) { logToPage('❌ WebSocket non connesso', 'error'); return; }
+            
+            // ← FIX: Aggiungi SESSIONID da sessionStorage a ogni messaggio
+            const sessionId = sessionStorage.getItem('SESSIONID');
+            if (sessionId) {
+                obj.session = sessionId;
+            }
+            
+            try { ws.send(JSON.stringify(obj)); }
+            catch (e) { logToPage(`❌ Errore invio: ${e.message}`, 'error'); }
+        }
+
+        function sendCommand(command) {
+            wsSend({ pagina: "PLANETARIUM", doc: "command", data: command });
+        }
+
+        // ── Log ───────────────────────────────────────────────────────────────
+        let _lastLogMessage = '';
+        let _lastLogTime = 0;
+        let _logRepeatCount = 0;
+        
+        // Funzione per log interni (debug) - NON visibile nella console UI
+        function logToPage(message, type = 'info') {
+            // Log solo in console browser per debug
+            const ts = new Date().toLocaleTimeString('it-IT');
+            console.log(`[${ts}] ${message}`);
+        }
+        
+        // Funzione per messaggi terminal dal server - visibile nella console UI
+        function logTerminalMessage(message) {
+            const container = document.getElementById('console-messages');
+            const ts = new Date().toLocaleTimeString('it-IT');
+            
+            const div = document.createElement('div');
+            div.className = 'console-message info';
+            div.innerHTML = `<span class="console-timestamp">[${ts}]</span>${message}`;
+            
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            
+            // Limita a 50 messaggi
+            if (container.children.length > 50) {
+                container.removeChild(container.firstChild);
+            }
+        }
+
+        // ── UI helpers ────────────────────────────────────────────────────────
+        function toggleConsole() {
+            document.getElementById('console-log').classList.toggle('visible');
+        }
+
+        function clearConsole() {
+            document.getElementById('console-messages').innerHTML = '';
+        }
+
+        function sendCommandToServer() {
+            const input = document.getElementById('command-input');
+            const cmd = input.value.trim();
+            if (!cmd) return;
+            sendCommand(cmd);
+            input.value = '';
+        }
+
+        // ── Dialog Popup ──────────────────────────────────────────────────────
+        // IMPORTANTE: usa window.currentDialogEvent per compatibilità con planetarium-controls.js
+        window.currentDialogEvent = null;  // Salva evento click per positioning
+        let lastDialogContent = '';        // Per deduplica
+        let lastDialogTime = 0;            // Per deduplica
+
+        function showDialog(htmlContent, clickX, clickY) {
+            // Deduplica: ignora se stesso contenuto entro 500ms
+            const now = Date.now();
+            if (htmlContent === lastDialogContent && now - lastDialogTime < 500) {
+                logToPage('💬 Dialog duplicato ignorato', 'warning');
+                return;
+            }
+            lastDialogContent = htmlContent;
+            lastDialogTime = now;
+
+            const dialog = document.getElementById('dialog-popup');
+            const content = dialog.querySelector('.dialog-content');
+            const arrow = dialog.querySelector('.dialog-arrow');
+            
+            // Imposta contenuto
+            content.innerHTML = htmlContent;
+            
+            // Mostra dialog temporaneamente per calcolare dimensioni
+            dialog.style.visibility = 'hidden';
+            dialog.classList.add('visible');
+            
+            const dialogRect = dialog.getBoundingClientRect();
+            const viewportW = window.innerWidth;
+            const viewportH = window.innerHeight;
+            
+            // Determina posizione migliore e direzione arrow
+            let left, top, arrowClass;
+            
+            const margin = 20;
+            const arrowBorder = 10;     // border size CSS
+            const arrowOffset = 20;     // distance from dialog edge (top/bottom/left/right in CSS)
+            const arrowTipOffset = 10;  // distanza dalla punta dell'arrow al bordo del dialog
+            
+            // Prova a posizionare sopra il punto di click
+            if (clickY - dialogRect.height - arrowTipOffset - margin > 0) {
+                // Spazio sopra: dialog sopra, arrow giù
+                // La PUNTA dell'arrow deve essere a clickY
+                top = clickY - dialogRect.height - arrowTipOffset;
+                left = clickX - dialogRect.width / 2;
+                arrowClass = 'down';
+            }
+            // Altrimenti sotto
+            else if (clickY + dialogRect.height + arrowTipOffset + margin < viewportH) {
+                // Spazio sotto: dialog sotto, arrow su
+                // La PUNTA dell'arrow deve essere a clickY
+                top = clickY + arrowTipOffset;
+                left = clickX - dialogRect.width / 2;
+                arrowClass = 'up';
+            }
+            // Altrimenti a destra
+            else if (clickX + dialogRect.width + arrowTipOffset + margin < viewportW) {
+                // Spazio a destra: dialog a destra, arrow a sinistra
+                // La PUNTA dell'arrow deve essere a clickX
+                top = clickY - dialogRect.height / 2;
+                left = clickX + arrowTipOffset;
+                arrowClass = 'left';
+            }
+            // Altrimenti a sinistra
+            else {
+                // Dialog a sinistra, arrow a destra
+                // La PUNTA dell'arrow deve essere a clickX
+                top = clickY - dialogRect.height / 2;
+                left = clickX - dialogRect.width - arrowTipOffset;
+                arrowClass = 'right';
+            }
+            
+            // Clamp dialog ai bordi viewport
+            const clampedLeft = Math.max(margin, Math.min(left, viewportW - dialogRect.width - margin));
+            const clampedTop = Math.max(margin, Math.min(top, viewportH - dialogRect.height - margin));
+            
+            // Applica posizione dialog
+            dialog.style.left = clampedLeft + 'px';
+            dialog.style.top = clampedTop + 'px';
+            dialog.style.visibility = 'visible';
+            
+            // Imposta direzione arrow
+            arrow.className = 'dialog-arrow ' + arrowClass;
+            
+            // Reset inline styles that might interfere
+            arrow.style.left = '';
+            arrow.style.top = '';
+            arrow.style.right = '';
+            arrow.style.bottom = '';
+            arrow.style.marginLeft = '';
+            arrow.style.marginTop = '';
+            
+            // ← FIX: Posiziona arrow esattamente sul punto di click
+            // Calcola posizione arrow relativa al dialog
+            if (arrowClass === 'down' || arrowClass === 'up') {
+                // Arrow orizzontale: allinea left per puntare al clickX
+                const arrowLeft = clickX - clampedLeft - arrowBorder;
+                arrow.style.left = arrowLeft + 'px';
+                arrow.style.marginLeft = '0';
+            } else if (arrowClass === 'left' || arrowClass === 'right') {
+                // Arrow verticale: allinea top per puntare al clickY
+                const arrowTop = clickY - clampedTop - arrowBorder;
+                arrow.style.top = arrowTop + 'px';
+                arrow.style.marginTop = '0';
+            }
+            
+            // ← FIX: Proteggi dialog da chiusura immediata
+            // Imposta flag per prevenire chiusura durante questo click cycle
+            dialog.dataset.justOpened = 'true';
+            setTimeout(() => {
+                delete dialog.dataset.justOpened;
+            }, 100);
+            
+            // DEBUG: Mostra crosshair temporaneo sul punto di click (opzionale)
+            if (false) {  // Cambia a true per debug visivo
+                const crosshair = document.createElement('div');
+                crosshair.style.position = 'fixed';
+                crosshair.style.left = clickX + 'px';
+                crosshair.style.top = clickY + 'px';
+                crosshair.style.width = '10px';
+                crosshair.style.height = '10px';
+                crosshair.style.background = 'red';
+                crosshair.style.borderRadius = '50%';
+                crosshair.style.transform = 'translate(-50%, -50%)';
+                crosshair.style.zIndex = '99999';
+                crosshair.style.pointerEvents = 'none';
+                document.body.appendChild(crosshair);
+                setTimeout(() => crosshair.remove(), 2000);
+            }
+            
+            logToPage('💬 Dialog mostrato', 'info');
+        }
+
+        function closeDialog() {
+            const dialog = document.getElementById('dialog-popup');
+            dialog.classList.remove('visible');
+            // NON resettiamo currentDialogEvent qui - serve per il prossimo dialog
+            lastDialogContent = '';  // Reset deduplica
+            logToPage('💬 Dialog chiuso', 'info');
+        }
+
+        // ── Location Dialog con OpenLayers ────────────────────────────────────
+        let locationMap = null;
+        let locationMarker = null;
+        
+        function azimutToDirection(azimut) {
+            // Converti azimut in direzione cardinale
+            const az = parseFloat(azimut);
+            if (isNaN(az)) return 'N';
+            
+            if (az >= 337.5 || az < 22.5) return 'N';
+            if (az >= 22.5 && az < 67.5) return 'NE';
+            if (az >= 67.5 && az < 112.5) return 'E';
+            if (az >= 112.5 && az < 157.5) return 'SE';
+            if (az >= 157.5 && az < 202.5) return 'S';
+            if (az >= 202.5 && az < 247.5) return 'SW';
+            if (az >= 247.5 && az < 292.5) return 'W';
+            if (az >= 292.5 && az < 337.5) return 'NW';
+            return 'N';
+        }
+        
+        function openLocationDialog() {
+            // Leggi valori correnti
+            const latEl = document.getElementById('latitude');
+            const lonEl = document.getElementById('longitude');
+            const azEl = document.getElementById('azimut');
+            
+            const currentLat = parseFloat(latEl.textContent) || 45.46;
+            const currentLon = parseFloat(lonEl.textContent) || 9.19;
+            const currentAz = azEl.textContent || '0';
+            
+            // Popola input
+            document.getElementById('location-lat').value = currentLat.toFixed(4);
+            document.getElementById('location-lon').value = currentLon.toFixed(4);
+            document.getElementById('location-direction').value = azimutToDirection(currentAz);
+            
+            // Mostra dialog
+            document.getElementById('location-dialog').style.display = 'flex';
+            
+            // Inizializza mappa dopo un attimo (per avere dimensioni corrette)
+            setTimeout(() => initLocationMap(currentLon, currentLat), 100);
+        }
+        
+        function closeLocationDialog() {
+            document.getElementById('location-dialog').style.display = 'none';
+            if (locationMap) {
+                locationMap.setTarget(null);
+                locationMap = null;
+            }
+        }
+        
+        function initLocationMap(lon, lat) {
+            if (locationMap) {
+                locationMap.setTarget(null);
+            }
+            
+            // Crea marker
+            const markerFeature = new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat]))
+            });
+            
+            const markerStyle = new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 8,
+                    fill: new ol.style.Fill({ color: '#4a9eff' }),
+                    stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                })
+            });
+            markerFeature.setStyle(markerStyle);
+            
+            const vectorSource = new ol.source.Vector({
+                features: [markerFeature]
+            });
+            
+            const vectorLayer = new ol.layer.Vector({
+                source: vectorSource
+            });
+            
+            // Crea mappa
+            locationMap = new ol.Map({
+                target: 'location-map',
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.OSM()
+                    }),
+                    vectorLayer
+                ],
+                view: new ol.View({
+                    center: ol.proj.fromLonLat([lon, lat]),
+                    zoom: 10
+                })
+            });
+            
+            locationMarker = markerFeature;
+            
+            // Click sulla mappa aggiorna marker e input
+            locationMap.on('click', function(evt) {
+                const coords = ol.proj.toLonLat(evt.coordinate);
+                const newLon = coords[0];
+                const newLat = coords[1];
+                
+                // Aggiorna marker
+                locationMarker.setGeometry(new ol.geom.Point(ol.proj.fromLonLat([newLon, newLat])));
+                
+                // Aggiorna input
+                document.getElementById('location-lon').value = newLon.toFixed(4);
+                document.getElementById('location-lat').value = newLat.toFixed(4);
+            });
+            
+            // Input cambiano anche marker
+            document.getElementById('location-lon').addEventListener('input', updateMarkerFromInputs);
+            document.getElementById('location-lat').addEventListener('input', updateMarkerFromInputs);
+        }
+        
+        function updateMarkerFromInputs() {
+            const lon = parseFloat(document.getElementById('location-lon').value);
+            const lat = parseFloat(document.getElementById('location-lat').value);
+            
+            if (!isNaN(lon) && !isNaN(lat) && locationMarker && locationMap) {
+                locationMarker.setGeometry(new ol.geom.Point(ol.proj.fromLonLat([lon, lat])));
+                locationMap.getView().setCenter(ol.proj.fromLonLat([lon, lat]));
+            }
+        }
+        
+        function confirmLocationChange() {
+            const lon = document.getElementById('location-lon').value;
+            const lat = document.getElementById('location-lat').value;
+            const direction = document.getElementById('location-direction').value;
+            
+            if (!lon || !lat) {
+                alert('Inserisci latitudine e longitudine valide');
+                return;
+            }
+            
+            // Invia comando al server
+            const command = `observe ${lon} ${lat} ${direction}`;
+            wsSend({
+                pagina: "PLANETARIUM",
+                doc: "command",
+                data: command
+            });
+            
+            console.log(`🌍 Location change: ${command}`);
+            
+            // Chiudi dialog
+            closeLocationDialog();
+        }
+
+        // Click fuori dal dialog per chiudere
+        document.addEventListener('click', (e) => {
+            const dialog = document.getElementById('dialog-popup');
+            const canvas = webgl.renderer ? webgl.renderer.domElement : null;
+            
+            // Non chiudere se appena aperto (previene chiusura durante stesso click cycle)
+            if (dialog.dataset.justOpened === 'true') {
+                return;
+            }
+            
+            if (dialog.classList.contains('visible') && 
+                !dialog.contains(e.target) && 
+                e.target !== canvas) {
+                closeDialog();
+            }
+        });
+
+        // ── WebSocket ─────────────────────────────────────────────────────────
+        let _msgCount = 0; // debug: conta messaggi ricevuti
+
+        function connectWebSocket() {
+            updateConnectionStatus('connecting', '⚪ Connessione...');
+            
+			const sessionId = sessionStorage.getItem('SESSIONID');
+            // Diagnostica dettagliata
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('🔌 WebSocket Connection Attempt');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('URL:', `${WS_URL}?session_id=${sessionId}`);
+            console.log('Protocol:', window.location.protocol);
+            console.log('Host:', window.location.host);
+            console.log('User Agent:', navigator.userAgent);
+            console.log('Connection:', navigator.onLine ? 'ONLINE' : 'OFFLINE');
+            console.log('WebSocket support:', typeof WebSocket !== 'undefined' ? 'YES' : 'NO');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+            if (typeof WebSocket === 'undefined') {
+                console.error('❌ WebSocket NOT supported in this browser');
+                logToPage('❌ WebSocket non supportato', 'error');
+                updateConnectionStatus('disconnected', '⚫ Non supportato');
+                return;
+            }
+
+            if (!navigator.onLine) {
+                console.warn('⚠️ Device appears OFFLINE');
+                logToPage('⚠️ Dispositivo offline', 'warning');
+            }
+
+            try {
+				const sessionId = sessionStorage.getItem('SESSIONID');
+                ws = new WebSocket(`${WS_URL}?session_id=${sessionId}`);
+                console.log('✅ WebSocket object created, readyState:', ws.readyState);
+                console.log('   CONNECTING=0, OPEN=1, CLOSING=2, CLOSED=3');
+            } catch (e) {
+                console.error('❌ Exception creating WebSocket:', e);
+                console.error('Error name:', e.name);
+                console.error('Error message:', e.message);
+                logToPage(`❌ Errore: ${e.message}`, 'error');
+                updateConnectionStatus('disconnected', '⚫ Errore');
+                return;
+            }
+
+            ws.onopen = () => {
+                console.log('✅ WebSocket CONNECTED (onopen fired)');
+                console.log('   readyState:', ws.readyState);
+                updateConnectionStatus('connected', '🟢 Connesso');
+                logToPage('✅ Connesso', 'success');
+                sendInitializationCommands();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    let xmlString;
+                    
+                    // Determina se è JSON o XML puro
+                    const data = event.data.trim();
+                    if (data.startsWith('{')) {
+                        // È JSON → estrai campo xml
+                        try {
+                            const jsonData = JSON.parse(data);
+                            xmlString = jsonData.xml || jsonData.XML || '';
+                            if (!xmlString) {
+                                console.warn('JSON ricevuto ma senza campo xml:', jsonData);
+                                return;
+                            }
+                        } catch (e) {
+                            console.error('Errore parsing JSON:', e.message);
+                            return;
+                        }
+                    } else if (data.startsWith('<')) {
+                        // È XML puro
+                        xmlString = data;
+                    } else {
+                        console.warn('Formato dati sconosciuto (né JSON né XML):', data.substring(0, 200));
+                        return;
+                    }
+                    
+                    // Parsa XML
+                    const xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
+
+                    // ← SOLO messaggi terminal vanno nella console UI
+                    const terminal = xmlDoc.querySelector('terminal');
+                    if (terminal && terminal.textContent.trim()) {
+                        logTerminalMessage(terminal.textContent.trim());
+                    }
+
+                    // Dialog popup (se presente tag <dialog>)
+                    const dialogEl = xmlDoc.querySelector('dialog');
+                    if (dialogEl) {
+                        if (window.currentDialogEvent) {
+                            const dialogHTML = dialogEl.innerHTML || dialogEl.textContent;
+                            showDialog(dialogHTML, window.currentDialogEvent.clientX, window.currentDialogEvent.clientY);
+                        }
+                    }
+
+                    // Se orbita attiva ignora i dati di rendering
+                    if (controls.orbitEnabled) return;
+
+                    // Processa renderer
+                    const renderer = xmlDoc.querySelector('renderer[name="solar"]')
+                                  || xmlDoc.querySelector('renderer');
+                    if (renderer) {
+                        webgl.processRenderer(renderer);
+                    }
+
+                } catch (e) {
+                    console.error('Errore processing message:', e.message, e);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('❌ WebSocket ERROR event fired');
+                console.error('Error object:', error);
+                console.error('readyState:', ws.readyState);
+                console.error('URL:', ws.url);
+                
+                // Su mobile, l'errore spesso non ha dettagli
+                if (error.message) {
+                    console.error('Error message:', error.message);
+                }
+                
+                updateConnectionStatus('disconnected', '⚫ Errore');
+                logToPage('❌ Errore WebSocket', 'error');
+            };
+
+            ws.onclose = (event) => {
+                console.warn('⚠️ WebSocket CLOSED event fired');
+                console.warn('Code:', event.code);
+                console.warn('Reason:', event.reason || '(no reason provided)');
+                console.warn('Was clean:', event.wasClean);
+                console.warn('readyState:', ws.readyState);
+                
+                // Codici comuni:
+                // 1000 = Normal closure
+                // 1001 = Going away (page refresh)
+                // 1006 = Abnormal closure (no close frame)
+                // 1008 = Policy violation
+                // 1015 = TLS handshake fail
+                
+                let statusText = '⚫ Disconnesso';
+                if (event.code === 1006) {
+                    statusText = '⚫ Connessione fallita';
+                    console.error('Code 1006: Likely server unreachable or network issue');
+                } else if (event.code === 1015) {
+                    statusText = '⚫ SSL/TLS Error';
+                    console.error('Code 1015: SSL/TLS handshake failed');
+                }
+                
+                updateConnectionStatus('disconnected', statusText);
+                logToPage(`⚠️ Disconnesso (${event.code}), riconnessione...`, 'warning');
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        function sendInitializationCommands() {
+            logToPage('🔧 Inizializzazione comandi...', 'info');
+            // Sequenza: observe → fov → horizont → light → execute_loop
+            const commands = [
+                { cmd: 'execute_loop off',                               delay:    0 },
+                { cmd: `observe ${deviceLongitude} ${deviceLatitude} N`, delay:  300 },
+                { cmd: 'fov 70',                                          delay:  600 },
+                { cmd: 'horizont true',                                   delay:  900 },
+                { cmd: 'light on',                                        delay: 1200 },
+                { cmd: 'execute_loop on',                                 delay: 1800 },
+            ];
+            commands.forEach(({ cmd, delay }) =>
+                setTimeout(() => sendCommand(cmd), delay)
+            );
+            // Log finale dopo tutti i comandi
+            setTimeout(() => {
+                logToPage('✅ Inizializzazione completata', 'success');
+            }, 2000);
+        }
+
+        function updateConnectionStatus(status, text) {
+            const el = document.getElementById('connection-status');
+            el.className = status;
+            el.textContent = text;
+        }
+
+        // ── Geolocalizzazione ─────────────────────────────────────────────────
+        // Restituisce Promise — connectWebSocket() viene chiamato solo dopo resolve()
+        function getDeviceLocation() {
+            logToPage('📍 Rilevamento posizione...', 'info');
+            return new Promise((resolve) => {
+                if ('geolocation' in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            deviceLatitude  = pos.coords.latitude;
+                            deviceLongitude = pos.coords.longitude;
+                            logToPage(`✅ GPS: ${deviceLatitude.toFixed(4)}°, ${deviceLongitude.toFixed(4)}°`, 'success');
+                            resolve();
+                        },
+                        () => getLocationByIP().then(resolve),
+                        { timeout: 5000, maximumAge: 60000 }
+                    );
+                } else {
+                    getLocationByIP().then(resolve);
+                }
+            });
+        }
+
+        function getLocationByIP() {
+            return fetch('https://ipapi.co/json/')
+                .then(r => r.json())
+                .then(d => {
+                    deviceLatitude  = d.latitude;
+                    deviceLongitude = d.longitude;
+                    logToPage(`🌐 IP: ${deviceLatitude.toFixed(4)}°, ${deviceLongitude.toFixed(4)}°`, 'success');
+                })
+                .catch(() => {
+                    logToPage('📍 Posizione non disponibile, uso default: Milano', 'warning');
+                });
+        }
+
+        // ── UI events ─────────────────────────────────────────────────────────
+        document.getElementById('toggle-console').addEventListener('click', () => {
+            toggleConsole();
+        });
+
+        document.getElementById('toggle-help').addEventListener('click', () => {
+            const el = document.getElementById('keyboard-help');
+            // Usa getComputedStyle perché display:none è nel CSS, non inline
+            const isHidden = window.getComputedStyle(el).display === 'none';
+            el.style.display = isHidden ? 'block' : 'none';
+        });
+
+        // ← Date/Time inputs - invia comando 'date' al server
+        let dateTimeInputsLocked = false;  // Flag per bloccare aggiornamenti automatici
+        
+        function sendDateTimeToServer() {
+            const dateInput = document.getElementById('sim-date');
+            const timeInput = document.getElementById('sim-time');
+            
+            if (!dateInput.value || !timeInput.value) return;
+            
+            // Converti da yyyy-mm-dd a dd-mm-yyyy
+            const dateParts = dateInput.value.split('-'); // [yyyy, mm, dd]
+            const dt = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // dd-mm-yyyy
+            
+            const tm = timeInput.value; // hh:mm o hh:mm:ss
+            const dtt = 'UT'; // Tipo sempre UT
+            
+            const command = `date ${dt} ${tm} ${dtt}`;
+            
+            wsSend({
+                pagina: "PLANETARIUM",
+                doc: "command",
+                data: command
+            });
+            
+            console.log(`📅 Date/Time inviato: ${command}`);
+        }
+        
+        // Blocca aggiornamenti automatici quando l'utente inizia a modificare
+        document.getElementById('sim-date').addEventListener('focus', () => {
+            dateTimeInputsLocked = true;
+            document.getElementById('sim-date').style.borderColor = '#ff9800';
+            document.getElementById('sim-time').style.borderColor = '#ff9800';
+            console.log('🔒 Date/Time: editing mode (aggiornamenti bloccati)');
+        });
+        
+        document.getElementById('sim-time').addEventListener('focus', () => {
+            dateTimeInputsLocked = true;
+            document.getElementById('sim-date').style.borderColor = '#ff9800';
+            document.getElementById('sim-time').style.borderColor = '#ff9800';
+            console.log('🔒 Date/Time: editing mode (aggiornamenti bloccati)');
+        });
+        
+        // Invia al server quando l'utente finisce di modificare (blur = perde focus)
+        document.getElementById('sim-date').addEventListener('blur', () => {
+            sendDateTimeToServer();
+            // Aspetta 2 secondi prima di sbloccare aggiornamenti automatici
+            setTimeout(() => {
+                dateTimeInputsLocked = false;
+                document.getElementById('sim-date').style.borderColor = '';
+                document.getElementById('sim-time').style.borderColor = '';
+                console.log('🔓 Date/Time: aggiornamenti automatici riattivati');
+            }, 2000);
+        });
+        
+        document.getElementById('sim-time').addEventListener('blur', () => {
+            sendDateTimeToServer();
+            setTimeout(() => {
+                dateTimeInputsLocked = false;
+                document.getElementById('sim-date').style.borderColor = '';
+                document.getElementById('sim-time').style.borderColor = '';
+                console.log('🔓 Date/Time: aggiornamenti automatici riattivati');
+            }, 2000);
+        });
+        
+        // Invia anche su Enter
+        document.getElementById('sim-date').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.target.blur(); // Trigger blur che invia
+            }
+        });
+        
+        document.getElementById('sim-time').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.target.blur();
+            }
+        });
+        
+        // Esponi flag globale per webgl
+        window.dateTimeInputsLocked = () => dateTimeInputsLocked;
+
+        // ── Clickable keyboard commands ───────────────────────────────────────
+        document.querySelectorAll('.kb-clickable').forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                const action = button.dataset.action;
+                
+                // Esegui azione corrispondente
+                switch(action) {
+                    case 'move-up':
+                        sendCommand('move 1 0');
+                        logToPage('⬆️ alt +1°', 'info');
+                        break;
+                    case 'move-down':
+                        sendCommand('move -1 0');
+                        logToPage('⬇️ alt -1°', 'info');
+                        break;
+                    case 'move-left':
+                        sendCommand('move 0 -1');
+                        logToPage('⬅️ az -1°', 'info');
+                        break;
+                    case 'move-right':
+                        sendCommand('move 0 1');
+                        logToPage('➡️ az +1°', 'info');
+                        break;
+                    case 'zoom-in':
+                        sendCommand('zoom +');
+                        logToPage('🔍 zoom+', 'info');
+                        break;
+                    case 'zoom-out':
+                        sendCommand('zoom -');
+                        logToPage('🔎 zoom-', 'info');
+                        break;
+                    case 'view-N':
+                        sendCommand('view N');
+                        logToPage('🧭 Nord', 'info');
+                        break;
+                    case 'view-S':
+                        sendCommand('view S');
+                        logToPage('🧭 Sud', 'info');
+                        break;
+                    case 'view-E':
+                        sendCommand('view E');
+                        logToPage('🧭 Est', 'info');
+                        break;
+                    case 'view-W':
+                        sendCommand('view W');
+                        logToPage('🧭 Ovest', 'info');
+                        break;
+                    case 'view-Z':
+                        sendCommand('view Z');
+                        logToPage('🧭 Zenit', 'info');
+                        break;
+                    case 'toggle-horizont':
+                        controls._horizont = !controls._horizont;
+                        sendCommand(controls._horizont ? 'horizont true' : 'horizont false');
+                        logToPage(`🌅 orizzonte: ${controls._horizont ? 'on' : 'off'}`, 'info');
+                        break;
+                    case 'toggle-light':
+                        controls._ambientLight = !controls._ambientLight;
+                        sendCommand(controls._ambientLight ? 'light on' : 'light off');
+                        logToPage(`💡 luce ambiente: ${controls._ambientLight ? 'on' : 'off'}`, 'info');
+                        break;
+                    case 'toggle-console':
+                        toggleConsole();
+                        break;
+                    case 'reset':
+                        sendCommand('default');
+                        logToPage('🔄 reset', 'info');
+                        break;
+                }
+                
+                // Feedback visivo
+                button.style.background = 'rgba(74, 158, 255, 0.6)';
+                setTimeout(() => {
+                    button.style.background = '';
+                }, 200);
+            });
+        });
+
+        document.getElementById('zoom-slider').addEventListener('input', (e) => {
+            const zoom = parseFloat(e.target.value);
+            document.getElementById('zoom-value').textContent = zoom.toFixed(1);
+            sendCommand(`zoom ${zoom}`);
+        });
+
+        document.getElementById('orbit-control-toggle').addEventListener('change', (e) => {
+            const enabled = e.target.checked;
+            controls.setOrbit(enabled);
+            if (enabled) {
+                sendCommand('execute_loop off');
+            } else {
+                // Ripristina vista: observe → horizont → execute_loop
+                sendCommand('execute_loop off');
+                setTimeout(() => sendCommand(`observe ${deviceLongitude} ${deviceLatitude} N`), 200);
+                setTimeout(() => sendCommand('horizont true'), 400);
+                setTimeout(() => sendCommand('execute_loop on'), 800);
+            }
+        });
+
+        document.getElementById('info-panel-header').addEventListener('click', () => {
+            const content = document.getElementById('info-panel-content');
+            const icon    = document.getElementById('toggle-info-icon');
+            content.classList.toggle('collapsed');
+            icon.classList.toggle('collapsed');
+            icon.textContent = content.classList.contains('collapsed') ? '▶' : '▼';
+        });
+        
+// Delega degli eventi sul document (equivalente a $.mobile.document.on)
+document.addEventListener('change', function(evt) {
+    const target = evt.target;
+
+    // 1. Checkbox .costellazione
+    if (target.matches('.costellazione')) {
+        const cost = target.dataset.costellazione;
+        const data = target.checked 
+            ? `constellation ${cost}` 
+            : `constellation ${cost} hidden`;
+
+        const obj = {
+            pagina: "PLANETARIUM",
+            doc: "command",
+            data: data
+        };
+
+        ws.send(JSON.stringify(obj));
+
+    }
+
+    // 2. Checkbox .asterismo
+    else if (target.matches('.asterismo')) {
+        const cost = target.dataset.costellazione;
+        const data = target.checked 
+            ? `asterism ${cost}` 
+            : `asterism ${cost} hidden`;
+
+        const obj = {
+            pagina: "PLANETARIUM",
+            doc: "command",
+            data: data
+        };
+
+        ws.send(JSON.stringify(obj));
+
+    }
+
+    // 3. Cambio su .constellation_star (probabilmente un <select>)
+    else if (target.matches('.constellation_star')) {
+        const value = target.value;
+
+        const obj = {
+            pagina: "PLANETARIUM",
+            doc: "command",
+            data: `sky ${value}`
+        };
+
+        ws.send(JSON.stringify(obj));
+
+    }
+});        
+
+        // ── Bootstrap ─────────────────────────────────────────────────────────
+        (async function start() {
+            const container = document.getElementById('canvas-container');
+            const ok = webgl.init(container);
+            if (!ok) return;
+
+            const canvas       = webgl.renderer.domElement;
+            const commandInput = document.getElementById('command-input');
+            controls.init(canvas, commandInput);
+
+            // Sequenza inizializzazione:
+            // 1. Chiama API per impostare cookies
+            // 2. Acquisisci geolocalizzazione
+            // 3. Apri WebSocket (che userà i cookies impostati al punto 1)
+            await initAPI();
+            await getDeviceLocation();
+            connectWebSocket();
+        })();
+    </script>
+</body>
+</html>

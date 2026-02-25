@@ -1,0 +1,7 @@
+<iniz>
+	x1=0 range(-5,5), x2=0 range(-5,5)
+</iniz>
+
+
+2x1-x2= exp( -x1 )
+-x1+2x2=exp( -x2 )

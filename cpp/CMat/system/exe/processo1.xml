@@ -1,0 +1,19 @@
+<processo dir="/home/sergio/programmi/c++/Simulatore" errore="0.0000000001">
+
+	<componente ident="C1">
+		<equazione>
+			<iniz>
+				y=10 const, x=5
+			</iniz>
+			<tabella ident="p">
+				<dati>
+					0,1,2,3,4
+					0,1,4,9,16
+				</dati>
+			</tabella>
+			x=y-k
+			k=p(x)
+		</equazione>
+	</componente>
+
+</processo>

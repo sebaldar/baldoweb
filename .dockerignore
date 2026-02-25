@@ -1,0 +1,7 @@
+data/
+data/**
+node_modules/
+server/node_modules/
+server/native/build/
+*.log
+.git/

@@ -1,0 +1,223 @@
+#include <iostream>
+#include <fstream>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+
+#include "cgi_base.hpp"
+#include "Util.h"
+
+using namespace std;
+
+/* urldecode - v. RFC 1738 per i dettagli */
+string urldecode (string &input)
+{
+        string str ;
+        char c, c1, c2;
+        const char *in = input.c_str();
+        while ( (c = *in) ) {
+                if( c == '%' ) {
+                        c1 = *(++in);
+                        c2 = *(++in);
+//                        if( c1 == EOF || c2 == EOF )  exit(0);
+                        c1 = tolower(c1);
+                        c2 = tolower(c2);
+                        if( ! isxdigit(c1) || ! isxdigit(c2) )  return str;
+                        if( c1 <= '9' )
+                                c1 = c1 - '0';
+                        else
+                                c1 = c1 - 'a' + 10;
+                        if( c2 <= '9' )
+                                c2 = c2 - '0';
+                        else
+                                c2 = c2 - 'a' + 10;
+                        str +=  16 * c1 + c2 ;
+                }
+                else if( c == '+' )
+                        str +=  ' ' ;
+                else
+                        str +=  c ;
+                in++;
+        }
+        return str;
+}
+
+size_t Split (const string& input, const string& delimiter, vector<string> &v)
+{
+
+        int res = 0;
+        size_t iniz = 0;
+        size_t n = input.find(delimiter);
+        while (n != string::npos) {
+        	v.push_back(input.substr(iniz, n-iniz));
+                iniz = ++n;
+                res++;
+                n = input.find(delimiter, iniz);
+        }
+
+        v.push_back(input.substr(iniz, input.size()));
+
+
+	return res;
+
+}
+
+CGI::CGI (  int argc, char **argv  )
+{
+
+	/* riceve l'input come argomento */
+	for ( int i = 1; i < argc; i++ )
+		the_query_string += argv[ i ] + " ";
+
+	the_query_string = urldecode(the_query_string);
+
+}
+
+CGI::CGI( string tag )
+{
+
+
+	if ( getenv( "DOCUMENT_ROOT" ) )
+		document_root = getenv( "DOCUMENT_ROOT" );
+
+	if ( getenv( "REQUEST_METHOD") )
+		method = getenv( "REQUEST_METHOD" );
+
+	if ( getenv( "CONTENT_LENGTH" ) )
+		length = atoi( getenv( "CONTENT_LENGTH" ) );
+	else length = 0;
+
+	the_query_string = "";
+	if ( method == "POST" ) {
+
+		if ( length > 0 ) {
+
+		  char * str = new char [length];
+
+		  cin.read (str, length);
+
+		  if (tag != "") {
+
+			  // estrae solo trai tag
+			  string tag_iniz = "<" + tag;
+			  string tag_fin = "</" + tag + ">";
+
+			  char *str1 = strstr( str, tag_iniz.c_str() );
+			  char *str2 = strstr( str, tag_fin.c_str() );
+
+			  *( str2 + tag_fin.size() ) = '\0';
+
+		  	  the_query_string = str1;
+		  }
+		  else
+		  	  the_query_string = str;
+
+		  delete [] str;
+
+		}
+
+		the_query_string = urldecode(the_query_string);
+
+	}
+	else if ( method == "GET" ) {
+
+		if ( getenv("QUERY_STRING") )
+			the_query_string = getenv("QUERY_STRING");
+
+		the_query_string = urldecode(the_query_string);
+
+		  if (tag != "") {
+
+			string tag_iniz = "<" + tag;
+			string tag_fin = "</" + tag + ">";
+
+			size_t f1 = the_query_string.find( tag_iniz );
+			size_t f2 = the_query_string.find( tag_fin );
+
+			if ( f2 != string::npos )
+				f2 +=  tag_fin.size () ;
+			else
+				// ha la forma <tag ... />
+				f2 = the_query_string.find( "/>" ) + 2;
+
+			the_query_string = the_query_string.substr( f1, f2 - f1 );
+
+		  }
+
+	}
+	else {
+
+		string s1;
+		while ( !cin.eof() ) {
+			char str;
+			cin.get ( str );
+			the_query_string += str;
+		}
+
+	}
+
+/*
+	vector<string> v;
+	int n = Split (the_query_string, "&", v);
+
+	if (n == 0) {
+		v.push_back(the_query_string);
+		n++;
+	}
+
+	for (int i=0; i < n; i++) {
+		vector<string> v1;
+		int n = Split (v[i], "=", v1);
+
+		if (n > 0) {
+			query_map[v1[0]]=v1[1];
+		}
+	}
+*/
+
+}
+
+/*
+map<string, string> & CGI::query_map()
+{
+	return query_map();
+}
+*/
+
+string CGI::query_string (string key )
+{
+        map<string, string>::iterator it = query_map.find(key);
+        if (it != query_map.end())
+                return it->second;
+        else return "";
+}
+
+string CGI::value ( string key ) {
+	return getValue ( the_query_string, key, "&" ) ;
+}
+
+void CGI::header (string type, string value)
+{
+	fHeader.push_back(type +":"+value);
+}
+
+void CGI::body (string row)
+{
+	fBody.push_back(row);
+}
+
+void CGI::print ()
+{
+	list<string>::iterator it;
+
+	for (it = fHeader.begin(); it != fHeader.end(); ++it)
+		cout << *it << endl;
+	cout << "\n";
+
+	for (it = fBody.begin(); it != fBody.end(); ++it)
+		cout << *it << endl;
+}
+
+

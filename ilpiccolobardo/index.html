@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Il Piccolo Bardo - Crea la Tua Favola</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --danger: #f44336;
+            --dark: #2c3e50;
+            --light: #ecf0f1;
+        }
+
+        body {
+            font-family: 'Comic Sans MS', 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            transition: background 0.5s ease;
+        }
+
+        body.nightmode {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+            animation: slideDown 0.5s ease;
+        }
+
+        body.nightmode header {
+            background: #2c3e50;
+            color: white;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        h1 {
+            color: var(--primary);
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        body.nightmode h1 {
+            color: #f39c12;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        body.nightmode .subtitle {
+            color: #bdc3c7;
+        }
+
+        .connection-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+
+        .connection-badge.connected { background: var(--success); color: white; }
+        .connection-badge.disconnected { background: var(--danger); color: white; }
+        .connection-badge.connecting { background: var(--warning); color: white; }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            margin-bottom: 30px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        body.nightmode .card {
+            background: #34495e;
+            color: white;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .card h2 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            font-size: 2em;
+            border-bottom: 3px solid var(--primary);
+            padding-bottom: 10px;
+        }
+
+        body.nightmode .card h2 {
+            color: #f39c12;
+            border-bottom-color: #f39c12;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+
+        body.nightmode label {
+            color: #ecf0f1;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 15px;
+            border: 3px solid #ddd;
+            border-radius: 12px;
+            font-size: 1.1em;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        body.nightmode input,
+        body.nightmode select,
+        body.nightmode textarea {
+            background: #2c3e50;
+            color: white;
+            border-color: #34495e;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(102, 126, 234, 0.3);
+            transform: scale(1.02);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .age-selector {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .age-btn {
+            padding: 15px 25px;
+            border: 3px solid var(--primary);
+            background: white;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 700;
+            transition: all 0.3s;
+            flex: 1;
+            min-width: 80px;
+        }
+
+        body.nightmode .age-btn {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .age-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .age-btn.selected {
+            background: var(--primary);
+            color: white;
+        }
+
+        button {
+            padding: 18px 40px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1.2em;
+            font-weight: 700;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn-group button {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .story-display {
+            background: linear-gradient(135deg, #fff9e6 0%, #ffe6f0 100%);
+            padding: 30px;
+            border-radius: 20px;
+            border: 3px solid var(--primary);
+            min-height: 200px;
+            font-size: 1.3em;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            position: relative;
+            animation: storyAppear 0.5s ease;
+        }
+
+        body.nightmode .story-display {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: #ecf0f1;
+        }
+
+        @keyframes storyAppear {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .story-illustration {
+            width: 100%;
+            max-width: 500px;
+            height: auto;
+            border-radius: 15px;
+            margin: 20px auto;
+            display: block;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .favorite-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 2em;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.3s;
+            padding: 10px;
+        }
+
+        .favorite-btn:hover {
+            transform: scale(1.3);
+        }
+
+        .favorite-btn.active {
+            color: #e74c3c;
+            animation: heartBeat 0.5s ease;
+        }
+
+        @keyframes heartBeat {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .nightmode-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            font-size: 2em;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        body.nightmode .nightmode-toggle {
+            background: #2c3e50;
+        }
+
+        .nightmode-toggle:hover {
+            transform: rotate(180deg) scale(1.1);
+        }
+
+        .favorites-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .favorite-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        body.nightmode .favorite-card {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .favorite-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .favorite-card h3 {
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+        body.nightmode .favorite-card h3 {
+            color: #f39c12;
+        }
+
+        .favorite-card p {
+            font-size: 0.95em;
+            color: #666;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        body.nightmode .favorite-card p {
+            color: #bdc3c7;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 1.2em;
+            transition: all 0.3s;
+        }
+
+        .delete-btn:hover {
+            transform: scale(1.2);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 5em;
+            margin-bottom: 20px;
+        }
+
+        .personalization-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #ddd;
+        }
+
+        .tab {
+            padding: 15px 30px;
+            background: #f5f5f5;
+            border: none;
+            border-radius: 12px 12px 0 0;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 1.1em;
+            transition: all 0.3s;
+        }
+
+        body.nightmode .tab {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .tab:hover {
+            background: #e0e0e0;
+        }
+
+        body.nightmode .tab:hover {
+            background: #34495e;
+        }
+
+        .tab.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            .age-selector { flex-direction: column; }
+            .btn-group { flex-direction: column; }
+            .btn-group button { width: 100%; }
+        }
+
+        /* Audio visualizer */
+        .audio-visualizer {
+            display: none;
+            height: 100px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 10px;
+            margin: 20px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .audio-visualizer.active {
+            display: block;
+        }
+
+        .wave {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            opacity: 0.3;
+            animation: wave 2s ease-in-out infinite;
+        }
+        
+#audioLoading {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+        @keyframes wave {
+            0%, 100% { transform: translateX(-50%) scaleY(0.5); }
+            50% { transform: translateX(0) scaleY(1); }
+        }
+        
+       /* Nuovi stili per account e footer */
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 999;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        body.nightmode .header-bar {
+            background: rgba(44, 62, 80, 0.9);
+        }
+
+        .account-btn {
+            background: none;
+            border: none;
+            font-size: 2em;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 50%;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .account-btn:hover {
+            background: rgba(102, 126, 234, 0.2);
+            transform: scale(1.1);
+        }
+
+        .account-name {
+            font-size: 0.9em;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        body.nightmode .account-name {
+            color: #f39c12;
+        }
+
+        /* Footer */
+        footer {
+            background: #2c3e50;
+            color: #bdc3c7;
+            padding: 30px 20px;
+            text-align: center;
+            font-size: 0.9em;
+            margin-top: 50px;
+            border-top: 3px solid var(--primary);
+        }
+
+        body.nightmode footer {
+            background: #1a252f;
+        }
+
+        .company-info {
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.8;
+        }
+
+        .company-info strong {
+            color: white;
+        }
+
+        /* Modale Account */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            animation: fadeIn 0.3s ease;
+        }
+
+        body.nightmode .modal-content {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .modal h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--primary);
+        }
+
+        body.nightmode .modal h2 {
+            color: #f39c12;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 1.8em;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .close-modal:hover {
+            color: var(--danger);
+        }
+
+        
+    </style>
+</head>
+<body>
+    <!-- Header bar con account e toggle notte -->
+    <div class="header-bar">
+        <button class="account-btn" onclick="openAccountModal()" id="accountBtn" title="Account">
+            👤
+            <span class="account-name" id="accountName" style="display:none;"></span>
+        </button>
+
+        <button class="nightmode-toggle" onclick="toggleNightMode()" title="Modalità buonanotte">🌙</button>
+    </div>
+
+    <!-- Spazio per evitare sovrapposizione con header fisso -->
+    <div style="height: 80px;"></div>
+
+    <div class="container">
+        <header>
+            <h1>🎭 Il Piccolo Bardo</h1>
+            <p class="subtitle">Crea Favole Magiche Personalizzate</p>
+            <div class="connection-badge" id="connectionStatus">Disconnesso</div>
+        </header>
+
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('create')">✨ Crea Favola</button>
+            <button class="tab" onclick="switchTab('favorites')">❤️ Le Mie Preferite</button>
+            <button class="tab" onclick="switchTab('chi_sono')">Info</button>
+        </div>
+
+        <!-- TAB: CREA FAVOLA -->
+        <div id="create-tab" class="tab-content active">
+            <div class="card">
+                <h2>👶 Personalizza la Tua Favola</h2>
+                
+                <div class="personalization-grid">
+                    <div class="form-group">
+                        <label>🎂 Età del Bambino</label>
+                        <div class="age-selector">
+                            <button class="age-btn" onclick="selectAge(3)">3 anni</button>
+                            <button class="age-btn" onclick="selectAge(4)">4 anni</button>
+                            <button class="age-btn" onclick="selectAge(5)">5 anni</button>
+                            <button class="age-btn" onclick="selectAge(6)">6 anni</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>👤 Nome del Bambino (opzionale)</label>
+                        <input type="text" id="childName" placeholder="es: Giulia">
+                    </div>
+
+                    <div class="form-group">
+                        <label>🐾 Animale Preferito (opzionale)</label>
+                        <input type="text" id="favoriteAnimal" placeholder="es: Drago, Unicorno, Gattino">
+                    </div>
+
+                    <div class="form-group">
+                        <label>🎨 Colore Preferito (opzionale)</label>
+                        <input type="text" id="favoriteColor" placeholder="es: Blu, Rosa, Arcobaleno">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>💭 Cosa Vuoi nella Favola?</label>
+                    <textarea id="userPrompt" placeholder="Racconta una storia su un drago gentile che aiuta i suoi amici nel bosco magico..."></textarea>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn-primary" onclick="generateStory()">✨ Crea la Favola</button>
+                </div>
+            </div>
+
+            <div class="card" id="storyCard" style="display: none;">
+                <h2>📖 La Tua Favola Magica</h2>
+                
+                <img id="storyIllustration" class="story-illustration" style="display: none;">
+                <div class="story-display" id="storyDisplay">
+                    <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
+                    <div class="loading" id="loadingIndicator">
+                        <div class="loading-spinner"></div>
+                        <p>Il Piccolo Bardo sta creando la tua favola magica...</p>
+                    </div>
+                </div>
+
+                <div class="audio-visualizer" id="audioVisualizer">
+                    <div class="wave"></div>
+                </div>
+
+
+                <div class="btn-group" style="margin-top: 20px;">
+                    <div id="audioLoading" style="display: none; text-align: center; color: #667eea; font-style: italic; margin-top: 20px;">
+                      ⏳ Il Bardo sta preparando la voce magica...<br>
+                      <small>Attendi qualche secondo ✨</small>
+                    </div>
+                    <button class="btn-success" onclick="listenStory()" id="readBtn" disabled>🔊 Leggi ad Alta Voce</button>
+                    <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled>🎨 Crea Illustrazione</button>
+                   <button class="btn-danger" onclick="stopReading()" id="stopBtn" disabled style="display: none;">⏹️ Ferma Lettura</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: PREFERITE -->
+        <div id="favorites-tab" class="tab-content">
+            <div class="card">
+                <h2>❤️ Le Mie Favole Preferite</h2>
+                <div class="favorites-section" id="favoritesContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📚</div>
+                        <p>Ancora nessuna favola preferita</p>
+                        <p style="font-size: 0.9em;">Crea una favola e mettile un cuore per salvarla qui!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- TAB: CHI SONO -->
+        <div id="chi_sono-tab" class="tab-content">
+            <div class="card">
+              <!-- Sezione "Perché Il Piccolo Bardo?" -->
+              <div class="card" style="margin-top: 30px; background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); border: 2px solid #bbdefb;">
+                <h2 style="color: #512da8; text-align: center; margin-bottom: 20px;">🪄 Perché Il Piccolo Bardo è speciale</h2>
+                
+                <div style="font-size: 1.1em; line-height: 1.7; color: #333;">
+                  <p style="margin-bottom: 18px;">
+                    <strong>Non è un semplice chatbot.</strong><br>
+                    Il Piccolo Bardo è un <em>narratore con un’anima</em>: ogni favola che racconta nasce da <strong>un repertorio personale</strong> di storie, frammenti, personaggi e valori scelti con cura.
+                  </p>
+
+                  <div style="background: white; padding: 20px; border-radius: 12px; margin: 20px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">I suoi punti di forza</h3>
+                    <ul style="padding-left: 25px; line-height: 1.8;">
+                      <li><strong>Sempre coerente:</strong> tono caldo, semplice e poetico, perfetto per bambini dai 3 ai 7 anni</li>
+                      <li><strong>Sicuro al 100%:</strong> niente contenuti inappropriati</li>
+                      <li><strong>Educativo:</strong> trasmette i valori di gentilezza, coraggio, amicizia, rispetto per la natura...</li>
+                      <li><strong>Creativo ma fedele:</strong> inventa storie nuove, ma sempre ispirate al mondo magico</li>
+                      <li><strong>Cresce con te:</strong> più frammenti sono aggiunti, più diventa ricco e vario</li>
+                    </ul>
+                  </div>
+
+                  <p style="text-align: center; font-style: italic; color: #512da8; font-size: 1.2em; margin: 25px 0;">
+                    Il Piccolo Bardo non ripete storie già sentite.<br>
+                    <strong>Racconta le storie del tuo cuore.</strong>
+                  </p>
+
+                  <p style="font-size: 0.95em; color: #666; text-align: center; margin-top: 30px;">
+                    Creato con per portare magia, serenità e valori positivi nelle serate dei bambini.<br>
+                    Ogni favola è unica, perché nasce da ciò che tu hai scelto di condividere.
+                  </p>
+                </div>
+              </div>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- Footer con dati aziendali -->
+    <footer>
+        <div class="company-info" id="companyInfo">
+            Caricamento dati aziendali...
+        </div>
+    </footer>
+
+    <!-- Modale Account -->
+    <div class="modal" id="accountModal">
+        <div class="modal-content" style="position: relative;">
+            <button class="close-modal" onclick="closeAccountModal()">×</button>
+            <h2 id="modalTitle">Accedi</h2>
+            <div id="modalBody">
+                <!-- Contenuto dinamico: login o impostazioni -->
+                <p>Invia un messaggio al server per autenticarti.</p>
+                <p><em>In attesa di implementazione backend...</em></p>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        let ws = null;
+        let reconnectInterval = null;
+        let selectedAge = null;
+        let currentStory = null;
+        let speechSynthesis = window.speechSynthesis;
+        let currentUtterance = null;
+        let favorites = [];
+        let isNightMode = false;
+
+        // Carica preferiti dal localStorage
+        function loadFavorites() {
+            const stored = localStorage.getItem('bardo_favorites');
+            if (stored) {
+                favorites = JSON.parse(stored);
+                displayFavorites();
+            }
+        }
+
+        function saveFavorites() {
+            localStorage.setItem('bardo_favorites', JSON.stringify(favorites));
+        }
+
+        // ── API init (per impostare cookies) ─────────────────────────────────
+        async function initAPI() {
+            try {
+                const response = await fetch('/api/session', {
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('📄 API Response:', data);
+                    
+                    if (data.session) {
+                        // ← FIX: Usa sessionStorage invece di cookie
+                        // Funziona sempre, anche cross-origin
+                        sessionStorage.setItem('SESSIONID', data.session);
+                        console.log('✅ SESSIONID salvato in sessionStorage:', data.session);
+                        
+                        // Verifica
+                        const saved = sessionStorage.getItem('SESSIONID');
+                        console.log('🔍 Verifica lettura:', saved);
+                        
+  
+                        // settiamo anche il cookie
+                        // Imposta cookie con expire tra 24 ora
+                        const expires = new Date();
+                        expires.setHours(expires.getHours() + 24);
+                                
+                        document.cookie = `SESSIONID=${data.session}; expires=${expires.toUTCString()}; path=/; SameSite=None; Secure`;
+                    
+                    } else {
+                        console.error('❌ Response non contiene campo "session"');
+                    }
+                    
+                } else {
+                    logToPage(`⚠️ API risposta: ${response.status}`, 'warning');
+                }
+            } catch (error) {
+                logToPage('⚠️ API non disponibile', 'warning');
+                console.error('API error:', error);
+            }
+        }
+
+        // WebSocket Connection
+        async function connect() {
+
+            updateStatus('connecting');
+            
+            await initAPI();
+
+/*
+if (response.ok) {
+    const content = await response.text(); 
+    console.log(content); // Qui vedrai il contenuto come stringa
+}
+*/
+
+            ws = new WebSocket('wss://www.ilpiccolobardo.it/ws');
+            
+            ws.onopen = () => {
+                updateStatus('connected');
+                console.log('✓ Connesso al server!');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleResponse(data);
+                } catch (e) {
+                    console.error('Errore parsing risposta:', e);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('Errore WebSocket:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('Disconnesso dal server!');
+                updateStatus('disconnected');
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(() => {
+                        if (ws.readyState === WebSocket.CLOSED) {
+                            connect();
+                        }
+                    }, 5000);
+                }
+            };
+        }
+
+        function sendMessage(action, data = {}) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    pagina: "IL_PICCOLO_BARDO",
+                    action: action,
+                    data: data
+                };
+                ws.send(JSON.stringify(message));
+                console.log(`→ Inviato: ${action}`);
+            } else {
+                alert('Non connesso al server! Riprova tra qualche secondo.');
+            }
+        }
+
+        // Ricezione dati dal WebSocket
+        function handleResponse(response) {
+            console.log('← Ricevuto:', response);
+
+            if (response.action === 'generated_story') {
+                displayStory(response.data.story);
+            } else if (response.action === 'illustration_generated') {
+                displayIllustration(response.data.imageUrl);
+            } else if (response.action === 'speech_generated') {
+                document.getElementById('audioLoading').style.display = 'none';
+                const audio = new Audio(response.audioUrl);
+                audio.play();
+            } else if (response.action === 'image_generated') {
+                displayIllustration(response.img);
+            } 
+            // Nuovi messaggi dal server
+            else if (response.action === 'user_status') {
+                currentUser = response.data.user || null;
+                updateAccountButton();
+            } 
+            else if (response.action === 'company_info') {
+                document.getElementById('companyInfo').innerHTML = `
+                    <strong>${response.data.name}</strong><br>
+                    P.IVA: ${response.data.vat}<br>
+                    ${response.data.address}<br>
+                    Email: <a href="mailto:${response.data.email}" style="color:#667eea;">${response.data.email}</a><br>
+                    © ${new Date().getFullYear()} Tutti i diritti riservati.
+                `;
+            }
+        }
+
+        function updateStatus(status) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = `connection-badge ${status}`;
+            statusEl.textContent = status === 'connected' ? '🟢 Connesso' : 
+                                  status === 'connecting' ? '🟡 Connessione...' : 
+                                  '🔴 Disconnesso';
+        }
+
+        // Age Selection
+        function selectAge(age) {
+            selectedAge = age;
+            document.querySelectorAll('.age-btn').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            event.target.classList.add('selected');
+        }
+
+        // Generate Story
+        function generateStory() {
+            if (!selectedAge) {
+                alert('Seleziona prima l\'età del bambino! 🎂');
+                return;
+            }
+
+            const prompt = document.getElementById('userPrompt').value;
+            if (!prompt.trim()) {
+                alert('Scrivi cosa vuoi nella favola! 💭');
+                return;
+            }
+
+            const childName = document.getElementById('childName').value;
+            const favoriteAnimal = document.getElementById('favoriteAnimal').value;
+            const favoriteColor = document.getElementById('favoriteColor').value;
+
+            // Arricchisci il prompt con le personalizzazioni
+            let enrichedPrompt = prompt;
+            if (childName) enrichedPrompt += ` Il protagonista si chiama ${childName}.`;
+            if (favoriteAnimal) enrichedPrompt += ` Nella storia c'è un ${favoriteAnimal}.`;
+            if (favoriteColor) enrichedPrompt += ` Usa il colore ${favoriteColor} nella narrazione.`;
+
+            currentStory = {
+                prompt: enrichedPrompt,
+                age: selectedAge,
+                childName: childName || null,
+                timestamp: new Date().toISOString()
+            };
+
+            // Mostra loading
+            document.getElementById('storyCard').style.display = 'block';
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('storyDisplay').innerHTML = `
+                <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
+                <div class="loading" id="loadingIndicator">
+                    <div class="loading-spinner"></div>
+                    <p>Il Piccolo Bardo sta creando la tua favola magica...</p>
+                </div>
+            `;
+            document.getElementById('readBtn').disabled = true;
+            document.getElementById('illustrateBtn').disabled = true;
+            document.getElementById('storyIllustration').style.display = 'none';
+
+            // Invia richiesta
+            sendMessage('generate_story', { 
+                userPrompt: enrichedPrompt, 
+                age: selectedAge 
+            });
+
+            // Scroll alla storia
+            document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function displayStory(story) {
+            currentStory.text = story;
+            
+            const display = document.getElementById('storyDisplay');
+            display.innerHTML = `
+                <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
+                ${story}
+            `;
+
+            document.getElementById('readBtn').disabled = false;
+            document.getElementById('illustrateBtn').disabled = false;
+            
+            // Verifica se è già nei preferiti
+            updateFavoriteButton();
+        }
+
+
+        function stopReading() {
+            if (speechSynthesis.speaking) {
+                speechSynthesis.cancel();
+            }
+            document.getElementById('readBtn').style.display = 'block';
+            document.getElementById('stopBtn').style.display = 'none';
+            document.getElementById('audioVisualizer').classList.remove('active');
+        }
+
+        // Illustration Generation
+        function generateIllustration() {
+            if (!currentStory || !currentStory.text) return;
+
+            sendMessage('generate_illustration', { 
+                text: currentStory.text,
+                storyId: currentStory.timestamp 
+            });
+
+            document.getElementById('illustrateBtn').disabled = true;
+            document.getElementById('illustrateBtn').textContent = '⏳ Creando...';
+        }
+
+        function displayIllustration(imageUrl) {
+            const img = document.getElementById('storyIllustration');
+            img.src = imageUrl;
+            img.style.display = 'block';
+            img.onload = () => {
+                img.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            };
+
+            document.getElementById('illustrateBtn').disabled = false;
+            document.getElementById('illustrateBtn').textContent = '🎨 Crea Illustrazione';
+            
+            if (currentStory) {
+                currentStory.illustration = imageUrl;
+            }
+        }
+
+        // Favorites Management
+        function toggleFavorite() {
+            if (!currentStory || !currentStory.text) return;
+
+            const index = favorites.findIndex(f => f.timestamp === currentStory.timestamp);
+            
+            if (index > -1) {
+                // Rimuovi dai preferiti
+                favorites.splice(index, 1);
+            } else {
+                // Aggiungi ai preferiti
+                favorites.unshift(currentStory);
+            }
+
+            saveFavorites();
+            updateFavoriteButton();
+            displayFavorites();
+        }
+
+        function updateFavoriteButton() {
+            const btn = document.getElementById('favoriteBtn');
+            if (!btn) return;
+
+            const isFavorite = favorites.some(f => f.timestamp === currentStory.timestamp);
+            btn.textContent = isFavorite ? '❤️' : '🤍';
+            btn.classList.toggle('active', isFavorite);
+        }
+
+        function displayFavorites() {
+            const container = document.getElementById('favoritesContainer');
+            
+            if (favorites.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📚</div>
+                        <p>Ancora nessuna favola preferita</p>
+                        <p style="font-size: 0.9em;">Crea una favola e mettile un cuore per salvarla qui!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+            favorites.forEach((fav, index) => {
+                const card = document.createElement('div');
+                card.className = 'favorite-card';
+                card.innerHTML = `
+                    <button class="delete-btn" onclick="deleteFavorite(${index}); event.stopPropagation();">×</button>
+                    <h3>${fav.childName ? `Favola di ${fav.childName}` : 'Favola Magica'}</h3>
+                    <p style="font-size: 0.85em; color: #999; margin-bottom: 10px;">
+                        📅 ${new Date(fav.timestamp).toLocaleDateString('it-IT')} | 
+                        🎂 ${fav.age} anni
+                    </p>
+                    <p>${fav.text.substring(0, 150)}...</p>
+                `;
+                card.onclick = () => loadFavorite(index);
+                container.appendChild(card);
+            });
+        }
+
+        function loadFavorite(index) {
+            currentStory = favorites[index];
+            switchTab('create');
+            
+            document.getElementById('storyCard').style.display = 'block';
+            document.getElementById('storyDisplay').innerHTML = `
+                <button class="favorite-btn active" onclick="toggleFavorite()" id="favoriteBtn">❤️</button>
+                ${currentStory.text}
+            `;
+
+            if (currentStory.illustration) {
+                const img = document.getElementById('storyIllustration');
+                img.src = currentStory.illustration;
+                img.style.display = 'block';
+            }
+
+            document.getElementById('readBtn').disabled = false;
+            document.getElementById('illustrateBtn').disabled = false;
+            
+            document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function deleteFavorite(index) {
+            if (confirm('Vuoi davvero eliminare questa favola dai preferiti?')) {
+                favorites.splice(index, 1);
+                saveFavorites();
+                displayFavorites();
+            }
+        }
+
+        // Night Mode
+        function toggleNightMode() {
+            isNightMode = !isNightMode;
+            document.body.classList.toggle('nightmode');
+            
+            const btn = document.querySelector('.nightmode-toggle');
+            btn.textContent = isNightMode ? '☀️' : '🌙';
+            
+        }
+
+        // Tab Switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        function listenStory() {
+          const storyText = currentStory.text;
+          if (!storyText) {
+        //    addLog('Nessun testo da leggere!', 'error');
+            return;
+          }
+
+          // Mostra loading
+          document.getElementById('audioLoading').style.display = 'block';
+
+          sendMessage('synthesize_speech', { text: storyText });
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            connect();
+            loadFavorites();
+            updateAccountButton(); // iniziale
+            
+            // Carica voci per TTS in anticipo (importante per la fluidità)
+            speechSynthesis.getVoices();
+            
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = () => {
+                    const voices = speechSynthesis.getVoices();
+                    console.log('🎤 Voci disponibili:', voices.length);
+                    
+                    // Log delle voci italiane per debug
+                    const italianVoices = voices.filter(v => v.lang.startsWith('it'));
+                    console.log('🇮🇹 Voci italiane:', italianVoices.map(v => `${v.name} (${v.lang})`));
+                };
+            }
+        });
+
+        let currentUser = null;
+
+        // Nuove funzioni per account
+        function openAccountModal() {
+            const modal = document.getElementById('accountModal');
+            const title = document.getElementById('modalTitle');
+            const body = document.getElementById('modalBody');
+
+            if (currentUser) {
+                title.textContent = "Impostazioni Account";
+                body.innerHTML = `
+                    <p>Ciao <strong>${currentUser.name || currentUser.email}</strong>! 👋</p>
+                    <hr style="margin: 20px 0; border-color: #ddd;">
+                    <p><strong>Email:</strong> ${currentUser.email}</p>
+                    ${currentUser.childName ? `<p><strong>Bambino:</strong> ${currentUser.childName}</p>` : ''}
+                    <br>
+                    <button class="btn-danger" onclick="logout()" style="width:100%; padding:15px;">Esci</button>
+                `;
+            } else {
+                title.textContent = "Accedi";
+                body.innerHTML = `
+                    <p>Per salvare le favole preferite nel cloud e sincronizzarle tra dispositivi, accedi al tuo account.</p>
+                    <br>
+                    <button class="btn-primary" onclick="login()" style="width:100%; padding:15px;">Accedi / Registrati</button>
+                    <p style="margin-top:20px; font-size:0.9em; color:#666;">Funzionalità in arrivo!</p>
+                `;
+            }
+
+            modal.classList.add('active');
+        }
+
+        function closeAccountModal() {
+            document.getElementById('accountModal').classList.remove('active');
+        }
+
+        function login() {
+            alert("Funzionalità di login in arrivo! Per ora le favole sono salvate solo localmente.");
+            closeAccountModal();
+        }
+
+        function logout() {
+            if (confirm("Vuoi uscire dall'account? Le favole preferite rimarranno salvate localmente.")) {
+                currentUser = null;
+                updateAccountButton();
+                closeAccountModal();
+            }
+        }
+
+        function updateAccountButton() {
+            const btn = document.getElementById('accountBtn');
+            const nameSpan = document.getElementById('accountName');
+
+            if (currentUser) {
+                btn.innerHTML = `👤 <span class="account-name">${(currentUser.name || currentUser.email).charAt(0).toUpperCase()}</span>`;
+                nameSpan.style.display = 'inline';
+                nameSpan.textContent = (currentUser.name || currentUser.email).charAt(0).toUpperCase();
+            } else {
+                btn.innerHTML = `👤`;
+                nameSpan.style.display = 'none';
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            stopReading();
+        });
+        
+        
+    </script>
+</body>
+</html>

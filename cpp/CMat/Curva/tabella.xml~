@@ -1,0 +1,10 @@
+<curva nome="entalpia" descrizione="">
+	<dato x="0" y="0" />
+	<dato x="1" y="1" />
+	<dato x="2" y="4" />
+	<dato x="3" y="9" />
+	<dato x="4" y="16" />
+	<dato x="5" y="25" />
+	<dato x="6" y="36" />
+</curva>
+

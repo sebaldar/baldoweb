@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Il Piccolo Bardo - Amministrazione</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .connection-status {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+
+        .connection-status.connected { background: #4caf50; color: white; }
+        .connection-status.disconnected { background: #f44336; color: white; }
+        .connection-status.connecting { background: #ff9800; color: white; }
+
+        .main-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .main-tab {
+            padding: 15px 30px;
+            background: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 1.1em;
+            color: #666;
+            transition: all 0.3s;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+
+        .main-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .main-tab-content {
+            display: none;
+        }
+
+        .main-tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-warning { background: #ff9800; color: white; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-info { background: #2196f3; color: white; }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .list-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .list-item {
+            background: #f9f9f9;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .list-item:hover {
+            background: #e3f2fd;
+            transform: translateX(5px);
+        }
+
+        .list-item.selected {
+            background: #667eea;
+            color: white;
+        }
+
+        .list-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .list-item-title {
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+
+        .list-item-meta {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .list-item.selected .list-item-meta {
+            color: rgba(255,255,255,0.8);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .badge-age { background: #e3f2fd; color: #1976d2; }
+        .badge-complexity { background: #fff3e0; color: #f57c00; }
+        .badge-type { background: #f3e5f5; color: #7b1fa2; }
+
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.9em;
+        }
+
+        .detail-section {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .detail-section h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .detail-item {
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid #667eea;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 15px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 2em;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .multi-select-box {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .multi-select-item {
+            padding: 8px;
+            margin-bottom: 5px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .multi-select-item input[type="checkbox"] {
+            width: auto;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎭 Il Piccolo Bardo - Admin</h1>
+            <p class="subtitle">Pannello di Amministrazione</p>
+            <div class="connection-status" id="connectionStatus">Disconnesso</div>
+        </header>
+
+        <div class="main-tabs">
+            <button class="main-tab active" onclick="switchMainTab('stories')">📚 Storie</button>
+            <button class="main-tab" onclick="switchMainTab('fragments')">📄 Frammenti</button>
+            <button class="main-tab" onclick="switchMainTab('characters')">👤 Personaggi</button>
+            <button class="main-tab" onclick="switchMainTab('settings')">🏞️ Ambientazioni</button>
+        </div>
+
+        <!-- TAB: STORIE -->
+        <div id="stories-content" class="main-tab-content active">
+            <div class="grid">
+                <div class="card">
+                    <h2>📚 Lista Storie</h2>
+                    <button class="btn-success btn-small" onclick="refreshStories()" style="margin-bottom: 10px;">🔄 Aggiorna</button>
+                    <div class="list-container" id="storiesList"></div>
+                </div>
+
+                <div class="card">
+                    <h2 id="storyFormTitle">➕ Nuova Storia</h2>
+                    <div class="form-group">
+                        <label>ID Storia</label>
+                        <input type="text" id="storyId" placeholder="es: story_001">
+                    </div>
+                    <div class="form-group">
+                        <label>Titolo</label>
+                        <input type="text" id="storyTitle" placeholder="Il coraggio del cagnolino">
+                    </div>
+                    <div class="form-group">
+                        <label>Descrizione</label>
+                        <textarea id="storyDescription" placeholder="Una storia sul superare le paure..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Età Minima</label>
+                        <input type="number" id="storyAgeMin" value="3" min="2" max="6">
+                    </div>
+                    <div class="form-group">
+                        <label>Età Massima</label>
+                        <input type="number" id="storyAgeMax" value="5" min="2" max="6">
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-success" onclick="saveStory()">💾 Salva Storia</button>
+                        <button class="btn-warning" onclick="editStoryDetails()" id="editDetailsBtn" disabled>✏️ Modifica Dettagli</button>
+                        <button class="btn-danger" onclick="deleteStory()" id="deleteStoryBtn" disabled>🗑️ Elimina</button>
+                        <button class="btn-info" onclick="resetStoryForm()">🔄 Nuovo</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: FRAMMENTI -->
+        <div id="fragments-content" class="main-tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>📄 Lista Frammenti</h2>
+                    <button class="btn-success btn-small" onclick="refreshFragments()" style="margin-bottom: 10px;">🔄 Aggiorna</button>
+                    <div class="list-container" id="fragmentsList"></div>
+                </div>
+
+                <div class="card">
+                    <h2 id="fragmentFormTitle">➕ Nuovo Frammento</h2>
+                    <div class="form-group">
+                        <label>ID Frammento</label>
+                        <input type="text" id="fragmentId" placeholder="es: pf_001">
+                    </div>
+                    <div class="form-group">
+                        <label>Testo</label>
+                        <textarea id="fragmentText" placeholder="Il cagnolino guardò avanti..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Età Minima</label>
+                        <input type="number" id="fragmentAgeMin" value="3" min="2" max="6">
+                    </div>
+                    <div class="form-group">
+                        <label>Età Massima</label>
+                        <input type="number" id="fragmentAgeMax" value="5" min="2" max="6">
+                    </div>
+                    <div class="form-group">
+                        <label>Complessità</label>
+                        <select id="fragmentComplexity">
+                            <option value="bassa">Bassa</option>
+                            <option value="media">Media</option>
+                            <option value="alta">Alta</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tono</label>
+                        <select id="fragmentTone">
+                            <option value="positivo">Positivo</option>
+                            <option value="neutro">Neutro</option>
+                            <option value="riflessivo">Riflessivo</option>
+                        </select>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-success" onclick="saveFragment()">💾 Salva Frammento</button>
+                        <button class="btn-danger" onclick="deleteFragment()" id="deleteFragmentBtn" disabled>🗑️ Elimina</button>
+                        <button class="btn-info" onclick="resetFragmentForm()">🔄 Nuovo</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: PERSONAGGI -->
+        <div id="characters-content" class="main-tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>👤 Lista Personaggi</h2>
+                    <button class="btn-success btn-small" onclick="refreshCharacters()" style="margin-bottom: 10px;">🔄 Aggiorna</button>
+                    <div class="list-container" id="charactersList"></div>
+                </div>
+
+                <div class="card">
+                    <h2 id="characterFormTitle">➕ Nuovo Personaggio</h2>
+                    <div class="form-group">
+                        <label>ID Personaggio</label>
+                        <input type="text" id="characterId" placeholder="es: ch_dog">
+                    </div>
+                    <div class="form-group">
+                        <label>Nome</label>
+                        <input type="text" id="characterName" placeholder="Cagnolino">
+                    </div>
+                    <div class="form-group">
+                        <label>Descrizione</label>
+                        <textarea id="characterDescription" placeholder="Un piccolo cagnolino coraggioso..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Tratti (uno per riga)</label>
+                        <textarea id="characterTraits" placeholder="timido&#10;curioso&#10;coraggioso"></textarea>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-success" onclick="saveCharacter()">💾 Salva Personaggio</button>
+                        <button class="btn-danger" onclick="deleteCharacter()" id="deleteCharacterBtn" disabled>🗑️ Elimina</button>
+                        <button class="btn-info" onclick="resetCharacterForm()">🔄 Nuovo</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: AMBIENTAZIONI -->
+        <div id="settings-content" class="main-tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>🏞️ Lista Ambientazioni</h2>
+                    <button class="btn-success btn-small" onclick="refreshSettings()" style="margin-bottom: 10px;">🔄 Aggiorna</button>
+                    <div class="list-container" id="settingsList"></div>
+                </div>
+
+                <div class="card">
+                    <h2 id="settingFormTitle">➕ Nuova Ambientazione</h2>
+                    <div class="form-group">
+                        <label>ID Ambientazione</label>
+                        <input type="text" id="settingId" placeholder="es: st_forest">
+                    </div>
+                    <div class="form-group">
+                        <label>Nome</label>
+                        <input type="text" id="settingName" placeholder="Bosco Incantato">
+                    </div>
+                    <div class="form-group">
+                        <label>Tipo</label>
+                        <select id="settingType">
+                            <option value="naturale">Naturale</option>
+                            <option value="urbano">Urbano</option>
+                            <option value="fantastico">Fantastico</option>
+                            <option value="domestico">Domestico</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Descrizione</label>
+                        <textarea id="settingDescription" placeholder="Un bosco magico pieno di meraviglie..."></textarea>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-success" onclick="saveSetting()">💾 Salva Ambientazione</button>
+                        <button class="btn-danger" onclick="deleteSetting()" id="deleteSettingBtn" disabled>🗑️ Elimina</button>
+                        <button class="btn-info" onclick="resetSettingForm()">🔄 Nuovo</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: MODIFICA DETTAGLI STORIA -->
+    <div class="modal" id="storyDetailsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>✏️ Modifica Dettagli Storia</h2>
+                <button class="modal-close" onclick="closeStoryDetailsModal()">×</button>
+            </div>
+
+            <div class="form-group">
+                <label>📄 Frammenti</label>
+                <div class="multi-select-box" id="modalFragmentsList"></div>
+            </div>
+
+            <div class="form-group">
+                <label>👤 Personaggi</label>
+                <div class="multi-select-box" id="modalCharactersList"></div>
+            </div>
+
+            <div class="form-group">
+                <label>🏞️ Ambientazioni</label>
+                <div class="multi-select-box" id="modalSettingsList"></div>
+            </div>
+
+            <div class="form-group">
+                <label>💫 Emozioni (separate da virgola)</label>
+                <input type="text" id="modalEmotions" placeholder="coraggio, gioia, curiosità">
+            </div>
+
+            <div class="form-group">
+                <label>💡 Temi (separati da virgola)</label>
+                <input type="text" id="modalThemes" placeholder="autostima, amicizia, crescita">
+            </div>
+
+            <div class="button-group">
+                <button class="btn-success" onclick="saveStoryDetails()">💾 Salva Modifiche</button>
+                <button class="btn-danger" onclick="closeStoryDetailsModal()">✖️ Annulla</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectInterval = null;
+        let selectedStory = null;
+        let selectedFragment = null;
+        let selectedCharacter = null;
+        let selectedSetting = null;
+        let availableFragments = [];
+        let availableCharacters = [];
+        let availableSettings = [];
+
+        // WebSocket Connection
+        function connect() {
+          
+            updateStatus('connecting');
+            
+            ws = new WebSocket('wss://www.ilpiccolobardo.it/ws');
+            
+            ws.onopen = () => {
+                updateStatus('connected');
+                console.log('✓ Connesso al server!');
+                refreshAll();
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleResponse(data);
+                } catch (e) {
+                    console.error('Errore parsing risposta:', e);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('Errore WebSocket:', error);
+            };
+            
+            ws.onclose = () => {
+                updateStatus('disconnected');
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(() => {
+                        if (ws.readyState === WebSocket.CLOSED) {
+                            connect();
+                        }
+                    }, 5000);
+                }
+            };
+        }
+
+        function sendMessage(action, data = {}) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    pagina: "IL_PICCOLO_BARDO",
+                    action: action,
+                    data: data
+                };
+                ws.send(JSON.stringify(message));
+                console.log(`→ Inviato: ${action}`, data);
+            } else {
+                alert('Non connesso al server!');
+            }
+        }
+
+        function handleResponse(response) {
+            console.log('← Ricevuto:', response);
+            
+            if (response.action === 'list_stories') {
+                displayStories(response.data);
+            } else if (response.action === 'list_fragments') {
+                availableFragments = response.data || [];
+                displayFragments(response.data);
+            } else if (response.action === 'list_characters') {
+                availableCharacters = response.data || [];
+                displayCharacters(response.data);
+            } else if (response.action === 'list_settings') {
+                availableSettings = response.data || [];
+                displaySettings(response.data);
+            } else if (response.action === 'story_saved' || response.action === 'fragment_saved' || 
+                       response.action === 'character_saved' || response.action === 'setting_saved') {
+                alert('✓ Salvataggio riuscito!');
+                refreshAll();
+            } else if (response.action === 'story_deleted' || response.action === 'fragment_deleted' || 
+                       response.action === 'character_deleted' || response.action === 'setting_deleted') {
+                alert('✓ Eliminazione riuscita!');
+                refreshAll();
+            } else if (response.action === 'story_details_saved') {
+                alert('✓ Dettagli storia aggiornati!');
+                closeStoryDetailsModal();
+                refreshStories();
+            } else if (response.action === 'error') {
+                alert('✗ Errore: ' + (response.message || 'Operazione fallita'));
+            }
+        }
+
+        function updateStatus(status) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = `connection-status ${status}`;
+            statusEl.textContent = status === 'connected' ? '🟢 Connesso' : 
+                                  status === 'connecting' ? '🟡 Connessione...' : 
+                                  '🔴 Disconnesso';
+        }
+
+        // Tab Switching
+        function switchMainTab(tabName) {
+            document.querySelectorAll('.main-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.main-tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-content`).classList.add('active');
+        }
+
+        // Refresh Functions
+        function refreshAll() {
+            refreshStories();
+            refreshFragments();
+            refreshCharacters();
+            refreshSettings();
+        }
+
+        function refreshStories() {
+            sendMessage('list_stories');
+        }
+
+        function refreshFragments() {
+            sendMessage('list_fragments');
+        }
+
+        function refreshCharacters() {
+            sendMessage('list_characters');
+        }
+
+        function refreshSettings() {
+            sendMessage('list_settings');
+        }
+
+        // Display Functions
+        function displayStories(stories) {
+            const container = document.getElementById('storiesList');
+            
+            if (!stories || stories.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📚</div><p>Nessuna storia</p></div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            stories.forEach(story => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.innerHTML = `
+                    <div class="list-item-header">
+                        <div class="list-item-title">${story.title}</div>
+                    </div>
+                    <div class="list-item-meta">
+                        ID: ${story.id} | 
+                        <span class="badge badge-age">Età: ${story.ageMin}-${story.ageMax}</span>
+                    </div>
+                    <p style="margin-top: 8px; font-size: 0.9em; color: #666;">${story.description || ''}</p>
+                `;
+                item.onclick = () => selectStory(story);
+                container.appendChild(item);
+            });
+        }
+
+        function displayFragments(fragments) {
+            const container = document.getElementById('fragmentsList');
+            
+            if (!fragments || fragments.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📄</div><p>Nessun frammento</p></div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            fragments.forEach(fragment => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.innerHTML = `
+                    <div class="list-item-header">
+                        <div class="list-item-title">${fragment.id}</div>
+                    </div>
+                    <div class="list-item-meta">
+                        <span class="badge badge-complexity">${fragment.complexity}</span>
+                        <span class="badge badge-age">Età: ${fragment.ageMin}-${fragment.ageMax}</span>
+                    </div>
+                    <p style="margin-top: 8px; font-size: 0.9em;">${fragment.text.substring(0, 100)}...</p>
+                `;
+                item.onclick = () => selectFragment(fragment);
+                container.appendChild(item);
+            });
+        }
+
+        function displayCharacters(characters) {
+            const container = document.getElementById('charactersList');
+            
+            if (!characters || characters.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👤</div><p>Nessun personaggio</p></div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            characters.forEach(character => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.innerHTML = `
+                    <div class="list-item-header">
+                        <div class="list-item-title">${character.name}</div>
+                    </div>
+                    <div class="list-item-meta">ID: ${character.id}</div>
+                    <p style="margin-top: 8px; font-size: 0.9em;">${character.description || ''}</p>
+                `;
+                item.onclick = () => selectCharacter(character);
+                container.appendChild(item);
+            });
+        }
+
+        function displaySettings(settings) {
+            const container = document.getElementById('settingsList');
+            
+            if (!settings || settings.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏞️</div><p>Nessuna ambientazione</p></div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            settings.forEach(setting => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.innerHTML = `
+                    <div class="list-item-header">
+                        <div class="list-item-title">${setting.name}</div>
+                    </div>
+                    <div class="list-item-meta">
+                        ID: ${setting.id} | 
+                        <span class="badge badge-type">${setting.type}</span>
+                    </div>
+                    <p style="margin-top: 8px; font-size: 0.9em;">${setting.description || ''}</p>
+<function_calls>
+<invoke name="artifacts">
+<parameter name="command">update</parameter>
+<parameter name="id">piccolo_bardo_admin</parameter>
+<parameter name="old_str">                    <p style="margin-top: 8px; font-size: 0.9em;">${setting.description || ''}</p></parameter>
+<parameter name="new_str">                    <p style="margin-top: 8px; font-size: 0.9em;">${setting.description || ''}</p>
+`;
+item.onclick = () => selectSetting(setting);
+container.appendChild(item);
+});
+}                    
+                    
+                    
+// Selection Functions
+    function selectStory(story) {
+        selectedStory = story;
+        document.querySelectorAll('#storiesList .list-item').forEach(item => item.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        
+        document.getElementById('storyFormTitle').textContent = '✏️ Modifica Storia';
+        document.getElementById('storyId').value = story.id;
+        document.getElementById('storyId').disabled = true;
+        document.getElementById('storyTitle').value = story.title;
+        document.getElementById('storyDescription').value = story.description || '';
+        document.getElementById('storyAgeMin').value = story.ageMin;
+        document.getElementById('storyAgeMax').value = story.ageMax;
+        document.getElementById('deleteStoryBtn').disabled = false;
+        document.getElementById('editDetailsBtn').disabled = false;
+    }
+
+    function selectFragment(fragment) {
+        selectedFragment = fragment;
+        document.querySelectorAll('#fragmentsList .list-item').forEach(item => item.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        
+        document.getElementById('fragmentFormTitle').textContent = '✏️ Modifica Frammento';
+        document.getElementById('fragmentId').value = fragment.id;
+        document.getElementById('fragmentId').disabled = true;
+        document.getElementById('fragmentText').value = fragment.text;
+        document.getElementById('fragmentAgeMin').value = fragment.ageMin;
+        document.getElementById('fragmentAgeMax').value = fragment.ageMax;
+        document.getElementById('fragmentComplexity').value = fragment.complexity;
+        document.getElementById('fragmentTone').value = fragment.tone;
+        document.getElementById('deleteFragmentBtn').disabled = false;
+    }
+
+    function selectCharacter(character) {
+        selectedCharacter = character;
+        document.querySelectorAll('#charactersList .list-item').forEach(item => item.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        
+        document.getElementById('characterFormTitle').textContent = '✏️ Modifica Personaggio';
+        document.getElementById('characterId').value = character.id;
+        document.getElementById('characterId').disabled = true;
+        document.getElementById('characterName').value = character.name;
+        document.getElementById('characterDescription').value = character.description || '';
+        document.getElementById('characterTraits').value = character.traits ? character.traits.join('\n') : '';
+        document.getElementById('deleteCharacterBtn').disabled = false;
+    }
+
+    function selectSetting(setting) {
+        selectedSetting = setting;
+        document.querySelectorAll('#settingsList .list-item').forEach(item => item.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        
+        document.getElementById('settingFormTitle').textContent = '✏️ Modifica Ambientazione';
+        document.getElementById('settingId').value = setting.id;
+        document.getElementById('settingId').disabled = true;
+        document.getElementById('settingName').value = setting.name;
+        document.getElementById('settingType').value = setting.type;
+        document.getElementById('settingDescription').value = setting.description || '';
+        document.getElementById('deleteSettingBtn').disabled = false;
+    }
+
+    // Save Functions
+    function saveStory() {
+        const id = document.getElementById('storyId').value;
+        const title = document.getElementById('storyTitle').value;
+        
+        if (!id || !title) {
+            alert('ID e Titolo sono obbligatori!');
+            return;
+        }
+
+        const data = {
+            id: id,
+            title: title,
+            description: document.getElementById('storyDescription').value,
+            ageMin: parseInt(document.getElementById('storyAgeMin').value),
+            ageMax: parseInt(document.getElementById('storyAgeMax').value)
+        };
+
+        sendMessage(selectedStory ? 'update_story' : 'create_story', data);
+    }
+
+    function saveFragment() {
+        const id = document.getElementById('fragmentId').value;
+        const text = document.getElementById('fragmentText').value;
+        
+        if (!id || !text) {
+            alert('ID e Testo sono obbligatori!');
+            return;
+        }
+
+        const data = {
+            id: id,
+            text: text,
+            ageMin: parseInt(document.getElementById('fragmentAgeMin').value),
+            ageMax: parseInt(document.getElementById('fragmentAgeMax').value),
+            complexity: document.getElementById('fragmentComplexity').value,
+            tone: document.getElementById('fragmentTone').value,
+            embedding: []
+        };
+
+        sendMessage(selectedFragment ? 'update_fragment' : 'create_fragment', data);
+    }
+
+    function saveCharacter() {
+        const id = document.getElementById('characterId').value;
+        const name = document.getElementById('characterName').value;
+        
+        if (!id || !name) {
+            alert('ID e Nome sono obbligatori!');
+            return;
+        }
+
+        const traits = document.getElementById('characterTraits').value
+            .split('\n')
+            .map(t => t.trim())
+            .filter(t => t);
+
+        const data = {
+            id: id,
+            name: name,
+            description: document.getElementById('characterDescription').value,
+            traits: traits
+        };
+
+        sendMessage(selectedCharacter ? 'update_character' : 'create_character', data);
+    }
+
+    function saveSetting() {
+        const id = document.getElementById('settingId').value;
+        const name = document.getElementById('settingName').value;
+        
+        if (!id || !name) {
+            alert('ID e Nome sono obbligatori!');
+            return;
+        }
+
+        const data = {
+            id: id,
+            name: name,
+            type: document.getElementById('settingType').value,
+            description: document.getElementById('settingDescription').value
+        };
+
+        sendMessage(selectedSetting ? 'update_setting' : 'create_setting', data);
+    }
+
+    // Delete Functions
+    function deleteStory() {
+        if (!selectedStory) return;
+        
+        if (confirm(`Eliminare la storia "${selectedStory.title}"?`)) {
+            sendMessage('delete_story', { id: selectedStory.id });
+            resetStoryForm();
+        }
+    }
+
+    function deleteFragment() {
+        if (!selectedFragment) return;
+        
+        if (confirm(`Eliminare il frammento "${selectedFragment.id}"?`)) {
+            sendMessage('delete_fragment', { id: selectedFragment.id });
+            resetFragmentForm();
+        }
+    }
+
+    function deleteCharacter() {
+        if (!selectedCharacter) return;
+        
+        if (confirm(`Eliminare il personaggio "${selectedCharacter.name}"?`)) {
+            sendMessage('delete_character', { id: selectedCharacter.id });
+            resetCharacterForm();
+        }
+    }
+
+    function deleteSetting() {
+        if (!selectedSetting) return;
+        
+        if (confirm(`Eliminare l'ambientazione "${selectedSetting.name}"?`)) {
+            sendMessage('delete_setting', { id: selectedSetting.id });
+            resetSettingForm();
+        }
+    }
+
+    // Reset Functions
+    function resetStoryForm() {
+        selectedStory = null;
+        document.getElementById('storyFormTitle').textContent = '➕ Nuova Storia';
+        document.getElementById('storyId').value = '';
+        document.getElementById('storyId').disabled = false;
+        document.getElementById('storyTitle').value = '';
+        document.getElementById('storyDescription').value = '';
+        document.getElementById('storyAgeMin').value = '3';
+        document.getElementById('storyAgeMax').value = '5';
+        document.getElementById('deleteStoryBtn').disabled = true;
+        document.getElementById('editDetailsBtn').disabled = true;
+        document.querySelectorAll('#storiesList .list-item').forEach(item => item.classList.remove('selected'));
+    }
+
+    function resetFragmentForm() {
+        selectedFragment = null;
+        document.getElementById('fragmentFormTitle').textContent = '➕ Nuovo Frammento';
+        document.getElementById('fragmentId').value = '';
+        document.getElementById('fragmentId').disabled = false;
+        document.getElementById('fragmentText').value = '';
+        document.getElementById('fragmentAgeMin').value = '3';
+        document.getElementById('fragmentAgeMax').value = '5';
+        document.getElementById('fragmentComplexity').value = 'bassa';
+        document.getElementById('fragmentTone').value = 'positivo';
+        document.getElementById('deleteFragmentBtn').disabled = true;
+        document.querySelectorAll('#fragmentsList .list-item').forEach(item => item.classList.remove('selected'));
+    }
+
+    function resetCharacterForm() {
+        selectedCharacter = null;
+        document.getElementById('characterFormTitle').textContent = '➕ Nuovo Personaggio';
+        document.getElementById('characterId').value = '';
+        document.getElementById('characterId').disabled = false;
+        document.getElementById('characterName').value = '';
+        document.getElementById('characterDescription').value = '';
+        document.getElementById('characterTraits').value = '';
+        document.getElementById('deleteCharacterBtn').disabled = true;
+        document.querySelectorAll('#charactersList .list-item').forEach(item => item.classList.remove('selected'));
+    }
+
+    function resetSettingForm() {
+        selectedSetting = null;
+        document.getElementById('settingFormTitle').textContent = '➕ Nuova Ambientazione';
+        document.getElementById('settingId').value = '';
+        document.getElementById('settingId').disabled = false;
+        document.getElementById('settingName').value = '';
+        document.getElementById('settingType').value = 'naturale';
+        document.getElementById('settingDescription').value = '';
+        document.getElementById('deleteSettingBtn').disabled = true;
+        document.querySelectorAll('#settingsList .list-item').forEach(item => item.classList.remove('selected'));
+    }
+
+    // Story Details Modal
+    function editStoryDetails() {
+        if (!selectedStory) return;
+        
+        // Popola frammenti
+        const fragmentsContainer = document.getElementById('modalFragmentsList');
+        fragmentsContainer.innerHTML = '';
+        availableFragments.forEach(fragment => {
+            const item = document.createElement('div');
+            item.className = 'multi-select-item';
+            item.innerHTML = `
+                <input type="checkbox" id="modal_frag_${fragment.id}" value="${fragment.id}">
+                <label for="modal_frag_${fragment.id}" style="flex: 1; cursor: pointer; margin: 0;">
+                    ${fragment.id}: ${fragment.text.substring(0, 50)}...
+                </label>
+            `;
+            fragmentsContainer.appendChild(item);
+        });
+
+        // Popola personaggi
+        const charactersContainer = document.getElementById('modalCharactersList');
+        charactersContainer.innerHTML = '';
+        availableCharacters.forEach(character => {
+            const item = document.createElement('div');
+            item.className = 'multi-select-item';
+            item.innerHTML = `
+                <input type="checkbox" id="modal_char_${character.id}" value="${character.id}">
+                <label for="modal_char_${character.id}" style="flex: 1; cursor: pointer; margin: 0;">
+                    ${character.name}
+                </label>
+            `;
+            charactersContainer.appendChild(item);
+        });
+
+        // Popola ambientazioni
+        const settingsContainer = document.getElementById('modalSettingsList');
+        settingsContainer.innerHTML = '';
+        availableSettings.forEach(setting => {
+            const item = document.createElement('div');
+            item.className = 'multi-select-item';
+            item.innerHTML = `
+                <input type="checkbox" id="modal_set_${setting.id}" value="${setting.id}">
+                <label for="modal_set_${setting.id}" style="flex: 1; cursor: pointer; margin: 0;">
+                    ${setting.name} (${setting.type})
+                </label>
+            `;
+            settingsContainer.appendChild(item);
+        });
+
+        document.getElementById('storyDetailsModal').classList.add('active');
+    }
+
+    function closeStoryDetailsModal() {
+        document.getElementById('storyDetailsModal').classList.remove('active');
+    }
+
+    function saveStoryDetails() {
+        if (!selectedStory) return;
+
+        const selectedFragments = [];
+        availableFragments.forEach(fragment => {
+            const checkbox = document.getElementById(`modal_frag_${fragment.id}`);
+            if (checkbox && checkbox.checked) {
+                selectedFragments.push(fragment.id);
+            }
+        });
+
+        const selectedCharacters = [];
+        availableCharacters.forEach(character => {
+            const checkbox = document.getElementById(`modal_char_${character.id}`);
+            if (checkbox && checkbox.checked) {
+                selectedCharacters.push(character.id);
+            }
+        });
+
+        const selectedSettings = [];
+        availableSettings.forEach(setting => {
+            const checkbox = document.getElementById(`modal_set_${setting.id}`);
+            if (checkbox && checkbox.checked) {
+                selectedSettings.push(setting.id);
+            }
+        });
+
+        const emotions = document.getElementById('modalEmotions').value
+            .split(',')
+            .map(e => e.trim())
+            .filter(e => e);
+
+        const themes = document.getElementById('modalThemes').value
+            .split(',')
+            .map(t => t.trim())
+            .filter(t => t);
+
+        const data = {
+            storyId: selectedStory.id,
+            fragments: selectedFragments,
+            characters: selectedCharacters,
+            settings: selectedSettings,
+            emotions: emotions,
+            themes: themes
+        };
+
+        sendMessage('update_story_details', data);
+    }
+
+    // Initialize
+    window.addEventListener('load', () => {
+        connect();
+    });
+</script>                    

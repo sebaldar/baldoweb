@@ -1,0 +1,22 @@
+{
+  "name": "il piccolo bardo",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Narratore di racconti per bambini",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.2.4",
+    "mongodb": "^7.1.0",
+    "mysql2": "^3.17.0",
+    "neo4j-driver": "^6.0.1",
+    "node-addon-api": "^8.5.0",
+    "openai": "^6.15.0",
+    "ws": "^8.19.0"
+  }
+}

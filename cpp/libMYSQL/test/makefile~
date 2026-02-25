@@ -1,0 +1,15 @@
+CC=g++
+CFLAGS=
+APPNAME=testMysql
+INCLUDE=	-I./ 						\
+		-I$(HOME)/cpp/mysql				\
+		-I$(HOME)/cpp/tstringlist/include		\
+		-I$(HOME)/cpp/Util				\
+		-I/usr/include/mysql/				
+LIB=								\
+		-lmysqlclient
+SRCFILES=        main.cpp $(HOME)/cpp/tstringlist/source/tstringlist.cpp $(HOME)/cpp/mysql/tmysql.cpp  $(HOME)/cpp/Utils/Util.cpp
+$(APPNAME) : $(SRCFILES)
+	   $(CC) $(CFLAGS)  $(INCLUDE) $(SRCFILES) -L$(HOME)/lib $(LIB) -o $(HOME)/bin/$(APPNAME)
+
+

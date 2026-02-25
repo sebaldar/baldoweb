@@ -1,0 +1,5 @@
+x-0.5*cos(y)=0
+y-x*sin(x)=0
+z=x+ln(y+1)
+k=ln(x+1)+y
+

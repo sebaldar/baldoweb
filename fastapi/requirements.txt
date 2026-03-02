@@ -1,0 +1,29 @@
+fastapi
+uvicorn[standard]
+httpx
+pydantic
+pydantic-settings
+
+# LLM cloud
+openai
+anthropic
+
+# Agentic framework
+langgraph
+langchain-core
+
+# Neo4j
+neo4j
+
+# Logging
+python-json-logger
+python-dotenv
+
+# Geocoding (Trasforma nomi di città in coordinate)
+geopy
+
+# Parsing delle Date (Gestisce "ieri", "lunedì scorso", ecc.)
+dateparser
+
+# Utility per il fuso orario (Necessario per sincronizzare Astro e Meteo)
+pytz

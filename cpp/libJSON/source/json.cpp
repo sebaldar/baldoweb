@@ -191,3 +191,19 @@ std::string JSON::value ( const std::string & str )
 	}
 
 }
+
+std::string JSON::toString() const
+{
+    // 1. Converti il puntatore void* nel tipo reale di RapidJSON
+    const rapidjson::Document &document = *reinterpret_cast<const rapidjson::Document*>(doc);
+
+    // 2. Prepara il buffer e il writer
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+
+    // 3. Passa il documento al writer
+    document.Accept(writer);
+
+    // 4. Ritorna la stringa
+    return buffer.GetString();
+}

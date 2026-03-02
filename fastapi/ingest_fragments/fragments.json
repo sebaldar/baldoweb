@@ -1,0 +1,14 @@
+[
+  {
+    "text": "Nella Foresta dei Sussurri, le radici degli alberi si illuminano di blu quando sentono la risata di un bambino.",
+    "setting": "bosco",
+    "characters": ["alberi parlanti"],
+    "emotions": ["meraviglia"]
+  },
+  {
+    "text": "I draghi gentili non sputano fuoco, ma bolle di sapone che profumano di fragola e sogni.",
+    "setting": "qualsiasi",
+    "characters": ["drago gentile"],
+    "emotions": ["felicità", "calma"]
+  }
+]

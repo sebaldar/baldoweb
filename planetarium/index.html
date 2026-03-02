@@ -647,7 +647,6 @@
             ws.onmessage = (event) => {
                 try {
                     let xmlString;
-                    
                     // Determina se è JSON o XML puro
                     const data = event.data.trim();
                     if (data.startsWith('{')) {

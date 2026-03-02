@@ -32,6 +32,21 @@ services:
     volumes:
       - ./data/mongo:/data/db
 
+  fastapi:
+    build:
+      context: ./fastapi
+      dockerfile: Dockerfile
+    container_name: baldo-fastapi
+    restart: always
+    depends_on:
+      - neo4j
+      - db
+      - mongodb
+    env_file: .env
+    volumes:
+      - ./fastapi/logs:/app/logs
+    mem_limit: 512m
+
   app:
     build:
       context: .
@@ -41,15 +56,14 @@ services:
     depends_on:
       - db
       - neo4j
+      - fastapi
     env_file: .env
     ports:
-      # Espone la porta solo all'host locale per il proxy di Apache
       - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3002"
     volumes:
       - ./session:/app/server/session
       - ./server/logs:/app/server/logs
       - ./ssl:/app/ssl
       - ./data/planetarium_assets:/app/data/planetarium
-      
-      # Il volume public serve per condividere file generati (audio/immagini) con Apache
       - ./ilpiccolobardo/public:/app/ilpiccolobardo/public

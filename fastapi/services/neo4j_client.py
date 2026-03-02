@@ -1,0 +1,196 @@
+"""
+Neo4jClient
+===========
+Schema (English Unified):
+  Nodes:
+    (:PlotFragment {id, text, setting})
+    (:Story {id, text, original_prompt, setting, timestamp})
+    (:Character {name})
+    (:Emotion {name})
+
+  Relationships:
+    (:PlotFragment|Story)-[:CONTAINS]->(:Character)
+    (:PlotFragment|Story)-[:EVOKES]->(:Emotion)
+    (:Character)-[:RELATIONSHIP {type}]->(:Character)
+    (:Story)-[:INSPIRED_BY]->(:PlotFragment)
+"""
+
+
+
+import logging
+from neo4j import AsyncGraphDatabase
+
+logger = logging.getLogger(__name__)
+
+MAX_FRAGMENTS = 5
+MAX_PREVIOUS_STORIES = 3
+
+class Neo4jClient:
+
+    def __init__(self, uri: str, user: str, password: str):
+        self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+
+    async def close(self):
+        await self.driver.close()
+
+    # ------------------------------------------------------------------
+    # FRAGMENT SEARCH
+    # ------------------------------------------------------------------
+    async def cerca_frammenti(
+        self,
+        characters: list[str],
+        emotions: list[str],
+        setting: str,
+        extra_terms: list[str] = None,
+    ) -> list[dict]:
+        all_terms = list(set((extra_terms or []) + characters + emotions))
+
+        async with self.driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (f:PlotFragment)
+                OPTIONAL MATCH (f)-[:CONTAINS]->(p:Character)
+                OPTIONAL MATCH (f)-[:EVOKES]->(e:Emotion)
+                WITH f,
+                     count(CASE WHEN p.name IN $characters THEN 1 END) AS match_p,
+                     count(CASE WHEN e.name IN $emotions THEN 1 END) AS match_e,
+                     count(CASE WHEN p.name IN $terms OR e.name IN $terms THEN 1 END) AS match_t
+                WHERE match_p > 0 OR match_e > 0 OR match_t > 0
+                RETURN f.id AS id, f.text AS testo, f.setting AS ambientazione,
+                       (match_p * 2 + match_e + match_t) AS score
+                ORDER BY score DESC
+                LIMIT $limit
+                """,
+                characters=characters,
+                emotions=emotions,
+                terms=all_terms,
+                limit=MAX_FRAGMENTS,
+            )
+            fragments = [dict(record) async for record in result]
+
+        if not fragments:
+            fragments = await self._search_by_setting(setting)
+
+        logger.info(f"Neo4j: found {len(fragments)} fragments")
+        return fragments
+
+    async def _search_by_setting(self, setting: str) -> list[dict]:
+        keyword = setting.split()[0] if setting else ""
+        async with self.driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (f:PlotFragment)
+                WHERE toLower(f.setting) CONTAINS toLower($keyword)
+                RETURN f.id AS id, f.text AS testo, f.setting AS ambientazione, 0 AS score
+                LIMIT $limit
+                """,
+                keyword=keyword,
+                limit=MAX_FRAGMENTS,
+            )
+            return [dict(record) async for record in result]
+
+    # ------------------------------------------------------------------
+    # MEMORY — Previous Stories
+    # ------------------------------------------------------------------
+    async def cerca_storie_precedenti(self, characters: list[str], emotions: list[str]) -> list[dict]:
+        async with self.driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (s:Story)
+                OPTIONAL MATCH (s)-[:CONTAINS]->(p:Character)
+                OPTIONAL MATCH (s)-[:EVOKES]->(e:Emotion)
+                WITH s,
+                     count(CASE WHEN p.name IN $characters THEN 1 END) AS match_p,
+                     count(CASE WHEN e.name IN $emotions THEN 1 END) AS match_e
+                WHERE match_p > 0 OR match_e > 0
+                RETURN s.id AS id, s.text AS testo, s.setting AS ambientazione,
+                       s.timestamp AS timestamp,
+                       (match_p * 2 + match_e) AS score
+                ORDER BY score DESC, s.timestamp DESC
+                LIMIT $limit
+                """,
+                characters=characters,
+                emotions=emotions,
+                limit=MAX_PREVIOUS_STORIES,
+            )
+            stories = [dict(record) async for record in result]
+
+        logger.info(f"Neo4j: found {len(stories)} relevant previous stories")
+        return stories
+
+    # ------------------------------------------------------------------
+    # MEMORY — Save New Story
+    # ------------------------------------------------------------------
+    async def salva_storia(
+        self,
+        story_id: str,
+        text: str,
+        characters: list[str],
+        emotions: list[str],
+        setting: str,
+        original_prompt: str,
+        used_fragments: list[str],
+        timestamp: str,
+    ) -> None:
+        async with self.driver.session() as session:
+            # Create Story node
+            await session.run(
+                """
+                CREATE (s:Story {
+                    id: $id,
+                    text: $text,
+                    setting: $setting,
+                    original_prompt: $prompt,
+                    timestamp: $timestamp
+                })
+                """,
+                id=story_id, text=text, setting=setting,
+                prompt=original_prompt, timestamp=timestamp,
+            )
+
+            # Link Characters
+            for name in characters:
+                await session.run(
+                    """
+                    MATCH (s:Story {id: $sid})
+                    MERGE (p:Character {name: $name})
+                    MERGE (s)-[:CONTAINS]->(p)
+                    """,
+                    sid=story_id, name=name,
+                )
+
+            # Link Emotions
+            for emotion in emotions:
+                await session.run(
+                    """
+                    MATCH (s:Story {id: $sid})
+                    MERGE (e:Emotion {name: $name})
+                    MERGE (s)-[:EVOKES]->(e)
+                    """,
+                    sid=story_id, name=emotion,
+                )
+
+            # Link Fragments
+            for fid in used_fragments:
+                await session.run(
+                    """
+                    MATCH (s:Story {id: $sid})
+                    MATCH (f:PlotFragment {id: $fid})
+                    MERGE (s)-[:INSPIRED_BY]->(f)
+                    """,
+                    sid=story_id, fid=fid,
+                )
+
+        logger.info(f"Neo4j: story {story_id} saved successfully.")
+
+    async def get_relazioni_personaggi(self, characters: list[str]) -> list[dict]:
+        async with self.driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (a:Character)-[r:RELATIONSHIP]->(b:Character)
+                WHERE a.name IN $characters AND b.name IN $characters
+                RETURN a.name AS da, r.type AS tipo, b.name AS a
+                """,
+                characters=characters,
+            )
+            return [dict(record) async for record in result]

@@ -3,6 +3,8 @@
 import 'dotenv/config';
 import { promises as fs } from 'fs';
 import https from 'https';
+import http from 'http'   
+
 import { URL } from 'url';
 import path from 'path';
 import { WebSocketServer } from 'ws';
@@ -283,6 +285,9 @@ export default class Server { // Export della classe (default)
             };
                 
             this.srv_https = https.createServer(options, this.handleHttpRequest.bind(this));
+			// Server HTTP interno per chiamate Docker (niente SSL)
+			// NON esposto all'esterno — solo nella rete Docker interna
+			this.srv_http_internal = http.createServer(this.handleHttpRequest.bind(this));
                 
             this.wss = new WebSocketServer({ 
               server: this.srv_https, 
@@ -350,8 +355,8 @@ export default class Server { // Export della classe (default)
     }
     
 	async loadContext(request) {
-		const parsedUrl = new URL(request.url, `https://${request.headers.host}`);
-		
+		const protocol = request.connection.encrypted ? 'https' : 'http';
+		const parsedUrl = new URL(request.url, `${protocol}://${request.headers.host}`);		
 		// Forza il percorso assoluto corretto per Docker
 		// process.cwd() è /app/server, quindi cerchiamo /app/server/config.json
 		let FILE_CONFIG = parsedUrl.searchParams.get('config_file') || path.resolve(process.cwd(), 'config.json');
@@ -382,8 +387,8 @@ export default class Server { // Export della classe (default)
 			// ⚠️ CORS HEADERS - PRIMA DI TUTTO (prima di qualsiasi altra operazione)
 			const origin = request.headers.origin;
 			const allowedOrigins = [
-				'https://tuodominio.com',
-				'https://www.tuodominio.com',
+				'https://ilpiccolobardo.it',
+				'https://www.ilpiccolobardo.it',
 				// aggiungi altri domini permessi
 			];
 			
@@ -402,25 +407,54 @@ export default class Server { // Export della classe (default)
 				return;
 			}
 			
-		// Leggi session_id da HEADER o BODY invece che da cookie
-		let session_id = request.headers['x-session-id'];
-		
-		// Se è POST, potrebbe essere nel body
-		if (!session_id && request.method === 'POST') {
-			const body = await this.parseBody(request);
-			session_id = body.session_id;
-		}
-		
-		// Genera nuova sessione se mancante
-		if (!session_id || !this.isValidSessionIdFormat(session_id)) {
-			session_id = Server.generateSessionId();
-			console.log(`✅ Nuova sessione generata: ${session_id}`);
-		}
-		
-		// Crea directory sessione
-		const session_dir = path.join(process.env.SESSION_DIR, session_id);
-		await fs.mkdir(session_dir, { recursive: true });
+			// *** RECUPERA SESSION_ID da MULTIPLI SORGENTI (fallback chain) ***
+			let session_id = null;
+			let session_source = 'unknown';
 			
+			// 1. Prova dal cookie (metodo tradizionale)
+			const cookies = tools.parseCookies(request.headers.cookie);
+			if (cookies.SESSIONID && this.isValidSessionIdFormat(cookies.SESSIONID)) {
+				session_id = cookies.SESSIONID;
+				session_source = 'cookie';
+			}
+			
+			// 2. Fallback: leggi da query parameter (per sessionStorage client-side)
+			if (!session_id && queryParams.session_id && this.isValidSessionIdFormat(queryParams.session_id)) {
+				session_id = queryParams.session_id;
+				session_source = 'query';
+			}
+			
+			// 3. Fallback: leggi da header custom (alternativa più pulita)
+			if (!session_id && request.headers['x-session-id'] && this.isValidSessionIdFormat(request.headers['x-session-id'])) {
+				session_id = request.headers['x-session-id'];
+				session_source = 'header';
+			}
+			
+			// 1. Determina se serve una nuova sessione
+			let isNewSession = false;
+			if (!session_id || !this.isValidSessionIdFormat(session_id)) {
+				session_id = Server.generateSessionId();
+				session_source = 'generated';
+				isNewSession = true;
+				console.log(`✅ Nuova sessione generata: ${session_id}`);
+			}
+
+			// 2. Definisci la directory PRIMA di usarla
+			const session_dir = path.join(process.env.SESSION_DIR, session_id);
+
+			// 3. Se è nuova, crea la cartella e i file base
+			if (isNewSession) {
+				await fs.mkdir(session_dir, { recursive: true });
+				await this.ensureUserFileExists(session_dir);
+			}
+
+			// 4. IMPORTANTE: Invia il cookie al browser per il prossimo refresh
+			if (isNewSession || session_source !== 'cookie') {
+				response.setHeader('Set-Cookie', [
+					`SESSIONID=${session_id}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${60 * 60 * 24 * 7}`
+				]);
+			}	
+					
 			// 3. PREPARA JDATA
 			jdata = {
 				...jdata,
@@ -435,6 +469,8 @@ export default class Server { // Export della classe (default)
 				session_dir: session_dir,
 			};
 			
+
+		
 			// 4. GESTISCI RICHIESTA
 			switch (request.method) {
 				case "POST": {
@@ -447,7 +483,7 @@ export default class Server { // Export della classe (default)
 				}
 			}
 			
-			await this.http_command(jdata);
+			await this.http_command( jdata);
 			
 		} catch (error) {
 			console.error(`❌ Errore in handleHttpRequest: ${error.message}`);
@@ -717,6 +753,7 @@ export default class Server { // Export della classe (default)
             return;
         }
         const h_port = this.port;
+        const h_port_int = 2+parseInt(this.port);
 
         const d = new Date();
         console.log(`${d.toISOString().split('T')[0]} ${d.toTimeString().split(' ')[0]} : process ID ${process.pid}`);
@@ -725,9 +762,15 @@ export default class Server { // Export della classe (default)
             console.log(`Listening on https://${this.host}:${h_port} and wss://${this.host}:${h_port}`);
             this.startHeartbeat(); 
         });
+        
+		// HTTP interno Docker — non aggiungere ai ports in docker-compose
+		this.srv_http_internal.listen(h_port_int, '0.0.0.0', () => {
+            console.log(`Listening on http://${'0.0.0.0'}:${h_port_int}`);
+		});
+        
     }
 
-    async http_command(jdata) {
+    async http_command( jdata) {
         // Ora puoi accedere all'ID di sessione sicuro tramite jdata.SESSION
         console.log(`[HTTPS] Sessione attiva: ${jdata.SESSION}`); 
         if (!jdata.response.finished) {

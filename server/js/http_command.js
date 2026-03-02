@@ -1,13 +1,14 @@
 import fs from 'fs';
+import path from 'path';
 
 // Import dinamici: li faremo al bisogno nel metodo executeRequest.
 // Ogni modulo lo importeremo con import().
 
-// Classe WSS
 class HTTP {
 
     constructor( jdata ) {
         this.jdata = jdata;
+        this.response = jdata.response;
     }
 
     async executeRequest() {
@@ -15,22 +16,35 @@ class HTTP {
         const jdata = this.jdata;
 
         // Funzione helper per importare moduli ES dinamicamente
-        const load = async (path) => {
-            const mod = await import(`file://${process.cwd()}/js/pagine/${path}.js`);
-            return mod.default || mod; // supporta sia export default che named
+        const load = async (pagePath) => {
+            // Usiamo un percorso assoluto basato sulla struttura del Docker (/app/server/js/pagine/)
+            const fullPath = `file://${path.resolve('/app/server/js/api', `${pagePath}.js`)}`;
+            
+            try {
+                const mod = await import(fullPath);
+                return mod.default || mod;
+            } catch (err) {
+                console.error(`❌ Impossibile caricare il modulo in: ${fullPath}`, err.message);
+                throw err;
+            }
         };
 
         const doc = jdata.doc;
         switch (doc) {
 			case "session" :
-				this.jdata.response.statusCode = 200;
-				this.jdata.response.setHeader("Content-Type", `text/json`);	
-				this.jdata.response.end( JSON.stringify( {'session' : jdata.SESSION } ))
+				this.response.statusCode = 200;
+				this.response.setHeader("Content-Type", `text/json`);	
+				this.response.end( JSON.stringify( {'session' : jdata.SESSION } ))
 			break;
+            case "PLANETARIUM": {
+                const module = await load("PLANETARIUM/dati_astronomici");
+                await module.exe( jdata);
+            }
+            break;
 			default:
-				this.jdata.response.statusCode = 200;
-				this.jdata.response.setHeader("Content-Type", `text/html`);	
-				this.jdata.response.end("Nessuna richiesta gestita!")
+				this.response.statusCode = 200;
+				this.response.setHeader("Content-Type", `text/html`);	
+				this.response.end("Nessuna richiesta gestita!")
 			break;
 			
 
@@ -41,8 +55,8 @@ class HTTP {
 
 // Esportazione del modulo principale
 export default {
-    async exe( jdata ) {
-        const h = new HTTP(jdata);
+    async exe( response, jdata ) {
+        const h = new HTTP( response,jdata);
         await h.executeRequest();
     }
 };

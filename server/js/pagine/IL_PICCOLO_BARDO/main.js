@@ -3,6 +3,186 @@ import fs from 'fs';
 import neo4j from 'neo4j-driver';
 import PiccoloBardoManager from './PiccoloBardoManager.js';
 
+async function manage_fastapi(server, ws, message) {
+    const data = message.data;
+    // ── Payload base verso FastAPI ────────────────────────────────────────
+    const fastapiPayload = {
+        prompt:      data.userPrompt,
+        eta_bambino: data.age || 5,
+        lingua:      'it',
+        lunghezza:   'media',
+        session_id:  data.session_id || null,
+        lat:         data.geo?.lat  ?? null,
+        lon:         data.geo?.lon  ?? null,
+        source_geo:  data.geo ? 'device' : 'ip',
+        dati_astronomici: null,   // verrà popolato se serve
+    };
+
+    // ── Helper: invia evento al browser ──────────────────────────────────
+    const send = (payload) => {
+        if (ws && ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify(payload));
+        }
+    };
+
+    // ── Helper: leggi stream SSE e gestisci ogni evento ──────────────────
+    async function consumaSSE(payload) {
+        const fastapiResponse = await fetch('http://fastapi:8000/racconto/stream', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload),
+        });
+
+        if (!fastapiResponse.ok) {
+            const err = await fastapiResponse.json().catch(() => ({}));
+            throw new Error(err.detail || `FastAPI HTTP ${fastapiResponse.status}`);
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        for await (const chunk of fastapiResponse.body) {
+            buffer += decoder.decode(chunk, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();   // ultima riga potenzialmente incompleta
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const jsonStr = line.slice(6).trim();
+                if (!jsonStr) continue;
+
+                let evento;
+                try { evento = JSON.parse(jsonStr); }
+                catch { continue; }
+
+                // ── Evento speciale: FastAPI chiede i dati astronomici ──
+                if (evento.tipo === 'richiesta_astronomia') {
+                    // Non ritrasmettere al browser, gestiscilo qui
+                    const datiAstro = await chiamaPlanetarium(
+                        evento.lat,
+                        evento.lon,
+                        evento.data_storia,
+                    );
+
+                    if (datiAstro) {
+                        // Comunica al browser che stiamo guardando il cielo
+                        send({ tipo: 'nodo_end', nodo: 'analizza_prompt',
+                               stato: { usa_astronomia: true } });
+                        send({ tipo: 'nodo_start', nodo: 'recupera_astronomia' });
+
+                        // Rilancia FastAPI con i dati astronomici già pronti
+                        // Interrompe questo stream e ne apre uno nuovo
+                        payload.dati_astronomici = datiAstro;
+                        return { rilancia: true, payload };
+                    }
+                    // Se PLANETARIUM fallisce continua senza astronomia
+                    continue;
+                }
+
+                // ── Tutti gli altri eventi vanno al browser ─────────────
+                send(evento);
+
+                if (evento.tipo === 'fine' || evento.tipo === 'errore') {
+                    return { rilancia: false };
+                }
+            }
+        }
+        return { rilancia: false };
+    }
+
+    // ── Helper: chiama il motore astronomico Node ─────────────────────────
+    async function chiamaPlanetarium(lat, lon, dataStoria) {
+        // Usa coordinate del dispositivo/IP se il prompt non ha un luogo
+        const coordLat = lat ?? data.geo?.lat;
+        const coordLon = lon ?? data.geo?.lon;
+        if (!coordLat || !coordLon) return null;
+
+        try {
+            const params = new URLSearchParams({
+                lat:  coordLat,
+                lon:  coordLon,
+                data: dataStoria || new Date().toISOString().split('T')[0],
+            });
+
+            // Chiamata interna HTTPS al motore astronomico su Node stesso
+            const res = await fetch(`https://www.ilpiccolobardo.it/api/PLANETARIUM?${params}`, {
+                headers: { 
+                    'x-internal-call': 'baldo-ws',
+                    'Cookie': `SESSIONID=${data.session_id}`,
+            }
+});
+            if (!res.ok) {
+                console.warn(`PLANETARIUM HTTP ${res.status}`);
+                return null;
+            }
+            return await res.json();
+        } catch (err) {
+            console.warn('PLANETARIUM non disponibile:', err.message);
+            return null;   // degrada gracefully, la storia si fa senza astronomia
+        }
+    }
+
+    // ── Flusso principale ─────────────────────────────────────────────────
+    try {
+        send({ tipo: 'nodo_start', nodo: 'avvio' });
+
+        let risultato = await consumaSSE(fastapiPayload);
+
+        // Se FastAPI ha chiesto l'astronomia, rilancia con i dati iniettati
+        if (risultato.rilancia) {
+            risultato = await consumaSSE(risultato.payload);
+        }
+
+    } catch (err) {
+        console.error('Errore manage_fastapi:', err.message);
+        send({
+            tipo:     'errore',
+            messaggio: 'Il contastorie non è disponibile al momento. Riprova tra poco.',
+        });
+    }
+}
+/*```
+
+---
+
+## Come funziona il flusso completo
+```
+Browser ──WS──► Node: generate_story
+                  │
+                  ├─ POST /racconto/stream → FastAPI
+                  │    LangGraph: nodo_start analizza_prompt ──────────► Browser
+                  │    LangGraph: analizza_prompt estrae lat/lon
+                  │    LangGraph: emette evento richiesta_astronomia
+                  │                  │
+                  │    Node intercetta├─ GET /api/PLANETARIUM?lat=&lon=&data=
+                  │                  │    ← { pianeti, luna, costellazioni }
+                  │                  │
+                  ├─ Rilancia POST /racconto/stream con dati_astronomici già pronti
+                  │    LangGraph: salta nodo recupera_astronomia (astronomia_pronta=True)
+                  │    LangGraph: nodo_start recupera_frammenti ────────► Browser
+                  │    LangGraph: nodo_start genera_racconto ───────────► Browser
+                  │    LangGraph: token, token, token ──────────────────► Browser
+                  │    LangGraph: fine ────────────────────────────────► Browser
+
+*/
+async function manage_node(server, ws, message, manager) {
+
+    const data = message.data;
+	const genResult = await manager.generateStoryFromPrompt(data.userPrompt, data.age || 5);
+				 
+	const response = {
+		action: 'generated_story',
+		data: genResult
+	};
+
+        // Invia la risposta al client WebSocket (se esiste)
+        if (ws && ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify(response));
+        }
+
+}
+
+
 async function exe(server, ws, message) {
     try {
         const { action } = message;
@@ -33,6 +213,8 @@ async function exe(server, ws, message) {
 
             case 'create_story': {
                 const data = message.data;
+                
+                
                 const story = await manager.createStory({
                     id: data.id,
                     title: data.title,
@@ -255,11 +437,17 @@ async function exe(server, ws, message) {
 
             case 'generate_story': {
               const data = message.data;
-              const genResult = await manager.generateStoryFromPrompt(data.userPrompt, data.age || 5);
-              response = {
-                action: 'generated_story',
-                data: genResult
-              };
+              
+              switch ( data.endpoint ) {
+				case "fastapi" :
+					return manage_fastapi(server, ws, message);
+				break;
+				case "node" :
+					return manage_node(server, ws, message, manager);
+				break;
+			  }
+             
+            
             }
               break;
             case 'synthesize_speech': {

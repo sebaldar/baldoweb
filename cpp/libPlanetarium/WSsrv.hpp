@@ -31,6 +31,7 @@ public :
 	class clientData  * client_data ( int sockfd );
 
 	virtual std::string handleClient (  int sockfd, const std::string &buffer   ) ;
+	std::string computeCelestialPositions (  int sockfd, const std::string &json_input ) ;
   
   
 	void initDb () ;

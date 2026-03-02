@@ -21,6 +21,7 @@ class JSON {
 		std::string operator [] ( const std::string & str );
 		
 		std::vector< std::string > array( const std::string & str ) ;
+		std::string toString ( ) const;
 
 };
 

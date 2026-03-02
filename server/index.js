@@ -3,7 +3,9 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import fs from 'fs'; 
+import { promises as fs } from 'fs';
+import path from 'path';
+ 
 import os from 'os';
 import Server from './server_base.js'; 
 import wss_command from './js/wss_command.js'; 
@@ -27,9 +29,9 @@ class the_server extends Server {
         super(port);
     }
      
-    async http_command(jdata) {
-        await http_command.exe(jdata);
-        super.http_command(jdata);
+    async http_command(  jdata) {
+        await http_command.exe( jdata);
+        super.http_command( jdata);
     }
      
     wss_command(server, ws, jdata) {
@@ -39,9 +41,9 @@ class the_server extends Server {
      
     async on_my_ws_connection(server, request, ws, jdata) {
         
-       super.on_my_ws_connection(server,  ws, jdata );
-       const id = server.uid.id();
-        ws.clientData = {
+	   super.on_my_ws_connection(server,  ws, jdata );
+	   const id = server.uid.id();
+       ws.clientData = {
             id: id,
             client_ip: jdata.client_ip,
             query: jdata.query,
@@ -50,6 +52,27 @@ class the_server extends Server {
         
         console.log(`Client ${id} connected from ${jdata.client_ip}`);
         solar.registerClient(id, JSON.stringify(jdata.query));
+        
+        // registra l'id nella session
+        const session_dir = jdata.session_dir;
+        const user_file = path.join(session_dir, 'user.json');
+
+		try {
+			// 1. Lettura (specificando utf8 per avere una stringa)
+			const raw_data = await fs.readFile(user_file, 'utf8');
+			const user_data = JSON.parse(raw_data);
+
+			// 2. Modifica sicura
+			if (!user_data.data) user_data.data = {};
+			user_data.data.planetarium = { id: id };
+
+			// 3. Scrittura (con formattazione per facilitare il debug nel container)
+			await fs.writeFile(user_file, JSON.stringify(user_data, null, 2));
+			
+			console.log(`✅ File sessione aggiornato per ID: ${id}`);
+		} catch (err) {
+			console.error(`❌ Errore aggiornamento sessione (${user_file}):`, err.message);
+		}
         
         const sec_websocket_key = request.headers['sec-websocket-key'];
         server.CLIENTS[sec_websocket_key] = ws.clientData;

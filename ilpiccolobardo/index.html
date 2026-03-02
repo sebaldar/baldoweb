@@ -835,8 +835,31 @@
         let currentUtterance = null;
         let favorites = [];
         let isNightMode = false;
+		let geoCache = null
 
-        // Carica preferiti dal localStorage
+
+		async function initGeo() {
+		  // In sviluppo senza HTTPS la geo via rete fallisce quasi sempre
+		  // Non vale la pena mostrare errori o aspettare il timeout
+		  if (!navigator.geolocation || location.protocol !== 'https:') {
+			console.info('Geo: skip in contesto non sicuro, userà fallback IP')
+			return
+		  }
+
+		  navigator.geolocation.getCurrentPosition(
+			(pos) => {
+			  geoCache = { lat: pos.coords.latitude, lon: pos.coords.longitude }
+			  console.info(`Geo acquisita: ${geoCache.lat}, ${geoCache.lon}`)
+			},
+			(err) => {
+			  console.info(`Geo non disponibile (code ${err.code}), userà fallback IP`)
+			  geoCache = { lat: 40, lon: 10 }
+			},
+			{ timeout: 5000, maximumAge: 300_000 }
+		  )
+		}
+		
+       // Carica preferiti dal localStorage
         function loadFavorites() {
             const stored = localStorage.getItem('bardo_favorites');
             if (stored) {
@@ -883,12 +906,15 @@
                     }
                     
                 } else {
-                    logToPage(`⚠️ API risposta: ${response.status}`, 'warning');
+                    console.error(`⚠️ API risposta: ${response.status}`, 'warning');
                 }
             } catch (error) {
                 logToPage('⚠️ API non disponibile', 'warning');
                 console.error('API error:', error);
             }
+            
+            
+            
         }
 
         // WebSocket Connection
@@ -897,6 +923,7 @@
             updateStatus('connecting');
             
             await initAPI();
+            initGeo();
 
 /*
 if (response.ok) {
@@ -917,7 +944,7 @@ if (response.ok) {
                     const data = JSON.parse(event.data);
                     handleResponse(data);
                 } catch (e) {
-                    console.error('Errore parsing risposta:', e);
+ //                   console.error('Errore parsing risposta:', e);
                 }
             };
             
@@ -980,7 +1007,54 @@ if (response.ok) {
                     Email: <a href="mailto:${response.data.email}" style="color:#667eea;">${response.data.email}</a><br>
                     © ${new Date().getFullYear()} Tutti i diritti riservati.
                 `;
-            }
+			// ── Nuovi eventi SSE ritrasmessi da Node ────────────────────────
+			} else if (response.tipo === 'nodo_start') {
+				// Aggiorna il messaggio di stato mentre LangGraph avanza
+				const statusEl = document.getElementById('loadingStatus');
+				if (statusEl) {
+					const messaggi = {
+						'analizza_prompt':      '🔍 Analizzo la tua richiesta...',
+						'recupera_astronomia':  '🌌 Guardo il cielo di stanotte...',
+						'recupera_frammenti':   '📚 Sfoglio il libro delle storie...',
+						'genera_racconto':      '✍️ Il Bardo sta scrivendo...',
+						'valida_racconto':      '✨ Rifinitura magica in corso...',
+					};
+					statusEl.textContent = messaggi[response.nodo] ?? `⚙️ ${response.nodo}...`;
+				}
+
+			} else if (response.tipo === 'token') {
+				// Mostra il testo in streaming token per token
+				const loadingEl = document.getElementById('loadingIndicator');
+				const streamEl = document.getElementById('streamingText');
+
+				if (loadingEl) loadingEl.style.display = 'none';
+				if (streamEl) {
+					streamEl.style.display = 'block';
+					streamEl.textContent += response.testo;
+					currentStory.text += response.testo;  // accumula per TTS e preferiti
+				}
+
+			} else if (response.tipo === 'fine') {
+				// Racconto completo ricevuto
+				currentStory.text = response.racconto;
+				currentStory.storia_id = response.storia_id;
+
+				displayStory(response.racconto);
+
+				document.getElementById('readBtn').disabled = false;
+				document.getElementById('illustrateBtn').disabled = false;
+				updateFavoriteButton();
+
+				console.log(`✅ Favola completata in ${response.iterazioni} iterazioni`);
+
+			} else if (response.tipo === 'errore') {
+				document.getElementById('storyDisplay').innerHTML = `
+					<p style="color: red; text-align: center; padding: 20px;">
+						⚠️ ${response.messaggio || 'Qualcosa è andato storto, riprova!'}
+					</p>
+				`;
+			}
+
         }
 
         function updateStatus(status) {
@@ -1001,58 +1075,59 @@ if (response.ok) {
         }
 
         // Generate Story
-        function generateStory() {
-            if (!selectedAge) {
-                alert('Seleziona prima l\'età del bambino! 🎂');
-                return;
-            }
+		function generateStory() {
+			if (!selectedAge) {
+				alert('Seleziona prima l\'età del bambino! 🎂');
+				return;
+			}
 
-            const prompt = document.getElementById('userPrompt').value;
-            if (!prompt.trim()) {
-                alert('Scrivi cosa vuoi nella favola! 💭');
-                return;
-            }
+			const prompt = document.getElementById('userPrompt').value;
+			if (!prompt.trim()) {
+				alert('Scrivi cosa vuoi nella favola! 💭');
+				return;
+			}
 
-            const childName = document.getElementById('childName').value;
-            const favoriteAnimal = document.getElementById('favoriteAnimal').value;
-            const favoriteColor = document.getElementById('favoriteColor').value;
+			const childName = document.getElementById('childName').value;
+			const favoriteAnimal = document.getElementById('favoriteAnimal').value;
+			const favoriteColor = document.getElementById('favoriteColor').value;
 
-            // Arricchisci il prompt con le personalizzazioni
-            let enrichedPrompt = prompt;
-            if (childName) enrichedPrompt += ` Il protagonista si chiama ${childName}.`;
-            if (favoriteAnimal) enrichedPrompt += ` Nella storia c'è un ${favoriteAnimal}.`;
-            if (favoriteColor) enrichedPrompt += ` Usa il colore ${favoriteColor} nella narrazione.`;
+			let enrichedPrompt = prompt;
+			if (childName) enrichedPrompt += ` Il protagonista si chiama ${childName}.`;
+			if (favoriteAnimal) enrichedPrompt += ` Nella storia c'è un ${favoriteAnimal}.`;
+			if (favoriteColor) enrichedPrompt += ` Usa il colore ${favoriteColor} nella narrazione.`;
 
-            currentStory = {
-                prompt: enrichedPrompt,
-                age: selectedAge,
-                childName: childName || null,
-                timestamp: new Date().toISOString()
-            };
+			currentStory = {
+				prompt: enrichedPrompt,
+				age: selectedAge,
+				childName: childName || null,
+				timestamp: new Date().toISOString(),
+				text: ''
+			};
 
-            // Mostra loading
-            document.getElementById('storyCard').style.display = 'block';
-            document.getElementById('loadingIndicator').style.display = 'block';
-            document.getElementById('storyDisplay').innerHTML = `
-                <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
-                <div class="loading" id="loadingIndicator">
-                    <div class="loading-spinner"></div>
-                    <p>Il Piccolo Bardo sta creando la tua favola magica...</p>
-                </div>
-            `;
-            document.getElementById('readBtn').disabled = true;
-            document.getElementById('illustrateBtn').disabled = true;
-            document.getElementById('storyIllustration').style.display = 'none';
+			// Mostra area storia con stato iniziale
+			document.getElementById('storyCard').style.display = 'block';
+			document.getElementById('storyDisplay').innerHTML = `
+				<button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
+				<div class="loading" id="loadingIndicator">
+					<div class="loading-spinner"></div>
+					<p id="loadingStatus">Il Piccolo Bardo sta preparando la tua favola magica... ✨</p>
+				</div>
+				<div id="streamingText" style="display:none; white-space: pre-wrap; line-height: 1.8;"></div>
+			`;
+			document.getElementById('readBtn').disabled = true;
+			document.getElementById('illustrateBtn').disabled = true;
+			document.getElementById('storyIllustration').style.display = 'none';
+			document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
 
-            // Invia richiesta
-            sendMessage('generate_story', { 
-                userPrompt: enrichedPrompt, 
-                age: selectedAge 
-            });
-
-            // Scroll alla storia
-            document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
-        }
+			// Invia a Node via WebSocket con geo
+			sendMessage('generate_story', {
+				endpoint : "fastapi",
+				userPrompt: enrichedPrompt,
+				age: selectedAge,
+				geo: geoCache,           // lat/lon del dispositivo, o null
+				session_id: sessionStorage.getItem('SESSIONID'),
+			});
+		}        
 
         function displayStory(story) {
             currentStory.text = story;

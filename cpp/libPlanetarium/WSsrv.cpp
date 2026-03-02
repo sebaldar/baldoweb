@@ -65,6 +65,457 @@ void WSsrv::initDb (  )
 
 }
 
+// ============================================================
+// Implementazione di WSsrv::computeCelestialPositions
+// Da inserire in WSsrv.cpp in sostituzione della funzione stub
+// ============================================================
+
+std::string WSsrv::computeCelestialPositions ( int sockfd, const std::string &json_input ) {
+
+    // --------------------------------------------------------
+    // 1. Parsing del JSON di input
+    // --------------------------------------------------------
+    JSON json;
+    json.loadFromString(json_input);
+
+    std::string s_latitude  = json["latitude"];
+    std::string s_longitude = json["longitude"];
+    std::string s_height    = json["height"];   // altezza camera in gradi [-90, +90]
+    std::string s_azimut    = json["azimut"];   // azimut camera in gradi [0, 360]
+    std::string s_date      = json["date"];     // formato "dd-mm-yyyy hh:mm:ss" oppure "dd-mm-yyyy"
+
+    double lat        = atof( s_latitude.c_str()  );
+    double lon        = atof( s_longitude.c_str() );
+    double cam_height = atof( s_height.c_str()    );  // gradi sull'orizzonte [-90,+90]
+    double cam_azimut = atof( s_azimut.c_str()    );  // gradi azimutali [0,360]
+
+    // --------------------------------------------------------
+    // 2. Derivazione dell'etichetta cardinale dall'azimut numerico
+    //    (usata a scopo descrittivo nell'output JSON)
+    //    N=0°, NE=45°, E=90°, SE=135°, S=180°, SW=225°, W=270°, NW=315°
+    //    Se altezza >= 85° → Zenith
+    // --------------------------------------------------------
+    std::string direction_label;
+    if ( cam_height >= 85.0 ) {
+        direction_label = "Z";
+    } else {
+        double az = cam_azimut;
+        while ( az <   0.0 ) az += 360.0;
+        while ( az >= 360.0) az -= 360.0;
+
+        if      ( az <  22.5 )  direction_label = "N";
+        else if ( az <  67.5 )  direction_label = "NE";
+        else if ( az < 112.5 )  direction_label = "E";
+        else if ( az < 157.5 )  direction_label = "SE";
+        else if ( az < 202.5 )  direction_label = "S";
+        else if ( az < 247.5 )  direction_label = "SW";
+        else if ( az < 292.5 )  direction_label = "W";
+        else if ( az < 337.5 )  direction_label = "NW";
+        else                    direction_label = "N";
+    }
+
+    // --------------------------------------------------------
+    // 3. Imposta la data sul client e disattiva il loop automatico
+    // --------------------------------------------------------
+    handleClient( sockfd, "execute_loop off" );
+
+    {
+        // Il comando "date" accetta "dd-mm-yyyy hh:mm:ss"
+        std::string date_cmd = s_date;
+        if ( date_cmd.find(':') == std::string::npos ) {
+            date_cmd += " 00:00:00";
+        }
+        handleClient( sockfd, "date " + date_cmd );
+    }
+
+    // --------------------------------------------------------
+    // 4. Imposta il punto di osservazione sulla Terra,
+    //    poi applica azimut e altezza numerici.
+    //    "observe lon lat" senza direzione: posiziona l'osservatore.
+    //    "azimut X"  → data->lookat.azimut = X  (gradi 0-360)
+    //    "altezza Y" → data->lookat.altezza = Y  (gradi -90/+90)
+    //    entrambi impostano VIEW::AZIMUT, usato da set_horizont()
+    // --------------------------------------------------------
+    {
+        std::stringstream cc;
+        cc << "observe " << lon << " " << lat;
+        handleClient( sockfd, cc.str() );
+    }
+    {
+        std::stringstream cc;
+        cc << "azimut " << cam_azimut;
+        handleClient( sockfd, cc.str() );
+    }
+    {
+        std::stringstream cc;
+        cc << "altezza " << cam_height;
+        handleClient( sockfd, cc.str() );
+    }
+
+    // --------------------------------------------------------
+    // 5. Recupera il puntatore ai dati del client
+    // --------------------------------------------------------
+    auto it = clients.find( sockfd );
+    if ( it == clients.end() ) return "{}";
+
+    Client      * client = it->second;
+    clientData  * data   = reinterpret_cast<clientData*>( client->extra );
+    if ( !data ) return "{}";
+
+    // --------------------------------------------------------
+    // 6. Calcola il giorno giuliano corrente (come in do_sendLoop)
+    // --------------------------------------------------------
+    short simulation = data->simulation;
+    Date  &d         = data->ref_date;
+    UT    uut        = d;
+    DT    ddt        = uut;
+    double JD        = uut.now( simulation );
+
+    // --------------------------------------------------------
+    // 7. Calcola posizioni di tutti i corpi celesti
+    //    (replica il blocco di do_sendLoop / render)
+    // --------------------------------------------------------
+
+    // --- Sole ---
+    Sun & sun = data->system->sun;
+    OrbitEcli orbit_sun = sun.orbitLBR( JD );
+    OrbitEqu  o_sun( JD );
+    o_sun = orbit_sun;
+    OrbitXYZ  o_sun_xyz = o_sun;
+    sun.position = o_sun_xyz;
+
+    // --- Terra (rotazione) ---
+    Earth & earth   = data->system->earth;
+    double rot       = earth.rotation( ddt, simulation );
+    data->rotation   = rot;
+    Grade  epsilon   = earth.obliquity( JD );
+    earth.obliq      = epsilon;
+
+    OrbitXYZ orbit_earth_xyz( 0, 0, 0 );
+    orbit_earth_xyz.rot_y = rot;
+    earth.position = orbit_earth_xyz;
+
+    // --- Orbita solare rettangolare (base per i pianeti) ---
+    OrbitXYZ orbit_sun_xyz = sun.orbit( MainBody::earth_data, JD );
+
+    // --- Luna ---
+    Moon & moon = data->system->moon;
+    OrbitEcli orbit_moon = moon.orbitAlfaELP( JD );
+    OrbitEqu  o_moon( JD );
+    o_moon = orbit_moon;
+    OrbitXYZ  o_moon_xyz = o_moon;
+    o_moon_xyz.rot_x += 1.543;
+    Grade rot_luna = 180 + o_moon.alfa;
+    o_moon_xyz.rot_y = rot_luna;
+    moon.position = o_moon_xyz;
+
+    // --- Mercurio ---
+    Mercury & mercury = data->system->mercury;
+    OrbitXYZ orbit_mercury_xyz = mercury.orbit_eq( MainBody::mercury_data, orbit_sun_xyz, epsilon, JD );
+    mercury.position = orbit_mercury_xyz;
+
+    // --- Venere ---
+    Venus & venus = data->system->venus;
+    OrbitXYZ orbit_venus_xyz = venus.orbit_eq( MainBody::venus_data, orbit_sun_xyz, epsilon, JD );
+    venus.position = orbit_venus_xyz;
+
+    // --- Marte ---
+    Mars & mars = data->system->mars;
+    OrbitXYZ orbit_mars_xyz = mars.orbit_eq( MainBody::mars_data, orbit_sun_xyz, epsilon, JD );
+    mars.position = orbit_mars_xyz;
+
+    // --- Giove ---
+    Jupiter & jupiter = data->system->jupiter;
+    OrbitXYZ orbit_jupiter_xyz = jupiter.orbit_eq( MainBody::jupiter_data, orbit_sun_xyz, epsilon, JD );
+    jupiter.position = orbit_jupiter_xyz;
+
+    // --- Saturno ---
+    Saturn & saturn = data->system->saturn;
+    OrbitXYZ orbit_saturn_xyz = saturn.orbit_eq( MainBody::saturn_data, orbit_sun_xyz, epsilon, JD );
+    saturn.position = orbit_saturn_xyz;
+
+    // --- Urano ---
+    Uranus & uranus = data->system->uranus;
+    OrbitXYZ orbit_uranus_xyz = uranus.orbit_eq( MainBody::uranus_data, orbit_sun_xyz, epsilon, JD );
+    uranus.position = orbit_uranus_xyz;
+
+    // --- Nettuno ---
+    Neptune & neptune = data->system->neptune;
+    OrbitXYZ orbit_neptune_xyz = neptune.orbit_eq( MainBody::neptune_data, orbit_sun_xyz, epsilon, JD );
+    neptune.position = orbit_neptune_xyz;
+
+    // --------------------------------------------------------
+    // 8. Orizzonte locale per calcolo altezza / azimut
+    // --------------------------------------------------------
+    Horizont horizont( lat, lon + rot );
+
+    // --------------------------------------------------------
+    // 9. SkyGrid per costellazioni e stelle
+    // --------------------------------------------------------
+    SkyGrid & skyGrid = *data->skyGrid;
+
+    // AR del Sole normalizzato [0,360) — serve per il calcolo dell'elongazione di tutti i corpi
+    double sun_ar = o_sun.alfa;
+    if ( sun_ar < 0 ) sun_ar += 360.0;
+
+    // --------------------------------------------------------
+    // 10. Lambda helper: costruisce il blocco JSON di un corpo
+    //     celeste a partire dalle sue coordinate equatoriali
+    //     (OrbitEqu contiene alfa=AR in gradi, delta=Dec in gradi, R in AU)
+    //
+    //     Elongazione = differenza angolare AR corpo - AR sole,
+    //     normalizzata in [-180, +180]: positiva = est del sole (serale),
+    //     negativa = ovest del sole (mattutina).
+    // --------------------------------------------------------
+    auto buildBodyJson = [&]( const std::string & name,
+                               OrbitEqu         & o_eq,
+                               OrbitXYZ         & o_xyz,
+                               bool               is_moon ) -> std::string
+    {
+        double ar  = o_eq.alfa;   // gradi
+        double dec = o_eq.delta;  // gradi
+        double R   = o_eq.R;      // AU (o unità interna per la luna)
+
+        // AR normalizzato [0,360)
+        if ( ar < 0 ) ar += 360.0;
+
+        // AR in ore (0..24)
+        double ar_h = 24.0 * ar / 360.0;
+
+        // Altezza e azimut locali rispetto al punto di vista dell'osservatore
+        double az_body  = horizont.azimut( Point( o_xyz.x, o_xyz.y, o_xyz.z ) );
+        double alt_body = horizont.height( Point( o_xyz.x, o_xyz.y, o_xyz.z ) );
+
+        // Elongazione rispetto al Sole: differenza di AR normalizzata [-180, +180]
+        double elongazione = ar - sun_ar;
+        if ( elongazione >  180.0 ) elongazione -= 360.0;
+        if ( elongazione < -180.0 ) elongazione += 360.0;
+
+        // Distanza
+        double distanza_km = 0.0;
+        double distanza_au = 0.0;
+        if ( is_moon ) {
+            // orbit_moon.R è in AU (valore tipico ~0.00257 AU = ~384400 km)
+            distanza_km = R * CelestialBody::AU;   // conversione in km
+        } else {
+            distanza_au = R;
+            distanza_km = R * CelestialBody::AU;   // utile per info
+        }
+
+        // Costellazione
+        std::string constellation = skyGrid.whichConstellation( ar, dec );
+        std::string zodiac        = skyGrid.whichZodiac( ar );
+
+        // Stelle principali visibili in quell'area del cielo (±1h ±1° intorno alla posizione)
+        std::string stars_raw;
+        stars_raw += skyGrid.find( ar_h,     dec     );
+        stars_raw += skyGrid.find( ar_h + 1, dec     );
+        stars_raw += skyGrid.find( ar_h - 1, dec     );
+        stars_raw += skyGrid.find( ar_h,     dec + 1 );
+        stars_raw += skyGrid.find( ar_h,     dec - 1 );
+
+        // Costruisce la lista stelle come array JSON di stringhe
+        // skyGrid.find() restituisce righe separate da \n
+        std::stringstream stars_arr;
+        stars_arr << "[";
+        {
+            std::istringstream iss( stars_raw );
+            std::string line;
+            bool first = true;
+            while ( std::getline( iss, line ) ) {
+                if ( line.empty() ) continue;
+                // Escape delle virgolette interne
+                std::string escaped;
+                for ( char c : line ) {
+                    if ( c == '"' ) escaped += "\\\"";
+                    else            escaped += c;
+                }
+                if ( !first ) stars_arr << ",";
+                stars_arr << "\"" << escaped << "\"";
+                first = false;
+            }
+        }
+        stars_arr << "]";
+
+        // Stelle della costellazione (lista nomi)
+        std::vector<std::string> const_stars_vec = skyGrid.constellationStars( skyGrid.constellationCodeFromName( constellation ) );
+        std::stringstream const_stars_arr;
+        const_stars_arr << "[";
+        for ( size_t i = 0; i < const_stars_vec.size(); ++i ) {
+            std::string s = const_stars_vec[i];
+            // Teniamo solo la prima riga (nome)
+            size_t nl = s.find('\n');
+            if ( nl != std::string::npos ) s = s.substr(0, nl);
+            // Rimuove spazi finali
+            while ( !s.empty() && ( s.back() == ' ' || s.back() == '\r' ) ) s.pop_back();
+            // Escape
+            std::string escaped;
+            for ( char c : s ) { if ( c == '"' ) escaped += "\\\""; else escaped += c; }
+            if ( i > 0 ) const_stars_arr << ",";
+            const_stars_arr << "\"" << escaped << "\"";
+        }
+        const_stars_arr << "]";
+
+        std::stringstream j;
+        j.precision(8);
+        j << "{"
+          <<   "\"name\":\"" << name << "\","
+          <<   "\"ra_deg\":"  << ar  << ","
+          <<   "\"ra_hms\":\""  << Grade(o_eq.alfa).toGradeHMS() << "\","
+          <<   "\"dec_deg\":" << dec << ","
+          <<   "\"dec_dms\":\""  << Grade(dec).toGradeGPS() << "\","
+          <<   "\"altitude_deg\":" << alt_body << ","
+          <<   "\"azimuth_deg\":"  << az_body  << ","
+          <<   "\"elongation_deg\":" << elongazione << ","
+          <<   "\"constellation\":\"" << constellation << "\","
+          <<   "\"zodiac\":\"" << zodiac << "\",";
+
+        if ( is_moon ) {
+            j << "\"distance_km\":"  << distanza_km << ",";
+        } else {
+            j << "\"distance_au\":"  << distanza_au << ","
+              << "\"distance_km\":"  << distanza_km << ",";
+        }
+
+        j <<   "\"visible\":"  << ( alt_body > 0 ? "true" : "false" ) << ","
+          <<   "\"nearby_stars\":" << stars_arr.str() << ","
+          <<   "\"constellation_stars\":" << const_stars_arr.str()
+          << "}";
+
+        return j.str();
+    };
+
+    // --------------------------------------------------------
+    // 11. Costruisce il JSON finale
+    // --------------------------------------------------------
+    std::stringstream result;
+    result.precision(8);
+
+    // Data JD corrente
+    std::string date_str = d.toDate( JD );
+
+    // Costellazioni e stelle nella direzione di osservazione (punto azimut/alt scelto)
+    // Ricaviamo AR/Dec del punto di osservazione dalla camera lookat
+    set_horizont( data );   // aggiorna camera.lookat in base a direzione impostata
+    clientData::Camera & camera = data->camera;
+    OrbitXYZ lookat_xyz( camera.lookat_x, camera.lookat_y, camera.lookat_z );
+    OrbitEqu  o_lookat = lookat_xyz;
+    double lookat_ar  = o_lookat.alfa;
+    double lookat_dec = o_lookat.delta;
+    if ( lookat_ar < 0 ) lookat_ar += 360.0;
+    double lookat_ar_h = 24.0 * lookat_ar / 360.0;
+
+    std::string sky_stars_raw;
+    sky_stars_raw += skyGrid.find( lookat_ar_h,     lookat_dec     );
+    sky_stars_raw += skyGrid.find( lookat_ar_h + 1, lookat_dec     );
+    sky_stars_raw += skyGrid.find( lookat_ar_h - 1, lookat_dec     );
+    sky_stars_raw += skyGrid.find( lookat_ar_h,     lookat_dec + 1 );
+    sky_stars_raw += skyGrid.find( lookat_ar_h,     lookat_dec - 1 );
+
+    std::string sky_const = skyGrid.whichConstellation( lookat_ar, lookat_dec );
+    std::string sky_zodiac = skyGrid.whichZodiac( lookat_ar );
+
+    // Stelle vicine al punto osservato (come array JSON)
+    std::stringstream sky_stars_arr;
+    sky_stars_arr << "[";
+    {
+        std::istringstream iss( sky_stars_raw );
+        std::string line;
+        bool first = true;
+        while ( std::getline( iss, line ) ) {
+            if ( line.empty() ) continue;
+            std::string escaped;
+            for ( char c : line ) { if ( c == '"' ) escaped += "\\\""; else escaped += c; }
+            if ( !first ) sky_stars_arr << ",";
+            sky_stars_arr << "\"" << escaped << "\"";
+            first = false;
+        }
+    }
+    sky_stars_arr << "]";
+
+    // --- Luna: OrbitEqu e OrbitXYZ ---
+    OrbitEqu o_moon_eq = moon.position;  // OrbitXYZ → OrbitEqu (conversione implicita)
+    OrbitXYZ o_moon_xyz2 = moon.position;
+
+    // --- Sole ---
+    OrbitEqu o_sun_eq = sun.position;
+    OrbitXYZ o_sun_xyz2 = sun.position;
+
+    // --- Pianeti (conversione ImplicitXYZ→Equ) ---
+    OrbitEqu o_mercury_eq = mercury.position;
+    OrbitXYZ o_mercury_xyz = mercury.position;
+
+    OrbitEqu o_venus_eq = venus.position;
+    OrbitXYZ o_venus_xyz = venus.position;
+
+    OrbitEqu o_mars_eq = mars.position;
+    OrbitXYZ o_mars_xyz = mars.position;
+
+    OrbitEqu o_jupiter_eq = jupiter.position;
+    OrbitXYZ o_jupiter_xyz = jupiter.position;
+
+    OrbitEqu o_saturn_eq = saturn.position;
+    OrbitXYZ o_saturn_xyz = saturn.position;
+
+    OrbitEqu o_uranus_eq = uranus.position;
+    OrbitXYZ o_uranus_xyz = uranus.position;
+
+    OrbitEqu o_neptune_eq = neptune.position;
+    OrbitXYZ o_neptune_xyz = neptune.position;
+
+    // --------------------------------------------------------
+    // 12. Assembla il JSON di output
+    // --------------------------------------------------------
+    result << "{"
+           <<   "\"date\":\"" << date_str << "\","
+           <<   "\"julian_day\":" << JD << ","
+           <<   "\"observer\":{"
+           <<     "\"latitude\":"   << lat        << ","
+           <<     "\"longitude\":"  << lon        << ","
+           <<     "\"azimut_deg\":" << cam_azimut << ","
+           <<     "\"height_deg\":" << cam_height << ","
+           <<     "\"direction\":\"" << direction_label << "\""
+           <<   "},"
+           <<   "\"view_direction\":{"
+           <<     "\"ra_deg\":"    << lookat_ar  << ","
+           <<     "\"dec_deg\":"   << lookat_dec << ","
+           <<     "\"constellation\":\"" << sky_const   << "\","
+           <<     "\"zodiac\":\""        << sky_zodiac  << "\","
+           <<     "\"nearby_stars\":"    << sky_stars_arr.str()
+           <<   "},"
+           <<   "\"bodies\":["
+           <<     buildBodyJson( "luna",    o_moon_eq,    o_moon_xyz2,  true  ) << ","
+           <<     buildBodyJson( "sole",    o_sun_eq,     o_sun_xyz2,   false ) << ","
+           <<     buildBodyJson( "mercurio",o_mercury_eq, o_mercury_xyz,false ) << ","
+           <<     buildBodyJson( "venere",  o_venus_eq,   o_venus_xyz,  false ) << ","
+           <<     buildBodyJson( "marte",   o_mars_eq,    o_mars_xyz,   false ) << ","
+           <<     buildBodyJson( "giove",   o_jupiter_eq, o_jupiter_xyz,false ) << ","
+           <<     buildBodyJson( "saturno", o_saturn_eq,  o_saturn_xyz, false ) << ","
+           <<     buildBodyJson( "urano",   o_uranus_eq,  o_uranus_xyz, false ) << ","
+           <<     buildBodyJson( "nettuno", o_neptune_eq, o_neptune_xyz,false )
+           <<   "]"
+           << "}";
+
+    // --------------------------------------------------------
+    // 13. Salva su file e restituisce la stringa JSON
+    // --------------------------------------------------------
+    {
+        // Costruisce un nome file univoco per cliente e data
+        std::string fname = "celestial_" + std::to_string(sockfd) + "_" + date_str + ".json";
+        // Sostituisce spazi e ':' con underscore per sicurezza sul filesystem
+        for ( auto & c : fname )
+            if ( c == ' ' || c == ':' ) c = '_';
+
+        std::ofstream ofs( fname );
+        if ( ofs.is_open() ) {
+            ofs << result.str();
+            ofs.close();
+        }
+    }
+
+    return result.str();
+}
+
 std::string WSsrv::handleClient (  int sockfd, const std::string &buffer )
 {
 
@@ -2852,7 +3303,7 @@ std::string  WSsrv::do_sendLoop ( int id  )
 	clientData * data = reinterpret_cast < clientData * > ( client->extra );
 
 	if ( !data->executeLoop ) {
-		std::cout << "executeLoop non attivato" << std::endl;
+//		std::cout << "executeLoop non attivato!" << std::endl;
 		return "";
 	}
 

@@ -87,6 +87,26 @@ void handleClient(const FunctionCallbackInfo<Value>& args) {
     );
 }
 
+void computeCelestialPositions(const FunctionCallbackInfo<Value>& args) {
+    Isolate* isolate = args.GetIsolate();
+
+    if (args.Length() < 2 || !args[0]->IsInt32() || !args[1]->IsString()) {
+        isolate->ThrowException(Exception::TypeError(
+            String::NewFromUtf8(isolate, "Expected (int, string)").ToLocalChecked()
+        ));
+        return;
+    }
+
+    int socket = args[0]->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
+    std::string buffer = ToStdString(isolate, args[1]);
+
+    std::string json = solar.computeCelestialPositions(socket, buffer);
+
+    args.GetReturnValue().Set(
+        String::NewFromUtf8(isolate, json.c_str()).ToLocalChecked()
+    );
+}
+
 void do_sendLoop(const FunctionCallbackInfo<Value>& args) {
     Isolate* isolate = args.GetIsolate();
 
@@ -99,6 +119,7 @@ void do_sendLoop(const FunctionCallbackInfo<Value>& args) {
 
     int socket = args[0]->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
     std::string xml = solar.do_sendLoop(socket);
+    
     args.GetReturnValue().Set(
         String::NewFromUtf8(isolate, xml.c_str()).ToLocalChecked()
     );
@@ -110,6 +131,7 @@ void Initialize(Local<Object> exports) {
     NODE_SET_METHOD(exports, "render", render);
     NODE_SET_METHOD(exports, "handleClient", handleClient);
     NODE_SET_METHOD(exports, "do_sendLoop", do_sendLoop);
+    NODE_SET_METHOD(exports, "computeCelestialPositions", computeCelestialPositions);
 }
 
 NODE_MODULE(NODE_GYP_MODULE_NAME, Initialize);

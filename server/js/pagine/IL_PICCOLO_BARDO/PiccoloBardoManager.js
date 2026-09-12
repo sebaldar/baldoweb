@@ -1362,8 +1362,9 @@ const response = await this.openai.audio.speech.create({
 
 
     // Crea cartella public/audio se non esiste
-  //  const audioDir = path.join(__dirname, 'public', 'audio');
-    const audioDir = "/home/dedalo/IL_PICCOLO_BARDO/www/public/audio";
+    // Deve puntare al mount Docker (./ilpiccolobardo/public → /app/ilpiccolobardo/public)
+    // che è la cartella servita da Apache (DocumentRoot .../ilpiccolobardo)
+    const audioDir = "/app/ilpiccolobardo/public/audio";
 
     await fs.mkdir(audioDir, { recursive: true });
 
@@ -1456,7 +1457,9 @@ const response = await this.openai.audio.speech.create({
     }
 
     // Directory immagini pubbliche
-    const imagesDir = "/home/dedalo/IL_PICCOLO_BARDO/www/public/images";
+    // Deve puntare al mount Docker (./ilpiccolobardo/public → /app/ilpiccolobardo/public)
+    // che è la cartella servita da Apache (DocumentRoot .../ilpiccolobardo)
+    const imagesDir = "/app/ilpiccolobardo/public/images";
     await fs.mkdir(imagesDir, { recursive: true });
 
     const fileName = `illustration_${Date.now()}.png`;

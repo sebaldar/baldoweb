@@ -22,6 +22,9 @@ from services.neo4j_client import Neo4jClient
 from services.astronomy import AstronomyClient
 from services.weather import WeatherClient    # <--- NUOVO
 from services.geo_service import GeoService  # <--- NUOVO
+
+from routers.admin import router as admin_router
+
 from agent.graph import build_graph
 
 logging.basicConfig(level=logging.INFO)
@@ -89,6 +92,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(admin_router)
 
 # ---------------------------------------------------------------------------
 # Modelli Pydantic

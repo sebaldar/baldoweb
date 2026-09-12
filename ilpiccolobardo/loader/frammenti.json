@@ -1,0 +1,95 @@
+{
+  "sovrascrivi": false,
+  "frammenti": [
+    {
+      "id": "frag_001",
+      "tema": "amicizia",
+      "archetipo": "incontro_inaspettato",
+      "setting": "bosco magico",
+      "characters": ["Volpe", "Coniglio"],
+      "emotions": ["diffidenza", "amicizia", "sorpresa"],
+      "text": "Nel bosco fitto dove i raggi di sole faticavano a filtrare tra le foglie, una volpe rossa incontrò un coniglio bianco che piangeva accanto a una tana vuota. Invece di scappare, la volpe si sedette accanto a lui e chiese: 'Posso aiutarti?' — e da quel giorno diventarono inseparabili."
+    },
+    {
+      "id": "frag_002",
+      "tema": "coraggio",
+      "archetipo": "sfida_superata",
+      "setting": "castello antico",
+      "characters": ["Cavaliere", "Drago"],
+      "emotions": ["paura", "coraggio", "rispetto"],
+      "text": "Il giovane cavaliere tremava davanti alla porta del castello dove abitava il drago. Quando finalmente aprì la porta, trovò il drago che non ruggiva, ma singhiozzava. 'Sono solo' disse il drago. E il cavaliere capì che il coraggio più grande non è combattere, ma ascoltare."
+    },
+    {
+      "id": "frag_003",
+      "tema": "rispetto_natura",
+      "archetipo": "lezione_silenziosa",
+      "setting": "fiume incantato",
+      "characters": ["Bambino", "Pesce"],
+      "emotions": ["curiosità", "meraviglia", "rispetto"],
+      "text": "Sulla riva del fiume incantato, un bambino vide un pesce dorato che saltava fuori dall'acqua. Il pesce non parlò, ma con la coda indicò le stelle riflesse nell'acqua. Il bambino capì che il mondo era pieno di cose belle che si vedono solo se ci si ferma ad ascoltare il silenzio."
+    },
+    {
+      "id": "frag_004",
+      "tema": "famiglia",
+      "archetipo": "ritorno_a_casa",
+      "setting": "villaggio tra le montagne",
+      "characters": ["Orso", "Cucciolo"],
+      "emotions": ["paura", "sollievo", "amore"],
+      "text": "Il cucciolo d'orso si era perso nella neve e aveva camminato per ore nel bosco buio. Poi, tra gli alberi, vide la luce arancione della tana di casa. La mamma orsa lo aspettava sulla soglia, e quando lo abbracciò con le sue zampe grandi e calde, il cucciolo capì che casa è il posto dove qualcuno ti aspetta sempre."
+    },
+    {
+      "id": "frag_005",
+      "tema": "generosità",
+      "archetipo": "dono_inaspettato",
+      "setting": "mercato del villaggio",
+      "characters": ["Topolino", "Fornaio"],
+      "emotions": ["fame", "generosità", "gratitudine"],
+      "text": "Topolino passava ogni mattina davanti alla bottega del fornaio e annusava il profumo del pane caldo. Un giorno il fornaio lo vide e invece di scacciarlo, gli porse un pezzo di pane caldo. 'Un giorno o l'altro mi servirai anche tu' disse il fornaio con un sorriso. E quella promessa divenne la più bella amicizia del villaggio."
+    },
+    {
+      "id": "frag_006",
+      "tema": "pazienza",
+      "archetipo": "attesa_ricompensata",
+      "setting": "giardino fiorito",
+      "characters": ["Lumachina", "Farfalla"],
+      "emotions": ["tristezza", "pazienza", "gioia"],
+      "text": "La lumachina guardava la farfalla volare di fiore in fiore e si sentiva triste per i suoi passi lenti. Ma poi arrivò la pioggia, e mentre la farfalla si riparava, la lumachina continuò il suo cammino. Quando tornò il sole, la lumachina era arrivata in cima alla collina, e da lì vedeva tutto il giardino."
+    },
+    {
+      "id": "frag_007",
+      "tema": "diversità",
+      "archetipo": "diverso_è_speciale",
+      "setting": "lago delle ninfee",
+      "characters": ["Anatroccolo", "Cigno"],
+      "emotions": ["tristezza", "accettazione", "orgoglio"],
+      "text": "L'anatroccolo grigio si specchiava nell'acqua del lago e non capiva perché fosse così diverso dagli altri. Un cigno anziano nuotò fino a lui e disse: 'Anch'io ero come te. La bellezza non si vede subito, si scopre con il tempo.' L'anatroccolo alzò la testa e per la prima volta vide quanto fosse bello il mondo intorno a lui."
+    },
+    {
+      "id": "frag_008",
+      "tema": "onestà",
+      "archetipo": "verità_che_libera",
+      "setting": "bosco degli specchi",
+      "characters": ["Bambino", "Fata"],
+      "emotions": ["vergogna", "paura", "sollievo"],
+      "text": "Nel bosco degli specchi ogni bugia diventava visibile come una macchia colorata sul vestito. Il bambino aveva detto tante piccole bugie e il suo vestito era diventato tutto a pois. Quando finalmente disse la verità, le macchie sparirono una a una, e il bambino capì che la verità, anche quando fa un po' paura, rende sempre più leggeri."
+    },
+    {
+      "id": "frag_009",
+      "tema": "sogni",
+      "archetipo": "sogno_che_diventa_reale",
+      "setting": "città tra le nuvole",
+      "characters": ["Bambina", "Stella"],
+      "emotions": ["meraviglia", "speranza", "determinazione"],
+      "text": "Ogni notte la bambina guardava le stelle dalla finestra e sognava di volare fino a loro. Una stella più luminosa delle altre cominciò a lampeggiare. 'Vieni' sembrava dire. La bambina capì che i sogni non si guardano solo di notte — si costruiscono di giorno, un passo alla volta."
+    },
+    {
+      "id": "frag_010",
+      "tema": "perdono",
+      "archetipo": "riconciliazione",
+      "setting": "giardino segreto",
+      "characters": ["Rosa", "Spina"],
+      "emotions": ["rabbia", "dolore", "perdono"],
+      "text": "La rosa e la spina litigavano da sempre: la rosa diceva che la spina faceva del male, la spina diceva che proteggeva la rosa. Un giorno arrivò un bambino che, pur punzendosi, colse la rosa e la portò alla mamma malata. Allora la rosa e la spina capirono che erano due parti della stessa cosa, e smisero di litigare per sempre."
+    }
+  ]
+}

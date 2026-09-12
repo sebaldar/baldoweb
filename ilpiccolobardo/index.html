@@ -993,7 +993,14 @@ if (response.ok) {
                 audio.play();
             } else if (response.action === 'image_generated') {
                 displayIllustration(response.img);
-            } 
+            } else if (response.action === 'error') {
+                // Sblocca eventuali bottoni rimasti in stato "in corso" e avvisa l'utente
+                document.getElementById('audioLoading').style.display = 'none';
+                const illustrateBtn = document.getElementById('illustrateBtn');
+                illustrateBtn.disabled = false;
+                illustrateBtn.textContent = '🎨 Crea Illustrazione';
+                alert('Si è verificato un errore: ' + (response.message || 'errore sconosciuto'));
+            }
             // Nuovi messaggi dal server
             else if (response.action === 'user_status') {
                 currentUser = response.data.user || null;

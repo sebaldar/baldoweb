@@ -97,6 +97,7 @@ async def query_neo4j(state: BaldoState, neo4j: Neo4jClient) -> dict:
         emotions=state["emozioni"],
         setting=state["ambientazione"],
         extra_terms=state.get("termini_ricerca_neo4j", []),
+        eta_bambino=state.get("eta_bambino"),
     )
 
     storie_precedenti = await neo4j.cerca_storie_precedenti(
@@ -104,9 +105,14 @@ async def query_neo4j(state: BaldoState, neo4j: Neo4jClient) -> dict:
         emotions=state["emozioni"],
     )
 
+    # Descrizione/tratti dei personaggi coinvolti (se qualcuno li ha compilati
+    # a mano dal pannello Personaggi), per mantenerli coerenti tra le storie.
+    personaggi_bio = await neo4j.get_character_bios(state["personaggi"])
+
     return {
         "frammenti": frammenti,
         "storie_precedenti": storie_precedenti,
+        "personaggi_bio": personaggi_bio,
         "tentativi_neo4j": state["tentativi_neo4j"] + 1,
     }
 
@@ -210,6 +216,7 @@ async def componi_prompt(state: BaldoState) -> dict:
         frammenti=state["frammenti"],
         dati_astronomici=state.get("dati_astronomici") if state.get("usa_astronomia") else None,
         storie_precedenti=state.get("storie_precedenti", []),
+        personaggi_bio=state.get("personaggi_bio", {}),
         eta=state["eta_bambino"],
         lunghezza=state["lunghezza"],
         lingua=state["lingua"],

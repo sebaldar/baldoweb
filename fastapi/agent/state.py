@@ -39,6 +39,7 @@ class BaldoState(TypedDict):
     # --- DATI RACCOLTI (Nodo 4a e 4b) ---
     frammenti: List[Dict]
     qualita_frammenti: str                 # "buona" | "scarsa" | "assente"
+    personaggi_bio: Dict[str, Dict]        # nome -> {description, traits}, solo se presenti
     
     # Nuovi campi per coordinate e meteo
     lat: Optional[float]                   # Latitudine reale da GeoService

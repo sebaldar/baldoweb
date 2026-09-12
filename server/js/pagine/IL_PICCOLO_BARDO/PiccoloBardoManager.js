@@ -266,17 +266,17 @@ async createPlotFragment(fragmentData) {
   async createCharacter(charData) {
     const session = this.getSession();
     try {
+      // MERGE per nome (non CREATE): i frammenti caricati da /loader/ collegano
+      // i personaggi via MERGE (p:Character {name}) — usare CREATE qui avrebbe
+      // creato doppioni invece di riusare/arricchire lo stesso nodo.
       const result = await session.run(
-        `CREATE (c:Character {
-          id: $id,
-          name: $name,
-          traits: $traits,
-          description: $description
-        })
+        `MERGE (c:Character {name: $name})
+        SET c.traits = $traits,
+            c.description = $description
         RETURN c`,
         charData
       );
-      console.log(`✓ Personaggio creato: ${charData.name}`);
+      console.log(`✓ Personaggio creato/aggiornato: ${charData.name}`);
       return result.records[0].get('c').properties;
     } finally {
       await session.close();
@@ -1162,10 +1162,12 @@ const result = await session.run(
   async updateCharacter(charData) {
     const session = this.getSession();
     try {
+      // Il nome è la chiave (non un id separato): coerente con come i
+      // frammenti collegano i personaggi ovunque nel grafo. Non permette
+      // di rinominare: il campo Nome resta bloccato in modifica lato UI.
       const result = await session.run(
-        `MATCH (c:Character {id: $id})
-         SET c.name = $name,
-             c.description = $description,
+        `MATCH (c:Character {name: $name})
+         SET c.description = $description,
              c.traits = $traits
          RETURN c`,
         charData
@@ -1302,10 +1304,16 @@ const result = await session.run(
   }
 
   /**
-   * Elimina un personaggio
+   * Elimina un personaggio (per nome: i Character non hanno un id, vedi createCharacter)
    */
-  async deleteCharacter(characterId) {
-    await this.deleteNode('Character', characterId);
+  async deleteCharacter(name) {
+    const session = this.getSession();
+    try {
+      await session.run(`MATCH (c:Character {name: $name}) DETACH DELETE c`, { name });
+      console.log(`✓ Personaggio eliminato: ${name}`);
+    } finally {
+      await session.close();
+    }
   }
 
   /**

@@ -26,13 +26,17 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # ---------------------------------------------------------------------------
 
 class PlotFragmentIn(BaseModel):
-    id:          str              = Field(..., description="ID univoco, es. 'frag_001'")
-    text:        str              = Field(..., description="Testo narrativo del frammento")
-    setting:     str              = Field(..., description="Ambientazione, es. 'bosco magico'")
-    characters:  list[str]       = Field(default_factory=list, description="Personaggi coinvolti")
-    emotions:    list[str]       = Field(default_factory=list, description="Emozioni evocate")
-    tema:        Optional[str]   = Field(None, description="Tema narrativo, es. 'amicizia'")
-    archetipo:   Optional[str]   = Field(None, description="Archetipo, es. 'viaggio_eroe'")
+    id:             str            = Field(..., description="ID univoco, es. 'frag_001'")
+    text:           str            = Field(..., description="Testo narrativo del frammento")
+    setting:        str            = Field(..., description="Ambientazione, es. 'bosco magico'")
+    characters:     list[str]      = Field(default_factory=list, description="Personaggi coinvolti")
+    emotions:       list[str]      = Field(default_factory=list, description="Emozioni evocate")
+    tema:           Optional[str]  = Field(None, description="Tema narrativo, es. 'amicizia'")
+    archetipo:      Optional[str]  = Field(None, description="Archetipo, es. 'viaggio_eroe'")
+    tecnica_narrativa: Optional[str] = Field(None, description="Tecnica narrativa usata, es. 'binomio_fantastico' (Rodari), 'ripetizione_tre_volte' (Grimm)")
+    fascia_eta:     Optional[str]  = Field(None, description="Fascia d'età consigliata, es. '3-6'")
+    ritornello:     Optional[str]  = Field(None, description="Frase-ritornello ripetibile della storia")
+    domanda:        Optional[str]  = Field(None, description="Domanda finale per coinvolgere il bambino")
 
 class BulkLoadRequest(BaseModel):
     frammenti:   list[PlotFragmentIn]
@@ -107,16 +111,24 @@ async def carica_frammenti_bulk(
                 await session.run(
                     """
                     MERGE (f:PlotFragment {id: $id})
-                    SET f.text     = $text,
-                        f.setting  = $setting,
-                        f.tema     = $tema,
-                        f.archetipo = $archetipo
+                    SET f.text              = $text,
+                        f.setting           = $setting,
+                        f.tema              = $tema,
+                        f.archetipo         = $archetipo,
+                        f.tecnica_narrativa = $tecnica_narrativa,
+                        f.fascia_eta        = $fascia_eta,
+                        f.ritornello        = $ritornello,
+                        f.domanda           = $domanda
                     """,
-                    id        = frag.id,
-                    text      = frag.text,
-                    setting   = frag.setting,
-                    tema      = frag.tema,
-                    archetipo = frag.archetipo,
+                    id                = frag.id,
+                    text              = frag.text,
+                    setting           = frag.setting,
+                    tema              = frag.tema,
+                    archetipo         = frag.archetipo,
+                    tecnica_narrativa = frag.tecnica_narrativa,
+                    fascia_eta        = frag.fascia_eta,
+                    ritornello        = frag.ritornello,
+                    domanda           = frag.domanda,
                 )
 
                 # Collega i personaggi
@@ -165,11 +177,15 @@ async def lista_frammenti(neo4j: Neo4jClient = Depends(get_neo4j)):
             MATCH (f:PlotFragment)
             OPTIONAL MATCH (f)-[:CONTAINS]->(p:Character)
             OPTIONAL MATCH (f)-[:EVOKES]->(e:Emotion)
-            RETURN f.id        AS id,
-                   f.text      AS text,
-                   f.setting   AS setting,
-                   f.tema      AS tema,
-                   f.archetipo AS archetipo,
+            RETURN f.id             AS id,
+                   f.text           AS text,
+                   f.setting        AS setting,
+                   f.tema           AS tema,
+                   f.archetipo      AS archetipo,
+                   f.tecnica_narrativa AS tecnica_narrativa,
+                   f.fascia_eta     AS fascia_eta,
+                   f.ritornello     AS ritornello,
+                   f.domanda        AS domanda,
                    collect(DISTINCT p.name) AS characters,
                    collect(DISTINCT e.name) AS emotions
             ORDER BY f.id

@@ -47,6 +47,53 @@ class StoryComposer:
         else:
             testo_frammenti = "Usa la tua fantasia, ma mantieni lo stile di Baldo."
 
+        # --- COSTRUZIONE SEZIONE PROFILI PERSONAGGI ---
+        # Solo i personaggi con descrizione/tratti compilati a mano nel
+        # pannello Personaggi (identificati per nome, come ovunque nel grafo).
+        personaggi_bio = kwargs.get("personaggi_bio") or {}
+        righe_bio = []
+        for nome, bio in personaggi_bio.items():
+            dettagli = []
+            if bio.get("description"):
+                dettagli.append(bio["description"])
+            if bio.get("traits"):
+                dettagli.append("tratti: " + ", ".join(bio["traits"]))
+            if dettagli:
+                righe_bio.append(f"- {nome}: {'; '.join(dettagli)}")
+        sezione_bio = ""
+        if righe_bio:
+            sezione_bio = (
+                "\nPROFILI PERSONAGGI (mantienili coerenti con le storie precedenti):\n"
+                + "\n".join(righe_bio) + "\n"
+            )
+
+        # --- COSTRUZIONE SEZIONE TECNICA NARRATIVA ---
+        # Il frammento non spiega la tecnica, la applica: Baldo la deduce dal
+        # nome e dall'esempio di testo già fornito sopra tra i frammenti.
+        tecniche = sorted({
+            f.get("tecnica_narrativa") for f in (frammenti or []) if f.get("tecnica_narrativa")
+        })
+        sezione_tecnica = ""
+        if tecniche:
+            sezione_tecnica = (
+                f"\nTECNICA NARRATIVA DA APPLICARE: {', '.join(tecniche)}. "
+                "Osserva come il frammento sopra la mette in pratica e usa lo stesso "
+                "dispositivo narrativo per costruire la tua storia.\n"
+            )
+
+        # --- COSTRUZIONE SEZIONE DOMANDA FINALE ---
+        # Prende la prima disponibile: i frammenti arrivano già ordinati per
+        # rilevanza da cerca_frammenti, quindi è quella del frammento migliore.
+        domanda_finale = next(
+            (f.get("domanda") for f in (frammenti or []) if f.get("domanda")), None
+        )
+        sezione_domanda = ""
+        if domanda_finale:
+            sezione_domanda = (
+                f"\nDOMANDA FINALE: Concludi il racconto rivolgendo al bambino "
+                f"questa domanda (adattala al contesto se serve): \"{domanda_finale}\"\n"
+            )
+
         # --- COSTRUZIONE SEZIONE CIELO ---
         descrizione_cielo = f"La luna è in fase {fase_luna}."
         if corpi_celesti:
@@ -67,10 +114,10 @@ ELEMENTI DELLA STORIA RICHIESTI:
 - Prompt Utente: "{prompt_originale}"
 - Personaggi identificati: {', '.join(analisi.get('personaggi', []))}
 - Emozioni da evocare: {', '.join(analisi.get('emozioni', []))}
-
+{sezione_bio}
 FRAMMENTI DI TRAMA DAL DATABASE (Integrali nella narrazione):
 {testo_frammenti}
-
+{sezione_tecnica}{sezione_domanda}
 REGOLE DI GENERAZIONE:
 1. Rivolgiti al bambino con dolcezza.
 2. Inizia menzionando il meteo o le stelle che Baldo vede dalla sua torre a {luogo}.

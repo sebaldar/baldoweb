@@ -94,6 +94,20 @@ class StoryComposer:
                 f"questa domanda (adattala al contesto se serve): \"{domanda_finale}\"\n"
             )
 
+        # --- COSTRUZIONE SEZIONE RITORNELLO ---
+        # Stessa logica di domanda_finale: prende quello del frammento più
+        # rilevante. Va ripetuto più volte (non solo citato), è il suo scopo.
+        ritornello = next(
+            (f.get("ritornello") for f in (frammenti or []) if f.get("ritornello")), None
+        )
+        sezione_ritornello = ""
+        if ritornello:
+            sezione_ritornello = (
+                f"\nRITORNELLO: Ripeti questa frase 2-3 volte durante il racconto, "
+                f"nei momenti chiave, sempre uguale — è pensata per essere riconosciuta "
+                f"e ripetuta ad alta voce dal bambino: \"{ritornello}\"\n"
+            )
+
         # --- COSTRUZIONE SEZIONE CIELO ---
         descrizione_cielo = f"La luna è in fase {fase_luna}."
         if corpi_celesti:
@@ -117,7 +131,7 @@ ELEMENTI DELLA STORIA RICHIESTI:
 {sezione_bio}
 FRAMMENTI DI TRAMA DAL DATABASE (Integrali nella narrazione):
 {testo_frammenti}
-{sezione_tecnica}{sezione_domanda}
+{sezione_tecnica}{sezione_ritornello}{sezione_domanda}
 REGOLE DI GENERAZIONE:
 1. Rivolgiti al bambino con dolcezza.
 2. Inizia menzionando il meteo o le stelle che Baldo vede dalla sua torre a {luogo}.

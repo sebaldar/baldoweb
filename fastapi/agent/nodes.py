@@ -11,6 +11,14 @@ import logging
 import uuid
 import asyncio
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+# Stesso fuso usato in rag.py: quando il prompt non specifica un momento, il
+# fallback "adesso" deve rappresentare l'ora locale dell'utenza (Italia), non
+# quella del container (UTC) — coerenza necessaria perché entrambi i valori
+# finiscono nello stesso campo di stato e nello stesso confine di conversione
+# verso il motore astronomico (services/astronomy.py).
+FUSO_UTENZA = ZoneInfo("Europe/Rome")
 
 from agent.state import BaldoState
 from services.llm import LLMRouter
@@ -34,8 +42,8 @@ async def analizza_prompt(state: BaldoState, llm: LLMRouter) -> dict:
     analisi = await rag.analizza(state["prompt_originale"])
 
     # Gestione Fallback Temporale (Data e Ora attuali se non specificate)
-    data_target = analisi.get("data_storia") or datetime.now().strftime("%d-%m-%Y")
-    ora_target = analisi.get("ora_storia") or datetime.now().strftime("%H:%M:%S")
+    data_target = analisi.get("data_storia") or datetime.now(FUSO_UTENZA).strftime("%d-%m-%Y")
+    ora_target = analisi.get("ora_storia") or datetime.now(FUSO_UTENZA).strftime("%H:%M:%S")
     
     # Gestione Fallback Geografico (Default: Roma)
     luogo_target = analisi.get("luogo") or "Roma"
@@ -244,6 +252,89 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] rifinisci")
     racconto = await llm.rifinisci(draft=state["draft"], eta=state["eta_bambino"])
     return {"racconto_finale": racconto}
+
+# ---------------------------------------------------------------------------
+# NODE 10b — Verifica coerenza della domanda finale
+# ---------------------------------------------------------------------------
+async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
+    """
+    Rete di sicurezza economica: composer.py suggerisce una domanda finale
+    presa dal frammento più rilevante, ma il modello di generazione può
+    comunque ignorarla, storpiarla o (in rari casi) lasciarne una scollegata
+    dalla trama effettivamente raccontata.
+
+    In due passaggi, non uno: prima un classificatore SI/NO economico, e solo
+    se la risposta è NO si chiede la riscrittura mirata. Un'unica chiamata
+    "verifica-e-se-serve-correggi" è stata scartata: anche istruita a
+    restituire il testo invariato quando già coerente, un LLM tende comunque
+    a "migliorarlo" — riscriveva domande già valide, vanificando lo scopo di
+    un controllo mirato.
+    """
+    logger.info("[NODE] verifica_coerenza_domanda")
+
+    racconto = state.get("racconto_finale") or ""
+    if not racconto:
+        return {}
+
+    system_check = (
+        "Sei un revisore di favole per bambini in età prescolare. Leggi la favola "
+        "e la domanda con cui si chiude, rivolta al bambino (di solito l'ultima "
+        "frase, tra virgolette). La domanda NON deve avere per forza una "
+        "risposta univoca nel testo: può essere aperta o di opinione (es. "
+        "\"Chi è il più forte, il leone o il topolino?\", \"Tu cosa avresti fatto?\"). "
+        "Conta solo questo: la domanda parla di personaggi, oggetti o eventi "
+        "che compaiono DAVVERO nella favola appena letta? Rispondi "
+        "ESCLUSIVAMENTE con la parola SI se sì, oppure ESCLUSIVAMENTE con la "
+        "parola NO se la domanda manca o cita qualcosa (un personaggio, un "
+        "oggetto, una scena) che nella favola non compare affatto. "
+        "Nessun'altra parola nella risposta."
+    )
+
+    try:
+        esito = await llm.chiedi(system=system_check, user=racconto)
+    except Exception as e:
+        logger.warning(f"[verifica_coerenza_domanda] Controllo fallito, mantengo il racconto originale: {e}")
+        return {}
+
+    if not esito or esito.strip().upper().startswith("SI"):
+        return {}  # coerente (o controllo ambiguo): non tocco nulla
+
+    system_fix = (
+        "Sei un revisore di favole per bambini in età prescolare. Ricevi il "
+        "testo COMPLETO di una favola la cui domanda finale NON è coerente "
+        "con la storia. Il tuo compito: restituire l'INTERA favola, dalla "
+        "prima all'ultima riga, copiando ogni paragrafo esattamente com'è, "
+        "tranne l'ultima frase/domanda che devi sostituire con una domanda "
+        "breve coerente con ciò che accade davvero nella storia. "
+        "IMPORTANTE: la tua risposta deve contenere TUTTO il testo originale "
+        "(tutti i paragrafi), non solo la domanda finale — stai correggendo "
+        "una frase dentro un testo lungo, non scrivendone uno nuovo breve. "
+        "Nessun commento, nessuna spiegazione: solo la favola completa corretta."
+    )
+
+    try:
+        corretto = await llm.chiedi(system=system_fix, user=racconto)
+    except Exception as e:
+        logger.warning(f"[verifica_coerenza_domanda] Riscrittura fallita, mantengo il racconto originale: {e}")
+        return {}
+
+    # Rete di sicurezza: se il testo "corretto" è sospettosamente più corto
+    # dell'originale, l'LLM ha quasi certamente scartato il corpo della
+    # storia invece di limitarsi all'ultima frase (successo con un prompt
+    # meno esplicito di questo). Meglio tenere l'originale con la domanda
+    # scorrelata che una storia dimezzata.
+    if not corretto or len(corretto.strip()) < 0.7 * len(racconto.strip()):
+        logger.warning(
+            f"[verifica_coerenza_domanda] Riscrittura sospetta (lunghezza "
+            f"{len(corretto.strip()) if corretto else 0} vs originale "
+            f"{len(racconto.strip())}), mantengo il racconto originale."
+        )
+        return {}
+
+    if corretto and corretto.strip():
+        return {"racconto_finale": corretto.strip()}
+
+    return {}
 
 # ---------------------------------------------------------------------------
 # NODE 11 — Salvataggio memoria

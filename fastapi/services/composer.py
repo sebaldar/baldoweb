@@ -8,6 +8,7 @@ Si occupa di assemblare il prompt finale per l'LLM, integrando:
 """
 
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +41,72 @@ class StoryComposer:
         corpi_celesti = astro.get("corpi", [])
         fase_luna = astro.get("fase_luna", "sconosciuta")
 
+        # --- FRAMMENTO PRIMARIO vs SECONDARI ---
+        # Solo il frammento con punteggio più alto (il primo: cerca_frammenti
+        # restituisce già in ordine di rilevanza) fornisce domanda/ritornello/
+        # tecnica narrativa. Prendere questi campi dal primo disponibile in
+        # tutta la lista (comportamento precedente) poteva far ereditare una
+        # domanda pensata per un frammento marginale, scollegata dalla trama
+        # che l'LLM finisce davvero per raccontare.
+        frammenti = frammenti or []
+        frammento_primario = frammenti[0] if frammenti else {}
+        frammenti_secondari = frammenti[1:]
+
         # --- COSTRUZIONE SEZIONE FRAMMENTI ---
-        testo_frammenti = ""
-        if frammenti:
-            testo_frammenti = "\n".join([f"- {f.get('testo')}" for f in frammenti])
+        personaggi_richiesti = analisi.get('personaggi', [])
+        riga_personaggi_obbligatori = (
+            f"4. I personaggi nominati dall'utente ({', '.join(personaggi_richiesti)}) sono "
+            "OBBLIGATORI E ATTIVI: ognuno deve avere almeno un'azione con una sua "
+            "intenzione e almeno una battuta di dialogo. Non ridurre un "
+            "personaggio richiesto (es. un antagonista) a un semplice rumore o "
+            "spavento di passaggio (\"Miao!\" e sparisce) — deve avere un obiettivo "
+            "e delle parole sue.\n"
+            if personaggi_richiesti else ""
+        )
+        if frammento_primario:
+            archetipo = frammento_primario.get('archetipo')
+            riga_archetipo = f"ARCHETIPO NARRATIVO: {archetipo}\n\n" if archetipo else ""
+            testo_frammenti = (
+                f"{riga_archetipo}"
+                f"ESEMPIO DI STILE (NON di trama — leggi bene la regola 1 sotto):\n"
+                f"- {frammento_primario.get('testo')}\n\n"
+                "Come usarlo — regole non negoziabili:\n"
+                "1. Il testo sopra NON è la trama da seguire o parafrasare: è solo "
+                "un esempio di stile, ritmo e registro linguistico adatto "
+                "all'età. Inventa una trama NUOVA — eventi, dettagli, svolte — "
+                "basata sul PROMPT DELL'UTENTE e sull'archetipo narrativo "
+                "indicato sopra, non sulla sequenza di eventi del testo "
+                "d'esempio. Le storie migliori nascono quando il testo "
+                "d'esempio influenza pochissimo gli eventi concreti — più ti "
+                "allontani dalla sua trama letterale, meglio è, purché resti "
+                "coerente con l'archetipo e con il prompt.\n"
+                "2. Il PROMPT DELL'UTENTE vince sempre sui dettagli concreti "
+                "(dove, cosa, chi, oggetti) — se qualcosa del testo d'esempio "
+                "sopravvive per caso nella tua trama nuova e confligge con il "
+                "prompt, usa quello che ha chiesto l'utente.\n"
+                "3. Non riprendere battute o richiami del testo d'esempio che "
+                "presuppongono una scena non raccontata (es. un personaggio che "
+                "\"non ride più\" implica che prima ridesse: se quella risata non "
+                "fa parte della tua storia, non scrivere il richiamo, oppure "
+                "costruisci prima il momento che lo giustifica).\n"
+                f"{riga_personaggi_obbligatori}"
+                "5. Non introdurre personaggi antagonisti aggiuntivi che non sono "
+                "nel prompt dell'utente, se il prompt ne specifica già uno.\n"
+                "6. La tua trama nuova deve avere una motivazione chiara per cui "
+                "il protagonista agisce — mai un'azione immotivata (es. mai \"un "
+                "giorno decise di...\" senza dire perché, specie se il "
+                "personaggio è timido: un timido ha bisogno di un motivo forte "
+                "per agire).\n"
+            )
+            if frammenti_secondari:
+                testi_secondari = "\n".join(f"- {f.get('testo')}" for f in frammenti_secondari)
+                testo_frammenti += (
+                    "\nALTRI FRAMMENTI DISPONIBILI (spunti accessori: usali SOLO se si "
+                    "integrano naturalmente nella trama del frammento principale, "
+                    "altrimenti ignorali — meglio una storia coerente che una che li "
+                    "cita tutti a forza):\n"
+                    f"{testi_secondari}\n"
+                )
         else:
             testo_frammenti = "Usa la tua fantasia, ma mantieni lo stile di Baldo."
 
@@ -68,25 +131,22 @@ class StoryComposer:
             )
 
         # --- COSTRUZIONE SEZIONE TECNICA NARRATIVA ---
-        # Il frammento non spiega la tecnica, la applica: Baldo la deduce dal
-        # nome e dall'esempio di testo già fornito sopra tra i frammenti.
-        tecniche = sorted({
-            f.get("tecnica_narrativa") for f in (frammenti or []) if f.get("tecnica_narrativa")
-        })
+        # Solo dal frammento primario (vedi nota sopra): il nome della tecnica
+        # non spiega nulla di per sé, Baldo la deduce dal testo di quel
+        # frammento specifico — prenderla da un frammento diverso da quello
+        # che dà anche testo/domanda/ritornello creerebbe la stessa
+        # incoerenza che vogliamo evitare.
+        tecnica_narrativa = frammento_primario.get("tecnica_narrativa")
         sezione_tecnica = ""
-        if tecniche:
+        if tecnica_narrativa:
             sezione_tecnica = (
-                f"\nTECNICA NARRATIVA DA APPLICARE: {', '.join(tecniche)}. "
-                "Osserva come il frammento sopra la mette in pratica e usa lo stesso "
-                "dispositivo narrativo per costruire la tua storia.\n"
+                f"\nTECNICA NARRATIVA DA APPLICARE: {tecnica_narrativa}. "
+                "Osserva come il frammento principale la mette in pratica e usa lo "
+                "stesso dispositivo narrativo per costruire la tua storia.\n"
             )
 
         # --- COSTRUZIONE SEZIONE DOMANDA FINALE ---
-        # Prende la prima disponibile: i frammenti arrivano già ordinati per
-        # rilevanza da cerca_frammenti, quindi è quella del frammento migliore.
-        domanda_finale = next(
-            (f.get("domanda") for f in (frammenti or []) if f.get("domanda")), None
-        )
+        domanda_finale = frammento_primario.get("domanda")
         sezione_domanda = ""
         if domanda_finale:
             sezione_domanda = (
@@ -95,24 +155,60 @@ class StoryComposer:
             )
 
         # --- COSTRUZIONE SEZIONE RITORNELLO ---
-        # Stessa logica di domanda_finale: prende quello del frammento più
-        # rilevante. Va ripetuto più volte (non solo citato), è il suo scopo.
-        ritornello = next(
-            (f.get("ritornello") for f in (frammenti or []) if f.get("ritornello")), None
-        )
-        sezione_ritornello = ""
+        # Sempre presente, anche quando il frammento non ne fornisce uno: se
+        # dipende dal caso (solo quando il frammento vincitore ne ha uno), il
+        # ritornello compare in modo incostante da una storia all'altra. Va
+        # dichiarato come requisito PRIMA della scrittura, non lasciato
+        # emergere se capita.
+        ritornello = frammento_primario.get("ritornello")
         if ritornello:
             sezione_ritornello = (
                 f"\nRITORNELLO: Ripeti questa frase 2-3 volte durante il racconto, "
                 f"nei momenti chiave, sempre uguale — è pensata per essere riconosciuta "
                 f"e ripetuta ad alta voce dal bambino: \"{ritornello}\"\n"
             )
+        else:
+            sezione_ritornello = (
+                "\nRITORNELLO: il frammento non ne fornisce uno — INVENTANE TU uno, "
+                "breve e orecchiabile (un'onomatopea o una frasetta di poche "
+                "parole), coerente con l'archetipo e la tecnica narrativa sopra. "
+                "Decidilo PRIMA di scrivere la storia, non a metà: poi ripetilo "
+                "2-3 volte, identico, nei momenti chiave — deve essere una frase "
+                "che il bambino può dire insieme a te già dalla seconda volta. "
+                "\"Decidilo prima\" è un'istruzione per te, non per il bambino: "
+                "NON annunciare mai al bambino che stai per dargli un ritornello "
+                "(niente \"il ritornello di oggi è...\") — intreccialo nella "
+                "narrazione come se ci fosse sempre stato.\n"
+            )
 
-        # --- COSTRUZIONE SEZIONE CIELO ---
-        descrizione_cielo = f"La luna è in fase {fase_luna}."
-        if corpi_celesti:
-            nomi_corpi = [c.get("nome") for c in corpi_celesti]
-            descrizione_cielo += f" In cielo sono visibili: {', '.join(nomi_corpi)}."
+        # --- COSTRUZIONE SEZIONE CIELO (coerente con l'ora reale) ---
+        # Senza questo controllo il modello, lasciato solo con "adesso" come
+        # ora, tende a descrivere sempre un cielo notturno stellato — è il
+        # framing stesso di Baldo ("scruta le stelle dalla torre") a
+        # spingerlo in quella direzione, anche quando la storia è ambientata
+        # di giorno. Le stelle non sono mai visibili in pieno giorno.
+        ora_match = re.match(r"^(\d{1,2})", str(ora))
+        ora_num = int(ora_match.group(1)) if ora_match else None
+        è_notte = ora_num is not None and (ora_num >= 20 or ora_num < 6)
+
+        if ora_num is None:
+            descrizione_cielo = f"La luna è in fase {fase_luna}."
+            if corpi_celesti:
+                nomi_corpi = [c.get("nome") for c in corpi_celesti]
+                descrizione_cielo += f" In cielo sono visibili: {', '.join(nomi_corpi)}."
+        elif è_notte:
+            descrizione_cielo = f"È notte: il cielo è scuro, le stelle sono visibili. La luna è in fase {fase_luna}."
+            if corpi_celesti:
+                nomi_corpi = [c.get("nome") for c in corpi_celesti]
+                descrizione_cielo += f" Sono visibili anche: {', '.join(nomi_corpi)}."
+        else:
+            descrizione_cielo = (
+                "È giorno: il cielo è azzurro e luminoso. Le stelle NON sono "
+                "visibili adesso (si vedono solo di notte) — se vuoi parlare "
+                "del cielo, descrivi il sole, le nuvole o gli uccelli, non le "
+                "stelle. Vale per TUTTA la storia, dall'inizio fino alla "
+                "domanda finale compresa: non farle ricomparire in chiusura."
+            )
 
         # --- TEMPLATE FINALE ---
         prompt_finale = f"""
@@ -129,15 +225,18 @@ ELEMENTI DELLA STORIA RICHIESTI:
 - Personaggi identificati: {', '.join(analisi.get('personaggi', []))}
 - Emozioni da evocare: {', '.join(analisi.get('emozioni', []))}
 {sezione_bio}
-FRAMMENTI DI TRAMA DAL DATABASE (Integrali nella narrazione):
+FRAMMENTI DI TRAMA DAL DATABASE:
 {testo_frammenti}
 {sezione_tecnica}{sezione_ritornello}{sezione_domanda}
 REGOLE DI GENERAZIONE:
 1. Rivolgiti al bambino con dolcezza.
-2. Inizia menzionando il meteo o le stelle che Baldo vede dalla sua torre a {luogo}.
+2. Inizia menzionando il meteo e cosa Baldo vede davvero dalla sua torre a {luogo} in questo momento (leggi la sezione Cielo sopra: se è giorno, niente stelle).
 3. La lunghezza deve essere {kwargs.get('lunghezza', 'media')}.
 4. Rispondi esclusivamente in lingua: {kwargs.get('lingua', 'Italiano')}.
 5. Età del bambino: {kwargs.get('eta_bambino', 4)} anni (usa un vocabolario appropriato).
+6. Massimo un'immagine poetica per paragrafo (una metafora, un paragone lirico): il resto della frase resta concreto. Non impilare più immagini liriche nella stessa frase o nel giro di poche righe.
+7. Se c'è una DOMANDA FINALE, non far dichiarare la morale della storia — né a un personaggio né a te come narratore (niente frasi tipo "capì una cosa importante: ...") — prima di arrivarci. Deve restare una domanda vera, che il bambino può ancora pensare da solo, non la conferma di qualcosa già detto esplicitamente. Se una frase prima della domanda è già una chiusura emotiva soddisfacente, fermati lì: non serve aggiungere altro.
+8. Ogni dettaglio sensoriale deve essere percepibile davvero da un bambino che ascolta: niente immagini che funzionano solo per un adulto che coglie il sottotesto (es. un personaggio che "arrossisce sotto il pelo nero" — un bambino non può vederlo). Se un'immagine ha senso solo a livello concettuale e non letterale, cambiala con qualcosa di concreto (un suono, un movimento, un'espressione visibile).
 
 GENERA IL RACCONTO:
 """

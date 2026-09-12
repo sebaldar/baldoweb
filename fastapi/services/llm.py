@@ -1,17 +1,27 @@
 """
 LLMRouter
 =========
-Usa OpenAI o Claude (in ordine di preferenza).
-Tenta OpenAI come provider principale, Claude come fallback automatico.
+Usa Claude o OpenAI (in ordine di preferenza).
+Tenta Claude (Sonnet 5) come provider principale, OpenAI come fallback automatico.
 """
 
 import logging
+import re
 import openai
 import anthropic
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Il testo finisce incollato direttamente in innerHTML dal frontend (nessun
+# rendering Markdown): qualunque sintassi Markdown comparirebbe come testo
+# letterale con i simboli (es. "*Ops!*" invece di "Ops!" in corsivo, "---"
+# invece di una riga vuota). Rimossa qui come rete di sicurezza, anche se il
+# prompt istruisce già il modello a non usarla.
+_TITOLO_MARKDOWN_RE = re.compile(r"^\s*#{1,6}\s.+\n+")
+_ENFASI_MARKDOWN_RE = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*")
+_SEPARATORE_MARKDOWN_RE = re.compile(r"^\s*-{3,}\s*$", re.MULTILINE)
 
 
 class LLMRouter:
@@ -29,7 +39,7 @@ class LLMRouter:
         if not self.openai_client and not self.anthropic_client:
             raise RuntimeError("Nessun LLM configurato. Imposta OPENAI_API_KEY o ANTHROPIC_API_KEY nel .env")
 
-        provider = "OpenAI" if self.openai_client else "Claude"
+        provider = "Claude" if self.anthropic_client else "OpenAI"
         logger.info(f"LLMRouter pronto — provider principale: {provider}")
 
     async def chiedi(self, system: str, user: str) -> str:
@@ -39,9 +49,17 @@ class LLMRouter:
     async def genera_racconto(self, prompt: str) -> str:
         """Genera il draft del racconto tramite cloud LLM."""
         system = (
-            "Sei un contastorie poetico e fantasioso per bambini in età prescolare. "
-            "Usa un linguaggio semplice, immagini vivide, ritmo narrativo coinvolgente. "
-            "Incorpora elementi astronomici in modo magico e meraviglioso."
+            "Sei Baldo, un anziano astrologo e cantastorie gentile che vive in una "
+            "torre antica — questa cornice (chi sei, da dove racconti) va sempre "
+            "mantenuta: il messaggio dell'utente contiene le istruzioni esatte su "
+            "cosa vedi in cielo in questo momento (giorno o notte, meteo reale) — "
+            "seguile alla lettera, non inventare un cielo stellato di default. "
+            "Usa un linguaggio semplice, immagini vivide, ritmo narrativo "
+            "coinvolgente, adatto a bambini in età prescolare. "
+            "Non iniziare mai con un titolo o un'intestazione, e non usare ALCUNA "
+            "formattazione Markdown (niente *, **, #, --- o simili): il testo va "
+            "incollato così com'è in una pagina web, senza rendering Markdown — "
+            "se vuoi enfasi o un'onomatopea, scrivila in testo semplice."
         )
         return await self._cloud_chat(system=system, user=prompt)
 
@@ -51,8 +69,20 @@ class LLMRouter:
             f"Sei un editor esperto di letteratura per l'infanzia. "
             f"Il racconto è destinato a bambini di circa {eta} anni. "
             f"Raffina il testo mantenendone lo spirito: migliora il ritmo, "
-            f"semplifica dove necessario, rendi la conclusione più soddisfacente. "
-            f"NON aggiungere elementi nuovi, solo rifinisci."
+            f"semplifica dove necessario, usa solo parole che un bambino di "
+            f"quell'età conosce già (evita aggettivi astratti o letterari come "
+            f"\"viscido\", \"ambiguo\"). "
+            f"NON toccare la cornice di apertura/chiusura di Baldo (la torre, il "
+            f"cielo, il modo in cui si rivolge al bambino) se è già presente nel "
+            f"testo — lasciala intatta, non sostituirla con una formula fiabesca "
+            f"generica (mai \"vissero felici e contenti\" o simili, tanto più al "
+            f"plurale se il protagonista è uno solo). "
+            f"NON far dichiarare a un personaggio o al narratore la morale della "
+            f"storia (frasi tipo \"capì una cosa importante\"): se c'è una domanda "
+            f"finale rivolta al bambino, deve restare lei a fare quel lavoro. "
+            f"Non usare ALCUNA formattazione Markdown (niente *, **, #, ---): il "
+            f"testo va incollato così com'è in una pagina web. "
+            f"NON aggiungere elementi nuovi alla trama, solo rifinisci."
         )
         return await self._cloud_chat(
             system=system,
@@ -64,28 +94,61 @@ class LLMRouter:
     # ------------------------------------------------------------------
 
     async def _cloud_chat(self, system: str, user: str) -> str:
-        """Tenta OpenAI, poi Claude come fallback."""
-        if self.openai_client:
-            try:
-                resp = await self.openai_client.chat.completions.create(
-                    model=settings.OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    temperature=0.8,
-                )
-                return resp.choices[0].message.content
-            except Exception as e:
-                logger.warning(f"OpenAI fallito ({e}), provo Claude.")
-
+        """Tenta Claude (Sonnet 5), poi OpenAI come fallback."""
         if self.anthropic_client:
-            resp = await self.anthropic_client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
-                max_tokens=2048,
-                system=system,
-                messages=[{"role": "user", "content": user}],
-            )
-            return resp.content[0].text
+            try:
+                resp = await self.anthropic_client.messages.create(
+                    model=settings.ANTHROPIC_MODEL,
+                    # Margine ampio: con il thinking adattivo attivo, un tetto
+                    # basso rischia di esaurirsi nel ragionamento interno prima
+                    # ancora di produrre il testo visibile (successo in test:
+                    # nessun blocco "text" nella risposta, scattato il
+                    # fallback). Alzare il tetto non costa di più: si paga
+                    # solo per i token davvero generati, non per il tetto.
+                    max_tokens=8192,
+                    system=system,
+                    messages=[{"role": "user", "content": user}],
+                    thinking={"type": "adaptive"},
+                    # "low": scrittura creativa breve per bambini, non
+                    # ragionamento complesso — riduce anche il rischio sopra.
+                    output_config={"effort": "low"},
+                )
+                testo = self._estrai_testo(resp.content)
+                if testo:
+                    return self._pulisci(testo)
+                logger.warning("Claude ha risposto senza blocco di testo, provo OpenAI.")
+            except Exception as e:
+                logger.warning(f"Claude fallito ({e}), provo OpenAI.")
 
-        raise RuntimeError("Nessun LLM disponibile — OpenAI e Claude entrambi offline.")
+        if self.openai_client:
+            resp = await self.openai_client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=0.8,
+            )
+            return self._pulisci(resp.choices[0].message.content)
+
+        raise RuntimeError("Nessun LLM disponibile — Claude e OpenAI entrambi offline.")
+
+    @staticmethod
+    def _pulisci(testo: str) -> str:
+        testo = _TITOLO_MARKDOWN_RE.sub("", testo, count=1)
+        testo = _SEPARATORE_MARKDOWN_RE.sub("", testo)
+        testo = _ENFASI_MARKDOWN_RE.sub(lambda m: m.group(1) or m.group(2), testo)
+        return testo.strip()
+
+    @staticmethod
+    def _estrai_testo(content_blocks) -> str:
+        """
+        Con il thinking adattivo attivo, il primo blocco della risposta può
+        essere un blocco di ragionamento (senza attributo .text) invece del
+        testo vero e proprio — va cercato il blocco di tipo "text", non
+        preso semplicemente il primo (content_blocks[0]).
+        """
+        for block in content_blocks:
+            if getattr(block, "type", None) == "text":
+                return block.text
+        return ""

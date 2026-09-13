@@ -5,6 +5,7 @@ Usa Claude o OpenAI (in ordine di preferenza).
 Tenta Claude (Sonnet 5) come provider principale, OpenAI come fallback automatico.
 """
 
+import asyncio
 import logging
 import re
 import openai
@@ -13,6 +14,17 @@ import anthropic
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Nessuno dei due client aveva un timeout esplicito: quello di default di
+# Anthropic è 10 minuti (troppo lungo per restare "appesi" in un nodo del
+# grafo senza che scatti alcun fallback), e OpenAI non ne aveva affatto.
+# Osservato in produzione: una richiesta bloccata silenziosamente subito
+# dopo una chiamata Claude riuscita, senza errori né timeout per oltre 6
+# minuti — il nodo successivo del grafo non partiva mai e l'utente restava
+# senza risposta. asyncio.wait_for aggiunge un limite anche per blocchi non
+# di rete (es. contesa su un lock interno), che un timeout sul solo client
+# HTTP non coprirebbe.
+TIMEOUT_LLM_SECONDI = 45.0
 
 # Il testo finisce incollato direttamente in innerHTML dal frontend (nessun
 # rendering Markdown): qualunque sintassi Markdown comparirebbe come testo
@@ -28,11 +40,11 @@ class LLMRouter:
 
     def __init__(self):
         self.openai_client = (
-            openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=TIMEOUT_LLM_SECONDI)
             if settings.OPENAI_API_KEY else None
         )
         self.anthropic_client = (
-            anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=TIMEOUT_LLM_SECONDI)
             if settings.ANTHROPIC_API_KEY else None
         )
 
@@ -97,21 +109,24 @@ class LLMRouter:
         """Tenta Claude (Sonnet 5), poi OpenAI come fallback."""
         if self.anthropic_client:
             try:
-                resp = await self.anthropic_client.messages.create(
-                    model=settings.ANTHROPIC_MODEL,
-                    # Margine ampio: con il thinking adattivo attivo, un tetto
-                    # basso rischia di esaurirsi nel ragionamento interno prima
-                    # ancora di produrre il testo visibile (successo in test:
-                    # nessun blocco "text" nella risposta, scattato il
-                    # fallback). Alzare il tetto non costa di più: si paga
-                    # solo per i token davvero generati, non per il tetto.
-                    max_tokens=8192,
-                    system=system,
-                    messages=[{"role": "user", "content": user}],
-                    thinking={"type": "adaptive"},
-                    # "low": scrittura creativa breve per bambini, non
-                    # ragionamento complesso — riduce anche il rischio sopra.
-                    output_config={"effort": "low"},
+                resp = await asyncio.wait_for(
+                    self.anthropic_client.messages.create(
+                        model=settings.ANTHROPIC_MODEL,
+                        # Margine ampio: con il thinking adattivo attivo, un tetto
+                        # basso rischia di esaurirsi nel ragionamento interno prima
+                        # ancora di produrre il testo visibile (successo in test:
+                        # nessun blocco "text" nella risposta, scattato il
+                        # fallback). Alzare il tetto non costa di più: si paga
+                        # solo per i token davvero generati, non per il tetto.
+                        max_tokens=8192,
+                        system=system,
+                        messages=[{"role": "user", "content": user}],
+                        thinking={"type": "adaptive"},
+                        # "low": scrittura creativa breve per bambini, non
+                        # ragionamento complesso — riduce anche il rischio sopra.
+                        output_config={"effort": "low"},
+                    ),
+                    timeout=TIMEOUT_LLM_SECONDI,
                 )
                 testo = self._estrai_testo(resp.content)
                 if testo:
@@ -121,15 +136,22 @@ class LLMRouter:
                 logger.warning(f"Claude fallito ({e}), provo OpenAI.")
 
         if self.openai_client:
-            resp = await self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                temperature=0.8,
-            )
-            return self._pulisci(resp.choices[0].message.content)
+            try:
+                resp = await asyncio.wait_for(
+                    self.openai_client.chat.completions.create(
+                        model=settings.OPENAI_MODEL,
+                        messages=[
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        temperature=0.8,
+                    ),
+                    timeout=TIMEOUT_LLM_SECONDI,
+                )
+                return self._pulisci(resp.choices[0].message.content)
+            except Exception as e:
+                logger.error(f"Anche OpenAI fallito ({e}) — nessun LLM disponibile per questa richiesta.")
+                raise RuntimeError(f"Entrambi i provider LLM non disponibili: {e}") from e
 
         raise RuntimeError("Nessun LLM disponibile — Claude e OpenAI entrambi offline.")
 

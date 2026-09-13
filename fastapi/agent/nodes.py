@@ -274,35 +274,59 @@ async def componi_prompt(state: BaldoState) -> dict:
         "archetipo_kb": meta_composizione.get("archetipo"),
     }
 
-# Una frase più corta di così ("Sì.", "Corse via.") si ripete facilmente per
-# caso, senza essere un ritornello voluto.
-_RITORNELLO_MIN_PAROLE = 3
+# Sotto questa soglia di parole consecutive uguali, il confronto rischia
+# falsi positivi (formule ricorrenti per caso, non un ritornello voluto).
+_RITORNELLO_MIN_PAROLE = 6
+
+_PUNTEGGIATURA_BORDO_RE = re.compile(r"^[«»\"'“”,.:;!?]+|[«»\"'“”,.:;!?]+$")
+
+
+def _parola_normalizzata(parola: str) -> str:
+    return _PUNTEGGIATURA_BORDO_RE.sub("", parola).lower()
 
 
 def _rileva_ritornello(testo: str) -> "str | None":
     """
-    Cerca nel draft una frase (almeno _RITORNELLO_MIN_PAROLE parole) che
-    compare 2 o più volte, quasi identica ogni volta — più affidabile che
+    Cerca la sequenza di parole più lunga che si ripete almeno 2 volte nel
+    testo (almeno _RITORNELLO_MIN_PAROLE parole) — più affidabile che
     fidarsi del campo "ritornello" del frammento KB: quel testo può
     contenere un nome proprio specifico della fiaba d'origine (es.
     "Mangiafuoco") che il draft, lasciato libero di scrivere, sostituisce
     già con i personaggi della propria trama. Imporre il testo del
     frammento parola per parola a rifinisci reintroduceva quel nome
     estraneo — qui si protegge invece quello che il draft ha davvero usato.
+
+    Confronto per n-grammi di parole, non per frasi intere delimitate da
+    ".!?": un ritornello ripetuto quasi alla lettera è sfuggito una volta
+    alla rilevazione a frasi per due motivi — una congiunzione di raccordo
+    in testa solo alla prima occorrenza ("E Marco strinse..." vs "Marco
+    strinse...") e un punto di domanda dentro un dialogo poco prima
+    ("qui!\" E Marco...") che spezzava la frase nel punto sbagliato. I
+    confini di frase in una prosa piena di dialoghi sono troppo fragili
+    per un regex su ".!?"; i confini di parola no.
     """
-    frasi = re.split(r"(?<=[.!?])\s+", (testo or "").strip())
-    originali = {}
-    conteggi = {}
-    for frase in frasi:
-        pulita = frase.strip()
-        if len(pulita.split()) < _RITORNELLO_MIN_PAROLE:
+    parole = re.findall(r"\S+", testo or "")
+    n = _RITORNELLO_MIN_PAROLE
+    if len(parole) < n * 2:
+        return None
+
+    visti = {}
+    for i in range(len(parole) - n + 1):
+        chiave = tuple(_parola_normalizzata(p) for p in parole[i:i + n])
+        if not all(chiave):  # n-gramma con solo punteggiatura in qualche slot
             continue
-        chiave = pulita.lower()
-        conteggi[chiave] = conteggi.get(chiave, 0) + 1
-        originali.setdefault(chiave, pulita)
-    for chiave, n in conteggi.items():
-        if n >= 2:
-            return originali[chiave]
+        if chiave in visti:
+            j = visti[chiave]
+            # Estende la ripetizione oltre le n parole minime, finché le due
+            # occorrenze continuano a coincidere parola per parola.
+            k = n
+            while (
+                i + k < len(parole) and j + k < i
+                and _parola_normalizzata(parole[i + k]) == _parola_normalizzata(parole[j + k])
+            ):
+                k += 1
+            return " ".join(parole[i:i + k]).strip("«»\"'“”,.:;!? ")
+        visti.setdefault(chiave, i)
     return None
 
 

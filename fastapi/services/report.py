@@ -34,6 +34,12 @@ def _aggrega_uso_llm(llm_usage: list) -> dict:
         "modelli_utilizzati": modelli,
         "token_input": sum(u.get("token_input", 0) for u in llm_usage),
         "token_output": sum(u.get("token_output", 0) for u in llm_usage),
+        # Somma delle durate delle singole chiamate — utile per capire quanto
+        # del tempo totale è LLM vs altro (Neo4j, geocoding, motore
+        # astronomico...), e quali nodi pesano di più (genera_draft e
+        # rifinisci, per quanto osservato finora: la latenza segue i token
+        # di output, non quelli di input).
+        "durata_secondi_llm": round(sum(u.get("durata_secondi", 0) for u in llm_usage), 2),
         "dettaglio_chiamate": llm_usage,
     }
 
@@ -70,6 +76,7 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "modelli_utilizzati": uso["modelli_utilizzati"],
             "token_input": uso["token_input"],
             "token_output": uso["token_output"],
+            "durata_secondi_llm": uso["durata_secondi_llm"],
             "dettaglio_chiamate_llm": uso["dettaglio_chiamate"],
             "frammenti_usati": state.get("frammenti_usati") or [],
             "personaggi": state.get("personaggi") or [],

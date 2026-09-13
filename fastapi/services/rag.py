@@ -46,6 +46,7 @@ class RAGExtractor:
             "modello": risultato.modello,
             "token_input": risultato.token_input,
             "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2),
         }
 
         try:

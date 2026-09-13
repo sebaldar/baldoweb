@@ -361,7 +361,7 @@ FRAMMENTI DI TRAMA DAL DATABASE:
 {sezione_tecnica}{sezione_ritornello}{sezione_domanda}
 REGOLE DI GENERAZIONE:
 1. Rivolgiti al bambino con dolcezza.
-2. Inizia menzionando il meteo e cosa Baldo vede davvero dalla sua torre a {luogo} in questo momento (leggi la sezione Cielo sopra: se è giorno, niente stelle).
+2. Se la storia è ambientata all'aperto, o il prompt fa in qualche modo riferimento al cielo, al meteo o a un momento preciso della giornata, apri menzionando cosa Baldo vede davvero dalla sua torre a {luogo} in questo momento (leggi la sezione Cielo sopra: se è giorno, niente stelle). Se invece la storia si svolge interamente al chiuso o in un contesto dove il cielo non c'entra nulla (es. un oggetto animato in una stanza, un salone, una cameretta), tieni l'apertura di Baldo breve — un saluto naturale e uno o due dettagli concreti, anche solo un accenno rapido al meteo se viene spontaneo — senza costruire un intero paragrafo di cielo scollegato da quello che state per raccontare. In ogni caso, quello che il prompt dell'utente chiede esplicitamente viene sempre prima della cornice di Baldo, mai il contrario.
 3. La lunghezza deve essere {kwargs.get('lunghezza', 'media')}.
 4. Rispondi esclusivamente in lingua: {kwargs.get('lingua', 'Italiano')}.
 5. Età del bambino: {kwargs.get('eta_bambino', 4)} anni (usa un vocabolario appropriato).

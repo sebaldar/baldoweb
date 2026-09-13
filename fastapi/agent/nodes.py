@@ -83,6 +83,7 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
         "modello": risultato.modello,
         "token_input": risultato.token_input,
         "token_output": risultato.token_output,
+        "durata_secondi": round(risultato.durata_secondi, 2),
     }
     try:
         dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
@@ -106,6 +107,7 @@ async def decide_tools(state: BaldoState, llm: LLMRouter) -> dict:
         "modello": risultato.modello,
         "token_input": risultato.token_input,
         "token_output": risultato.token_output,
+        "durata_secondi": round(risultato.durata_secondi, 2),
     }
     try:
         dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
@@ -226,6 +228,7 @@ async def _riformula_termini(state: BaldoState, llm: LLMRouter) -> tuple[list[st
         "modello": risultato.modello,
         "token_input": risultato.token_input,
         "token_output": risultato.token_output,
+        "durata_secondi": round(risultato.durata_secondi, 2),
     }
     try:
         dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
@@ -345,6 +348,7 @@ async def genera_draft(state: BaldoState, llm: LLMRouter) -> dict:
             "modello": risultato.modello,
             "token_input": risultato.token_input,
             "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2),
         }],
     }
 
@@ -370,6 +374,7 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
             "modello": risultato.modello,
             "token_input": risultato.token_input,
             "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2),
         }],
     }
 
@@ -552,6 +557,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
             "modello": risultato_ritornello.modello,
             "token_input": risultato_ritornello.token_input,
             "token_output": risultato_ritornello.token_output,
+            "durata_secondi": round(risultato_ritornello.durata_secondi, 2),
         })
         if not risultato_ritornello.testo or not risultato_ritornello.testo.strip().upper().startswith("SI"):
             logger.warning(
@@ -569,6 +575,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         "modello": risultato_check.modello,
         "token_input": risultato_check.token_input,
         "token_output": risultato_check.token_output,
+        "durata_secondi": round(risultato_check.durata_secondi, 2),
     })
 
     if not esito or esito.strip().upper().startswith("SI"):
@@ -607,6 +614,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         "modello": risultato_fix.modello,
         "token_input": risultato_fix.token_input,
         "token_output": risultato_fix.token_output,
+        "durata_secondi": round(risultato_fix.durata_secondi, 2),
     })
 
     # Rete di sicurezza adattata al nuovo formato: ci aspettiamo una singola

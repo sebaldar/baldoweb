@@ -8,6 +8,7 @@ Tenta Claude (Sonnet 5) come provider principale, OpenAI come fallback automatic
 import asyncio
 import logging
 import re
+import time
 from dataclasses import dataclass
 import openai
 import anthropic
@@ -42,12 +43,18 @@ class RisultatoLLM:
     """
     Testo generato più i metadati della chiamata — usati per il report YAML
     amministrativo di ogni storia (modello effettivamente risposto, non
-    necessariamente quello primario, e token consumati).
+    necessariamente quello primario, token consumati, e durata: misurato che
+    la latenza segue i token di OUTPUT, non quelli di input — una chiamata
+    con migliaia di token in ingresso ma pochi in uscita costa un decimo in
+    tempo di una con output lungo, indipendentemente dall'input. durata_secondi
+    permette di verificarlo run per run invece che stimarlo, e di capire se
+    a pesare di più è genera_draft o rifinisci quando i due divergono).
     """
     testo: str
     modello: str
     token_input: int = 0
     token_output: int = 0
+    durata_secondi: float = 0.0
 
 
 class LLMRouter:
@@ -156,6 +163,7 @@ class LLMRouter:
 
     async def _cloud_chat(self, system: str, user: str) -> RisultatoLLM:
         """Tenta Claude (Sonnet 5), poi OpenAI come fallback."""
+        t0 = time.monotonic()
         if self.anthropic_client:
             try:
                 resp = await asyncio.wait_for(
@@ -185,6 +193,7 @@ class LLMRouter:
                         modello=settings.ANTHROPIC_MODEL,
                         token_input=getattr(uso, "input_tokens", 0) or 0,
                         token_output=getattr(uso, "output_tokens", 0) or 0,
+                        durata_secondi=time.monotonic() - t0,
                     )
                 logger.warning("Claude ha risposto senza blocco di testo, provo OpenAI.")
             except Exception as e:
@@ -209,6 +218,7 @@ class LLMRouter:
                     modello=settings.OPENAI_MODEL,
                     token_input=getattr(uso, "prompt_tokens", 0) or 0,
                     token_output=getattr(uso, "completion_tokens", 0) or 0,
+                    durata_secondi=time.monotonic() - t0,
                 )
             except Exception as e:
                 logger.error(f"Anche OpenAI fallito ({e}) — nessun LLM disponibile per questa richiesta.")

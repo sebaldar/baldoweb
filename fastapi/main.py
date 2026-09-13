@@ -167,7 +167,20 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
         "llm_usage": [],
     }
     
-    config = {"configurable": {"thread_id": body.session_id or f"sess_{uuid.uuid4().hex[:8]}"}}
+    # Sempre un thread_id nuovo, mai body.session_id: quel valore resta lo
+    # stesso per l'intera sessione del browser (sessionStorage), quindi
+    # riusarlo come thread_id di LangGraph fa sì che MemorySaver applichi il
+    # nuovo input come AGGIORNAMENTO del checkpoint precedente invece che
+    # come stato pulito. Per i canali con reducer additivo (llm_usage,
+    # iterazioni_totali) questo significa non "sovrascrivere con []/1", ma
+    # "sommare [] /1 al valore già salvato" — il vecchio valore resta la base
+    # e ogni nodo continua ad accumularci sopra. Osservato: la seconda
+    # generazione nella stessa sessione portava con sé, intatte, tutte le
+    # voci di llm_usage della prima (stessi token al bit, raddoppiando il
+    # totale riportato) — nessun'altra parte del codice legge lo stato di
+    # un thread_id al di fuori della stessa richiesta che l'ha creato,
+    # quindi non c'è continuità da preservare tra una storia e l'altra.
+    config = {"configurable": {"thread_id": f"racconto_{uuid.uuid4().hex}"}}
 
     NODI_INTERNI = {"LangGraph", "", "_route_valuta_prompt", "_route_dopo_neo4j", 
                     "_route_valuta_frammenti", "_route_valuta_draft"}

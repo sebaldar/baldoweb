@@ -8,6 +8,7 @@ la memoria Neo4j e la composizione narrativa.
 
 import json
 import logging
+import re
 import uuid
 import asyncio
 from datetime import datetime
@@ -256,6 +257,33 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
 # ---------------------------------------------------------------------------
 # NODE 10b — Verifica coerenza della domanda finale
 # ---------------------------------------------------------------------------
+# Un "nome proprio" qui è una singola parola capitalizzata (es. "Marco"),
+# non una descrizione generica ("principe coraggioso", "drago alato") che
+# non ci si aspetta di ritrovare alla lettera nel testo.
+_NOME_PROPRIO_RE = re.compile(r"^[A-ZÀ-Ý][a-zà-ÿ'\-]+(?:\s[A-ZÀ-Ý][a-zà-ÿ'\-]+)?$")
+
+
+def _nomi_propri_mancanti(personaggi: list, racconto: str) -> list:
+    """
+    Nomi propri richiesti esplicitamente dall'utente (via l'estrazione RAG)
+    ma assenti — nemmeno come sottostringa case-insensitive — dal racconto
+    finale: segnale di un nome storpiato o sostituito lungo la pipeline.
+    Solo rilevazione (log): una correzione automatica via regex rischia di
+    rompere declinazioni o vocativi che non può prevedere.
+    """
+    mancanti = []
+    testo_lower = (racconto or "").lower()
+    for nome in personaggi or []:
+        nome = (nome or "").strip()
+        if not _NOME_PROPRIO_RE.match(nome):
+            continue
+        # \b invece di un semplice "in": altrimenti "Marco" risulterebbe
+        # presente anche dentro "Marcolino" (sottostringa ma nome diverso).
+        if not re.search(rf"\b{re.escape(nome.lower())}\b", testo_lower):
+            mancanti.append(nome)
+    return mancanti
+
+
 async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     """
     Rete di sicurezza economica: composer.py suggerisce una domanda finale
@@ -275,6 +303,13 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     racconto = state.get("racconto_finale") or ""
     if not racconto:
         return {}
+
+    mancanti = _nomi_propri_mancanti(state.get("personaggi", []), racconto)
+    if mancanti:
+        logger.warning(
+            f"[verifica_coerenza_domanda] Nome/i proprio/i richiesti ma assenti "
+            f"dal racconto finale (possibile storpiatura): {mancanti}"
+        )
 
     system_check = (
         "Sei un revisore di favole per bambini in età prescolare. Leggi la favola "

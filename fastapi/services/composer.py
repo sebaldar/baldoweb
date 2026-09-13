@@ -166,6 +166,14 @@ class StoryComposer:
                 f"\nRITORNELLO: Ripeti questa frase 2-3 volte durante il racconto, "
                 f"nei momenti chiave, sempre uguale — è pensata per essere riconosciuta "
                 f"e ripetuta ad alta voce dal bambino: \"{ritornello}\"\n"
+                "Se questa frase nomina più figure o elementi distinti (es. \"una "
+                "strega, un uomo, un gigante, un giudice\"), la tua storia deve "
+                "costruire PRIMA una scena concreta e visibile per OGNUNO di essi, "
+                "così il bambino riconosce a chi si riferisce ciascuno quando la "
+                "frase torna. Se per uno di questi elementi non riesci a inventare "
+                "una scena credibile nella tua trama nuova, è meglio adattare la "
+                "frase togliendolo (restando fedele allo spirito del ritornello) "
+                "piuttosto che nominarlo comunque senza che sia mai comparso.\n"
             )
         else:
             sezione_ritornello = (
@@ -210,6 +218,34 @@ class StoryComposer:
                 "domanda finale compresa: non farle ricomparire in chiusura."
             )
 
+        # --- NUMERO DI INGANNI/SVOLTE SCALATO SULL'ETÀ ---
+        # Osservato: una storia con 3 inganni in sequenza, ognuno con il suo
+        # apparato di oggetti e scena, funziona a 6 anni ma è troppo densa
+        # (difficile da visualizzare) già a 4, e ancora di più a 3.
+        eta_bambino = kwargs.get('eta_bambino', 4)
+        try:
+            eta_bambino = int(eta_bambino)
+        except (TypeError, ValueError):
+            eta_bambino = 4
+        if eta_bambino <= 3:
+            regola_numero_inganni = (
+                f"Se la trama prevede inganni, travestimenti o sotterfugi in sequenza: "
+                f"per un bambino di {eta_bambino} anni, massimo 1, semplice e diretto — "
+                "niente sequenze di trucchi diversi da tenere a mente."
+            )
+        elif eta_bambino <= 5:
+            regola_numero_inganni = (
+                f"Se la trama prevede inganni, travestimenti o sotterfugi in sequenza: "
+                f"per un bambino di {eta_bambino} anni, massimo 2 — ognuno in più allunga "
+                "la storia e aggiunge un elemento nuovo da visualizzare."
+            )
+        else:
+            regola_numero_inganni = (
+                f"Se la trama prevede inganni, travestimenti o sotterfugi in sequenza: "
+                f"per un bambino di {eta_bambino} anni puoi arrivare fino a 3, se la trama "
+                "lo richiede davvero — ma meno è comunque meglio."
+            )
+
         # --- TEMPLATE FINALE ---
         prompt_finale = f"""
 {self.base_instruction}
@@ -237,6 +273,10 @@ REGOLE DI GENERAZIONE:
 6. Massimo un'immagine poetica per paragrafo (una metafora, un paragone lirico): il resto della frase resta concreto. Non impilare più immagini liriche nella stessa frase o nel giro di poche righe.
 7. Se c'è una DOMANDA FINALE, non far dichiarare la morale della storia — né a un personaggio né a te come narratore (niente frasi tipo "capì una cosa importante: ...") — prima di arrivarci. Deve restare una domanda vera, che il bambino può ancora pensare da solo, non la conferma di qualcosa già detto esplicitamente. Se una frase prima della domanda è già una chiusura emotiva soddisfacente, fermati lì: non serve aggiungere altro.
 8. Ogni dettaglio sensoriale deve essere percepibile davvero da un bambino che ascolta: niente immagini che funzionano solo per un adulto che coglie il sottotesto (es. un personaggio che "arrossisce sotto il pelo nero" — un bambino non può vederlo). Se un'immagine ha senso solo a livello concettuale e non letterale, cambiala con qualcosa di concreto (un suono, un movimento, un'espressione visibile).
+9. Se la storia costruisce più inganni, travestimenti o apparizioni pensati per essere poi elencati o nominati insieme (in un ritornello, in un riepilogo recitato da un personaggio, in una lista finale), OGNUNO di questi elementi deve avere prima una scena concreta e visibile che lo giustifichi — un bambino deve poter VEDERE la cosa nominata, non decodificarla come simbolo. Esempio di errore da evitare: l'elenco finale nomina "un giudice" ma nella storia è comparso solo un sasso lanciato contro un tronco — un bambino non collega le due cose, solo un adulto può leggerci "il martello di un giudice". Se vuoi quell'effetto, rendilo esplicito nella scena stessa (es. un tronco spezzato a forma di martelletto, un colpo netto "come quello di un giudice che grida: basta!").
+10. Gli oggetti usati per un inganno o un travestimento devono essere cose che il personaggio ha già con sé o trova naturalmente sul posto (un mantello, un ramo, una borsa, un sasso) — evita di far comparire dal nulla un oggetto creato apposta per il trucco e mai menzionato prima (es. una gabbietta con lucciole tenuta pronta per l'occasione): se serve un oggetto specifico, mostralo prima o rendilo qualcosa che il personaggio troverebbe davvero lì.
+11. {regola_numero_inganni}
+12. Se attribuisci un genere grammaticale a un personaggio/creatura tramite l'articolo (es. "il T-Rex", "la strega"), mantieni lo stesso genere nei pronomi per tutta la storia — non alternare "lui" e "lei" per lo stesso personaggio.
 
 GENERA IL RACCONTO:
 """

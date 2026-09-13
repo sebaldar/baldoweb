@@ -79,6 +79,46 @@ Il cielo descritto nella storia riflette il cielo reale per il luogo, la data e 
 
 ---
 
+## 📊 Report Amministrativo
+
+Dopo ogni storia generata **con successo** (non su un prompt rifiutato o un errore a metà), il backend scrive un report YAML in `fastapi/stories/` (volume Docker persistente, come `fastapi/logs/`), pensato per debug, controllo qualità e monitoraggio dei costi senza dover incrociare i log applicativi:
+
+```yaml
+storia_id: 155dbde2-765e-405c-8463-88d945332671
+timestamp: '2026-09-13T10:15:22+00:00'
+eta: 5
+nome: Sofia
+colore_preferito: blu
+animale_preferito: elefante
+prompt: "..."
+storia_generata: "..."
+tempo_elaborazione_secondi: 24.3
+modelli_utilizzati: [claude-sonnet-5]        # o entrambi, se è scattato il fallback
+token_input: 5306
+token_output: 1301
+dettaglio_chiamate_llm:                       # una voce per ogni chiamata LLM del grafo
+  - nodo: genera_draft
+    modello: claude-sonnet-5
+    token_input: 2854
+    token_output: 519
+  # ...
+frammenti_usati: [brema_003, rodari_007]
+personaggi: [elefante, cucciolo]
+luogo: Milano
+data_storia: 13-09-2026
+ora_storia: '22:00:00'
+condizioni_meteo: "nubi sparse, una temperatura piacevole..."
+usa_astronomia: true
+dati_astronomici:                             # payload completo del motore astronomico, null se non usato
+  corpi: [...]
+  fase_giorno: notte
+  fase_luna: Gibbosa Calante
+```
+
+Il modello riportato è quello **effettivamente risposto** per ogni chiamata (letto dalla risposta reale dell'SDK, non assunto dalla configurazione) — rilevante perché con il fallback Claude→OpenAI chiamate diverse della stessa storia possono aver usato provider diversi.
+
+---
+
 ## 🛠️ Stack Tecnologico
 
 | Componente | Tecnologia |

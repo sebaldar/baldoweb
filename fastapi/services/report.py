@@ -73,8 +73,16 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "dettaglio_chiamate_llm": uso["dettaglio_chiamate"],
             "frammenti_usati": state.get("frammenti_usati") or [],
             "personaggi": state.get("personaggi") or [],
-            # None quando il modello lo inventa da sé (non noto in anticipo).
+            # Rilevato dal draft (frase ripetuta 2+ volte), non il testo
+            # grezzo del frammento KB — vedi agent/nodes.py:_rileva_ritornello.
+            # None se il draft non ha ripetuto nulla di riconoscibile.
             "ritornello_atteso": state.get("ritornello_atteso"),
+            # Valori grezzi di tecnica_narrativa/archetipo dal frammento
+            # (jargon per l'autore) e se sono trapelati alla lettera nel
+            # racconto finale — non dovrebbero mai esserlo.
+            "tecnica_narrativa_kb": state.get("tecnica_narrativa_kb"),
+            "archetipo_kb": state.get("archetipo_kb"),
+            "termini_kb_trapelati": state.get("termini_kb_trapelati") or [],
             # Contesto fisico usato per la storia: senza luogo/data/ora
             # i risultati meteo/astro da soli non si possono verificare
             # (es. per capire se la fase lunare riportata è plausibile).

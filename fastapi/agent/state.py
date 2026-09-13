@@ -56,13 +56,19 @@ class BaldoState(TypedDict):
 
     # --- GENERAZIONE ---
     prompt_arricchito: str
-    # Ritornello del frammento primario (se il frammento ne fornisce uno),
-    # noto già al momento della composizione del prompt — passato a
-    # rifinisci come vincolo esplicito da preservare parola per parola,
-    # invece di lasciarlo alla mercé della riscrittura editoriale che
-    # copre l'intero testo. None quando il modello lo inventa da sé.
-    ritornello_atteso: Optional[str]
+    # Termini di jargon della KB (per il controllo, senza LLM, che non
+    # trapelino letteralmente nel racconto finale — un bambino non sa cosa
+    # significhi "capovolgimento" o "binomio fantastico").
+    tecnica_narrativa_kb: Optional[str]
+    archetipo_kb: Optional[str]
     draft: str
+    # Ritornello REALMENTE usato nel draft (rilevato per codice, non LLM,
+    # cercando una frase che si ripete 2+ volte — non il testo grezzo del
+    # frammento: quello può contenere un nome proprio della fiaba d'origine
+    # — es. "Mangiafuoco" — che il draft, lasciato libero, ha già sostituito
+    # con i personaggi della propria trama). Passato a rifinisci come
+    # vincolo da preservare parola per parola. None se non rilevato.
+    ritornello_atteso: Optional[str]
     valutazione_draft: str                 # "ok" | "spaventoso" | "inadeguato" | "troppo_lungo"
     tentativi_correzione: int
 
@@ -72,6 +78,10 @@ class BaldoState(TypedDict):
     # None se non c'era un "nome" personalizzato da verificare; altrimenti
     # True/False a seconda che compaia parola-per-parola nel racconto finale.
     nome_presente_in_output: Optional[bool]
+    # Valori di tecnica_narrativa_kb/archetipo_kb trapelati alla lettera nel
+    # racconto finale (lista vuota se nessuno, o se non c'era nulla da
+    # controllare).
+    termini_kb_trapelati: List[str]
 
     # --- MEMORIA ---
     storia_id: Optional[str]              

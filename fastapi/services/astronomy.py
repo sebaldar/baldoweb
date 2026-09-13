@@ -86,10 +86,16 @@ class AstronomyClient:
                 return {
                     "corpi": oggetti,
                     "fase_giorno": info.get("fase_giorno"),
-                    "fase_luna": info.get("fase_luna"), 
-                    "ora_locale": info.get("data_osservazione"), # Formattato da Node
+                    "fase_luna": info.get("fase_luna"),
+                    # NON è l'ora locale: il motore si limita a echeggiare
+                    # indietro l'istante che gli abbiamo inviato, che qui è
+                    # già stato convertito in UTC (vedi sopra) — chiamarlo
+                    # "ora_locale" ha già generato un falso allarme di un
+                    # apparente sfasamento di 2 ore che non esiste (verificato:
+                    # le altezze sono corrette per l'istante UTC reale).
+                    "ora_utc_motore": info.get("data_osservazione"), # Formattato da Node
                     "status": "reale"
-                } 
+                }
             
             logger.warning("Risposta Node.js non valida o status != success. Uso fallback.")
             return self._cielo_fallback()
@@ -111,6 +117,6 @@ class AstronomyClient:
             ],
             "fase_giorno": "notte",
             "fase_luna": "crescente",
-            "ora_locale": "ora non pervenuta",
+            "ora_utc_motore": "ora non pervenuta",
             "status": "fallback"
         }

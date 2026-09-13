@@ -69,7 +69,12 @@ class StoryComposer:
         )
         if frammento_primario:
             archetipo = frammento_primario.get('archetipo')
-            riga_archetipo = f"ARCHETIPO NARRATIVO: {archetipo}\n\n" if archetipo else ""
+            riga_archetipo = (
+                f"ARCHETIPO NARRATIVO: {archetipo} (termine tecnico per te, l'autore — "
+                "guida la struttura della trama, non deve mai comparire come parola "
+                "dentro il racconto: un bambino non sa cosa significhi).\n\n"
+                if archetipo else ""
+            )
             testo_frammenti = (
                 f"{riga_archetipo}"
                 f"ESEMPIO DI STILE (NON di trama — leggi bene la regola 1 sotto):\n"
@@ -146,7 +151,10 @@ class StoryComposer:
             sezione_tecnica = (
                 f"\nTECNICA NARRATIVA DA APPLICARE: {tecnica_narrativa}. "
                 "Osserva come il frammento principale la mette in pratica e usa lo "
-                "stesso dispositivo narrativo per costruire la tua storia.\n"
+                "stesso dispositivo narrativo per costruire la tua storia. Anche "
+                "questo è un termine tecnico per te: non usarlo mai come parola "
+                "dentro il racconto (mai scrivere frasi come \"ed ecco il "
+                f"{tecnica_narrativa}\" — applica la tecnica, non nominarla).\n"
             )
 
         # --- COSTRUZIONE SEZIONE DOMANDA FINALE ---
@@ -167,10 +175,18 @@ class StoryComposer:
         ritornello = frammento_primario.get("ritornello")
         if ritornello:
             sezione_ritornello = (
-                f"\nRITORNELLO: Ripeti questa frase 2-3 volte durante il racconto, "
-                f"nei momenti chiave, sempre uguale — è pensata per essere riconosciuta "
-                f"e ripetuta ad alta voce dal bambino: \"{ritornello}\"\n"
-                "Se questa frase nomina più figure o elementi distinti (es. \"una "
+                f"\nRITORNELLO: Il frammento suggerisce questo ritornello: \"{ritornello}\" — "
+                "usalo come PATTERN RITMICO (suoni, struttura, lunghezza), non come "
+                "stringa fissa da ripetere alla lettera. Se contiene un nome proprio "
+                "specifico della fiaba di provenienza del frammento (es. un "
+                "personaggio che la TUA storia non ha motivo di includere), "
+                "SOSTITUISCILO SEMPRE con il personaggio o l'elemento equivalente "
+                "della tua trama (es. \"il drago\", non il nome originale) — il "
+                "bambino non deve mai sentire un nome che la tua versione non ha "
+                "mai presentato. Una volta deciso l'adattamento, ripetilo 2-3 volte "
+                "durante il racconto, nei momenti chiave, sempre IDENTICO a se "
+                "stesso (non ri-adattarlo una seconda volta a metà racconto).\n"
+                "Se il ritornello nomina più figure o elementi distinti (es. \"una "
                 "strega, un uomo, un gigante, un giudice\"), la tua storia deve "
                 "costruire PRIMA una scena concreta e visibile per OGNUNO di essi, "
                 "così il bambino riconosce a chi si riferisce ciascuno quando la "
@@ -221,6 +237,23 @@ class StoryComposer:
                 "stelle. Vale per TUTTA la storia, dall'inizio fino alla "
                 "domanda finale compresa: non farle ricomparire in chiusura."
             )
+            # La Luna (e talvolta Venere) sono spesso visibili anche in pieno
+            # giorno — un fenomeno reale, non un errore. Prima di questo fix
+            # la sezione "è giorno" ignorava sempre corpi_celesti: un prompt
+            # che chiedeva esplicitamente "c'è la luna in cielo?" restava
+            # senza risposta anche quando i dati dicevano che era visibile.
+            corpi_diurni = [c.get("nome") for c in corpi_celesti if c.get("nome") in ("Luna", "Venere")]
+            if corpi_diurni:
+                descrizione_cielo += (
+                    f" DETTAGLIO REALE DA NON PERDERE: oggi si vede anche "
+                    f"{' e '.join(corpi_diurni)} nonostante sia giorno — capita "
+                    "davvero, non è un errore: appare pallida e sbiadita nel blu "
+                    "del cielo, non luminosa come di notte. Se il prompt "
+                    "dell'utente chiede di guardare il cielo o cercare la luna, "
+                    "questo è il posto giusto per usarlo: falla scoprire al "
+                    "personaggio come un piccolo regalo inatteso, non aggiungerla "
+                    "come dettaglio a caso se non c'entra con la trama."
+                )
 
         # --- NUMERO DI INGANNI/SVOLTE SCALATO SULL'ETÀ ---
         # Osservato: una storia con 3 inganni in sequenza, ognuno con il suo
@@ -284,10 +317,18 @@ REGOLE DI GENERAZIONE:
 
 GENERA IL RACCONTO:
 """
-        # Il ritornello del frammento (quando c'è) viene restituito insieme
-        # al prompt: rifinisci lo userà per proteggerlo dalla riscrittura
-        # editoriale, che altrimenti — coprendo l'intero testo — può farlo
-        # sparire o parafrasarlo insieme al resto (osservato: un ritornello
-        # acquisito nel draft, perso nella rifinitura).
-        metadati = {"ritornello_atteso": ritornello}
+        # ritornello_atteso NON viene più preso qui: il testo grezzo del
+        # frammento può contenere un nome proprio specifico della fiaba
+        # d'origine (es. "Mangiafuoco") che il draft, lasciato libero,
+        # sostituisce già con i personaggi della sua trama — imporlo
+        # verbatim a rifinisci reintroduceva quel nome estraneo. Il
+        # ritornello da proteggere viene rilevato DOPO il draft, da quello
+        # che il modello ha davvero scritto (vedi agent/nodes.py:genera_draft).
+        # tecnica_narrativa/archetipo tornano invece qui, per il controllo
+        # (economico, senza LLM) che il loro valore letterale — jargon per
+        # l'autore, non per il bambino — non sia trapelato nel testo finale.
+        metadati = {
+            "tecnica_narrativa": tecnica_narrativa,
+            "archetipo": frammento_primario.get("archetipo"),
+        }
         return prompt_finale.strip(), metadati

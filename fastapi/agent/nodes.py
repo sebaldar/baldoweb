@@ -270,8 +270,41 @@ async def componi_prompt(state: BaldoState) -> dict:
     )
     return {
         "prompt_arricchito": prompt_arricchito,
-        "ritornello_atteso": meta_composizione.get("ritornello_atteso"),
+        "tecnica_narrativa_kb": meta_composizione.get("tecnica_narrativa"),
+        "archetipo_kb": meta_composizione.get("archetipo"),
     }
+
+# Una frase più corta di così ("Sì.", "Corse via.") si ripete facilmente per
+# caso, senza essere un ritornello voluto.
+_RITORNELLO_MIN_PAROLE = 3
+
+
+def _rileva_ritornello(testo: str) -> "str | None":
+    """
+    Cerca nel draft una frase (almeno _RITORNELLO_MIN_PAROLE parole) che
+    compare 2 o più volte, quasi identica ogni volta — più affidabile che
+    fidarsi del campo "ritornello" del frammento KB: quel testo può
+    contenere un nome proprio specifico della fiaba d'origine (es.
+    "Mangiafuoco") che il draft, lasciato libero di scrivere, sostituisce
+    già con i personaggi della propria trama. Imporre il testo del
+    frammento parola per parola a rifinisci reintroduceva quel nome
+    estraneo — qui si protegge invece quello che il draft ha davvero usato.
+    """
+    frasi = re.split(r"(?<=[.!?])\s+", (testo or "").strip())
+    originali = {}
+    conteggi = {}
+    for frase in frasi:
+        pulita = frase.strip()
+        if len(pulita.split()) < _RITORNELLO_MIN_PAROLE:
+            continue
+        chiave = pulita.lower()
+        conteggi[chiave] = conteggi.get(chiave, 0) + 1
+        originali.setdefault(chiave, pulita)
+    for chiave, n in conteggi.items():
+        if n >= 2:
+            return originali[chiave]
+    return None
+
 
 # ---------------------------------------------------------------------------
 # NODE 7-10 — Generazione e Rifinitura (Draft, Correzione, Rifinitura)
@@ -282,6 +315,7 @@ async def genera_draft(state: BaldoState, llm: LLMRouter) -> dict:
     risultato = await llm.genera_racconto(prompt_input)
     return {
         "draft": risultato.testo,
+        "ritornello_atteso": _rileva_ritornello(risultato.testo),
         "llm_usage": [{
             "nodo": "genera_draft",
             "modello": risultato.modello,
@@ -345,15 +379,38 @@ def _nomi_propri_mancanti(personaggi: list, racconto: str) -> list:
     return mancanti
 
 
+def _termini_kb_trapelati(termini: list, racconto: str) -> list:
+    """
+    tecnica_narrativa e archetipo sono jargon per l'autore (Baldo), usati
+    per guidare la struttura della trama — mai parole che un bambino di tre
+    anni dovrebbe sentire (osservato: "Ed ecco il capovolgimento, piccolo
+    mio", con "capovolgimento" preso alla lettera dal campo KB). Match di
+    sottostringa, non \\b: alcuni valori sono "a_due_parole" con underscore,
+    che un LLM scrive naturalmente con uno spazio.
+    """
+    trovati = []
+    racconto_lower = (racconto or "").lower()
+    for termine in termini or []:
+        if not termine:
+            continue
+        normalizzato = termine.strip().lower().replace("_", " ")
+        if normalizzato and normalizzato in racconto_lower:
+            trovati.append(termine)
+    return trovati
+
+
 async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     """
     Rete di sicurezza economica: composer.py suggerisce una domanda finale
     presa dal frammento più rilevante, ma il modello di generazione può
     comunque ignorarla, storpiarla o (in rari casi) lasciarne una scollegata
     dalla trama effettivamente raccontata. Nello stesso nodo, per economia,
-    girano anche altri due controlli a costo quasi nullo: fedeltà del nome
-    del bambino (nessuna chiamata LLM, solo un match di stringa) e coerenza
-    del ritornello (un secondo classificatore SI/NO, stesso principio della
+    girano anche altri tre controlli a costo quasi nullo: fedeltà del nome
+    del bambino (nessuna chiamata LLM, solo un match di stringa), fuga di
+    lessico tecnico della KB (idem, nessuna chiamata LLM — tecnica_narrativa/
+    archetipo comparsi alla lettera nel testo, es. "Ed ecco il capovolgimento,
+    piccolo mio") e coerenza del ritornello (un secondo classificatore SI/NO,
+    stesso principio della
     domanda ma senza tentativo di riscrittura automatica — un ritornello,
     a differenza della domanda finale, è ripetuto più volte nel testo: una
     riscrittura automatica rischierebbe di introdurre incoerenza tra le
@@ -373,6 +430,15 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         return {}
 
     uso_llm = []
+
+    termini_trapelati = _termini_kb_trapelati(
+        [state.get("tecnica_narrativa_kb"), state.get("archetipo_kb")], racconto
+    )
+    if termini_trapelati:
+        logger.warning(
+            f"[verifica_coerenza_domanda] Termine/i tecnico/i della KB "
+            f"trapelato/i alla lettera nel racconto finale: {termini_trapelati}"
+        )
 
     mancanti = _nomi_propri_mancanti(state.get("personaggi", []), racconto)
     if mancanti:
@@ -445,7 +511,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         esito = risultato_check.testo
     except Exception as e:
         logger.warning(f"[verifica_coerenza_domanda] Controllo fallito, mantengo il racconto originale: {e}")
-        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
+        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
     uso_llm.append({
         "nodo": "verifica_coerenza_domanda.check",
@@ -456,7 +522,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
 
     if not esito or esito.strip().upper().startswith("SI"):
         # coerente (o controllo ambiguo): non tocco nulla
-        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
+        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
     system_fix = (
         "Sei un revisore di favole per bambini in età prescolare. Ricevi il "
@@ -476,7 +542,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         corretto = risultato_fix.testo
     except Exception as e:
         logger.warning(f"[verifica_coerenza_domanda] Riscrittura fallita, mantengo il racconto originale: {e}")
-        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
+        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
     uso_llm.append({
         "nodo": "verifica_coerenza_domanda.fix",
@@ -496,12 +562,12 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
             f"{len(corretto.strip()) if corretto else 0} vs originale "
             f"{len(racconto.strip())}), mantengo il racconto originale."
         )
-        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
+        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
     if corretto and corretto.strip():
-        return {"racconto_finale": corretto.strip(), "llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
+        return {"racconto_finale": corretto.strip(), "llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
-    return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
+    return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
 # ---------------------------------------------------------------------------
 # NODE 11 — Salvataggio memoria

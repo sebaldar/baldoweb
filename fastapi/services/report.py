@@ -69,6 +69,15 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "dettaglio_chiamate_llm": uso["dettaglio_chiamate"],
             "frammenti_usati": state.get("frammenti_usati") or [],
             "personaggi": state.get("personaggi") or [],
+            # Contesto fisico usato per la storia: senza luogo/data/ora
+            # i risultati meteo/astro da soli non si possono verificare
+            # (es. per capire se la fase lunare riportata è plausibile).
+            "luogo": state.get("luogo"),
+            "data_storia": state.get("data_storia"),
+            "ora_storia": state.get("ora_storia"),
+            "condizioni_meteo": state.get("dati_meteo"),
+            "usa_astronomia": state.get("usa_astronomia"),
+            "dati_astronomici": state.get("dati_astronomici") if state.get("usa_astronomia") else None,
         }
 
         percorso = DIRECTORY_STORIE / f"{storia_id}.yaml"

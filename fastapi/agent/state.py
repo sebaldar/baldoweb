@@ -18,6 +18,13 @@ class BaldoState(TypedDict):
     lunghezza: str
     lingua: str
 
+    # Dati di personalizzazione dal form (opzionali): oggi finiscono già
+    # intrecciati nel prompt arricchito lato frontend, ma servono anche qui
+    # come campi distinti per il report YAML amministrativo della storia.
+    nome: Optional[str]
+    colore_preferito: Optional[str]
+    animale_preferito: Optional[str]
+
     # --- ANALISI PROMPT (Nodo 1) ---
     personaggi: List[str]
     emozioni: List[str]
@@ -64,3 +71,9 @@ class BaldoState(TypedDict):
     # --- CONTROLLO FLUSSO ---
     errore: Optional[str]
     iterazioni_totali: Annotated[int, operator.add]
+
+    # Traccia di ogni chiamata LLM del grafo (nodo, modello, token in/out) —
+    # ogni nodo restituisce la propria voce in una lista di un elemento, il
+    # reducer le concatena in ordine di esecuzione. Usata per il report YAML
+    # amministrativo della storia (modello utilizzato, token consumati).
+    llm_usage: Annotated[List[Dict], operator.add]

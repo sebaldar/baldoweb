@@ -45,6 +45,7 @@ services:
     env_file: .env
     volumes:
       - ./fastapi/logs:/app/logs
+      - ./fastapi/stories:/app/stories
     mem_limit: 512m
 
   app:

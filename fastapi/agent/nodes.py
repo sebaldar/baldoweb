@@ -50,6 +50,7 @@ async def analizza_prompt(state: BaldoState, llm: LLMRouter) -> dict:
     luogo_target = analisi.get("luogo") or "Roma"
 
     termini = analisi.get("personaggi", []) + analisi.get("emozioni", [])
+    uso_llm = analisi.get("_uso_llm")
 
     return {
         "personaggi": analisi.get("personaggi", []),
@@ -62,6 +63,7 @@ async def analizza_prompt(state: BaldoState, llm: LLMRouter) -> dict:
         "tentativi_neo4j": 0,
         "tentativi_correzione": 0,
         "iterazioni_totali": 1,
+        "llm_usage": [uso_llm] if uso_llm else [],
     }
 
 # ---------------------------------------------------------------------------
@@ -72,15 +74,25 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
     system = """Sei un supervisore di storie per bambini. Valuta se il prompt è adeguato.
     Rispondi SOLO JSON: {"chiaro": true/false, "motivo": "..."}"""
     
-    risposta = await llm.chiedi(
+    risultato = await llm.chiedi(
         system=system,
         user=f"Prompt: {state['prompt_originale']}\nPersonaggi: {state['personaggi']}"
     )
+    uso_llm = {
+        "nodo": "valuta_prompt",
+        "modello": risultato.modello,
+        "token_input": risultato.token_input,
+        "token_output": risultato.token_output,
+    }
     try:
-        dati = json.loads(risposta.strip().strip("```json").strip("```"))
-        return {"prompt_chiaro": dati.get("chiaro", True), "motivo_rifiuto": dati.get("motivo")}
+        dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
+        return {
+            "prompt_chiaro": dati.get("chiaro", True),
+            "motivo_rifiuto": dati.get("motivo"),
+            "llm_usage": [uso_llm],
+        }
     except Exception:
-        return {"prompt_chiaro": True, "motivo_rifiuto": None}
+        return {"prompt_chiaro": True, "motivo_rifiuto": None, "llm_usage": [uso_llm]}
 
 # ---------------------------------------------------------------------------
 # NODE 3 — Decisione tool
@@ -88,12 +100,18 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
 async def decide_tools(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] decide_tools")
     system = 'Decidi se usare l\'astronomia. Rispondi SOLO JSON: {"usa_astronomia": true/false}'
-    risposta = await llm.chiedi(system=system, user=state['prompt_originale'])
+    risultato = await llm.chiedi(system=system, user=state['prompt_originale'])
+    uso_llm = {
+        "nodo": "decide_tools",
+        "modello": risultato.modello,
+        "token_input": risultato.token_input,
+        "token_output": risultato.token_output,
+    }
     try:
-        dati = json.loads(risposta.strip().strip("```json").strip("```"))
-        return {"usa_astronomia": dati.get("usa_astronomia", True)}
+        dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
+        return {"usa_astronomia": dati.get("usa_astronomia", True), "llm_usage": [uso_llm]}
     except:
-        return {"usa_astronomia": True}
+        return {"usa_astronomia": True, "llm_usage": [uso_llm]}
 
 # ---------------------------------------------------------------------------
 # NODE 4a — Query Neo4j
@@ -192,18 +210,28 @@ async def fetch_contesto_fisico(
 async def valuta_frammenti(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] valuta_frammenti")
     if not state["frammenti"]:
-        nuovi_termini = await _riformula_termini(state, llm)
-        return {"qualita_frammenti": "assente", "termini_ricerca_neo4j": nuovi_termini}
+        nuovi_termini, uso_llm = await _riformula_termini(state, llm)
+        return {
+            "qualita_frammenti": "assente",
+            "termini_ricerca_neo4j": nuovi_termini,
+            "llm_usage": [uso_llm] if uso_llm else [],
+        }
     return {"qualita_frammenti": "buona"}
 
-async def _riformula_termini(state: BaldoState, llm: LLMRouter) -> list[str]:
+async def _riformula_termini(state: BaldoState, llm: LLMRouter) -> tuple[list[str], dict]:
     system = 'Suggerisci termini di ricerca alternativi in JSON: {"termini": []}'
-    risposta = await llm.chiedi(system=system, user=state['ambientazione'])
+    risultato = await llm.chiedi(system=system, user=state['ambientazione'])
+    uso_llm = {
+        "nodo": "valuta_frammenti._riformula_termini",
+        "modello": risultato.modello,
+        "token_input": risultato.token_input,
+        "token_output": risultato.token_output,
+    }
     try:
-        dati = json.loads(risposta.strip().strip("```json").strip("```"))
-        return dati.get("termini", [])
+        dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
+        return dati.get("termini", []), uso_llm
     except:
-        return []
+        return [], uso_llm
 
 # ---------------------------------------------------------------------------
 # NODE 6 — Composizione prompt
@@ -219,14 +247,24 @@ async def componi_prompt(state: BaldoState) -> dict:
             "emozioni": state["emozioni"],
             "ambientazione": state["ambientazione"],
             "luogo": state.get("luogo"),
-            "data": state.get("data_storia"),
-            "meteo": state.get("dati_meteo")
+            # Nomi chiave allineati a quelli letti da composer.py — prima
+            # erano "data"/"meteo" (mai letti: composer cerca data_storia/
+            # dati_meteo), quindi il prompt mostrava sempre i placeholder
+            # generici "oggi"/"sereno" invece dei dati reali già raccolti
+            # da fetch_contesto_fisico, indipendentemente dal meteo/data vero.
+            "data_storia": state.get("data_storia"),
+            "ora_storia": state.get("ora_storia"),
+            "dati_meteo": state.get("dati_meteo"),
         },
         frammenti=state["frammenti"],
         dati_astronomici=state.get("dati_astronomici") if state.get("usa_astronomia") else None,
         storie_precedenti=state.get("storie_precedenti", []),
         personaggi_bio=state.get("personaggi_bio", {}),
-        eta=state["eta_bambino"],
+        # "eta_bambino", non "eta": composer.py legge kwargs.get('eta_bambino',
+        # ...) — con la chiave sbagliata l'età reale non arrivava mai e ogni
+        # regola che dipende dall'età (vocabolario, numero di inganni) cadeva
+        # sempre sul valore di default, qualunque età fosse stata scelta.
+        eta_bambino=state["eta_bambino"],
         lunghezza=state["lunghezza"],
         lingua=state["lingua"],
     )
@@ -238,8 +276,16 @@ async def componi_prompt(state: BaldoState) -> dict:
 async def genera_draft(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] genera_draft")
     prompt_input = state.get("prompt_arricchito") or state["prompt_originale"]
-    draft = await llm.genera_racconto(prompt_input)
-    return {"draft": draft}
+    risultato = await llm.genera_racconto(prompt_input)
+    return {
+        "draft": risultato.testo,
+        "llm_usage": [{
+            "nodo": "genera_draft",
+            "modello": risultato.modello,
+            "token_input": risultato.token_input,
+            "token_output": risultato.token_output,
+        }],
+    }
 
 async def valuta_draft(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] valuta_draft")
@@ -251,8 +297,16 @@ async def correggi_draft(state: BaldoState, llm: LLMRouter) -> dict:
 
 async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] rifinisci")
-    racconto = await llm.rifinisci(draft=state["draft"], eta=state["eta_bambino"])
-    return {"racconto_finale": racconto}
+    risultato = await llm.rifinisci(draft=state["draft"], eta=state["eta_bambino"])
+    return {
+        "racconto_finale": risultato.testo,
+        "llm_usage": [{
+            "nodo": "rifinisci",
+            "modello": risultato.modello,
+            "token_input": risultato.token_input,
+            "token_output": risultato.token_output,
+        }],
+    }
 
 # ---------------------------------------------------------------------------
 # NODE 10b — Verifica coerenza della domanda finale
@@ -326,13 +380,21 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     )
 
     try:
-        esito = await llm.chiedi(system=system_check, user=racconto)
+        risultato_check = await llm.chiedi(system=system_check, user=racconto)
+        esito = risultato_check.testo
     except Exception as e:
         logger.warning(f"[verifica_coerenza_domanda] Controllo fallito, mantengo il racconto originale: {e}")
         return {}
 
+    uso_check = {
+        "nodo": "verifica_coerenza_domanda.check",
+        "modello": risultato_check.modello,
+        "token_input": risultato_check.token_input,
+        "token_output": risultato_check.token_output,
+    }
+
     if not esito or esito.strip().upper().startswith("SI"):
-        return {}  # coerente (o controllo ambiguo): non tocco nulla
+        return {"llm_usage": [uso_check]}  # coerente (o controllo ambiguo): non tocco nulla
 
     system_fix = (
         "Sei un revisore di favole per bambini in età prescolare. Ricevi il "
@@ -348,10 +410,18 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     )
 
     try:
-        corretto = await llm.chiedi(system=system_fix, user=racconto)
+        risultato_fix = await llm.chiedi(system=system_fix, user=racconto)
+        corretto = risultato_fix.testo
     except Exception as e:
         logger.warning(f"[verifica_coerenza_domanda] Riscrittura fallita, mantengo il racconto originale: {e}")
-        return {}
+        return {"llm_usage": [uso_check]}
+
+    uso_fix = {
+        "nodo": "verifica_coerenza_domanda.fix",
+        "modello": risultato_fix.modello,
+        "token_input": risultato_fix.token_input,
+        "token_output": risultato_fix.token_output,
+    }
 
     # Rete di sicurezza: se il testo "corretto" è sospettosamente più corto
     # dell'originale, l'LLM ha quasi certamente scartato il corpo della
@@ -364,12 +434,12 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
             f"{len(corretto.strip()) if corretto else 0} vs originale "
             f"{len(racconto.strip())}), mantengo il racconto originale."
         )
-        return {}
+        return {"llm_usage": [uso_check, uso_fix]}
 
     if corretto and corretto.strip():
-        return {"racconto_finale": corretto.strip()}
+        return {"racconto_finale": corretto.strip(), "llm_usage": [uso_check, uso_fix]}
 
-    return {}
+    return {"llm_usage": [uso_check, uso_fix]}
 
 # ---------------------------------------------------------------------------
 # NODE 11 — Salvataggio memoria

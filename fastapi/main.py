@@ -7,6 +7,7 @@ Entrypoint FastAPI con supporto a Geocoding, Meteo e Astronomia.
 import logging
 import json
 import httpx
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -22,6 +23,7 @@ from services.neo4j_client import Neo4jClient
 from services.astronomy import AstronomyClient
 from services.weather import WeatherClient    # <--- NUOVO
 from services.geo_service import GeoService  # <--- NUOVO
+from services.report import salva_report_storia
 
 from routers.admin import router as admin_router
 
@@ -106,9 +108,15 @@ class StoryStreamRequest(BaseModel):
     session_id:  Optional[str] = None
     lat:         Optional[float] = None
     lon:         Optional[float] = None
-    data_storia: Optional[str] = None   
+    data_storia: Optional[str] = None
     ora_storia:  Optional[str] = None   # <--- Aggiunta ora
     source_geo:  Optional[str] = None   # "device" | "ip"
+    # Dati di personalizzazione dal form: oggi il frontend li intreccia già
+    # nel testo del prompt, ma servono anche come campi distinti per il
+    # report YAML amministrativo di ogni storia.
+    nome:              Optional[str] = None
+    colore_preferito:  Optional[str] = None
+    animale_preferito: Optional[str] = None
 
 class StoryResponse(BaseModel):
     racconto:        str
@@ -129,6 +137,8 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
     client_ip = request.headers.get("x-forwarded-for", request.client.host)
     logger.info(f"Stream racconto | IP={client_ip} | prompt='{body.prompt[:50]}...'")
 
+    t0 = time.monotonic()
+
     # Stato iniziale coerente con agent/state.py aggiornato
     stato_iniziale = {
         "prompt_originale": body.prompt,
@@ -140,6 +150,9 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
         "lon": body.lon,
         "data_storia": body.data_storia,
         "ora_storia": body.ora_storia,
+        "nome": body.nome,
+        "colore_preferito": body.colore_preferito,
+        "animale_preferito": body.animale_preferito,
         "luogo": "Roma", # Default che verrà sovrascritto dal Nodo 1
         "iterazioni_totali": 0,
         "frammenti": [],
@@ -150,7 +163,8 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
         "usa_astronomia": True,
         "prompt_chiaro": True,
         "dati_meteo": None,
-        "dati_astronomici": None
+        "dati_astronomici": None,
+        "llm_usage": [],
     }
     
     config = {"configurable": {"thread_id": body.session_id or f"sess_{uuid.uuid4().hex[:8]}"}}
@@ -188,6 +202,13 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
             # Snapshot Finale
             snapshot = baldo_graph.get_state(config)
             v = snapshot.values if hasattr(snapshot, "values") else {}
+
+            # Report YAML amministrativo — solo se è stata prodotta una
+            # storia vera (non su un prompt rifiutato o un errore a metà,
+            # dove i dati sarebbero incompleti o fuorvianti).
+            if v.get("racconto_finale") and not v.get("errore"):
+                salva_report_storia(v, time.monotonic() - t0)
+
             yield f"data: {json.dumps({
                 'tipo': 'fine',
                 'racconto': v.get('racconto_finale', ''),

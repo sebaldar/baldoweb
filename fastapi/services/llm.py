@@ -8,6 +8,7 @@ Tenta Claude (Sonnet 5) come provider principale, OpenAI come fallback automatic
 import asyncio
 import logging
 import re
+from dataclasses import dataclass
 import openai
 import anthropic
 
@@ -36,6 +37,19 @@ _ENFASI_MARKDOWN_RE = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*")
 _SEPARATORE_MARKDOWN_RE = re.compile(r"^\s*-{3,}\s*$", re.MULTILINE)
 
 
+@dataclass
+class RisultatoLLM:
+    """
+    Testo generato più i metadati della chiamata — usati per il report YAML
+    amministrativo di ogni storia (modello effettivamente risposto, non
+    necessariamente quello primario, e token consumati).
+    """
+    testo: str
+    modello: str
+    token_input: int = 0
+    token_output: int = 0
+
+
 class LLMRouter:
 
     def __init__(self):
@@ -54,11 +68,11 @@ class LLMRouter:
         provider = "Claude" if self.anthropic_client else "OpenAI"
         logger.info(f"LLMRouter pronto — provider principale: {provider}")
 
-    async def chiedi(self, system: str, user: str) -> str:
+    async def chiedi(self, system: str, user: str) -> RisultatoLLM:
         """Chiamata generica per RAG, analisi e valutazioni."""
         return await self._cloud_chat(system=system, user=user)
 
-    async def genera_racconto(self, prompt: str) -> str:
+    async def genera_racconto(self, prompt: str) -> RisultatoLLM:
         """Genera il draft del racconto tramite cloud LLM."""
         system = (
             "Sei Baldo, un anziano astrologo e cantastorie gentile che vive in una "
@@ -75,7 +89,7 @@ class LLMRouter:
         )
         return await self._cloud_chat(system=system, user=prompt)
 
-    async def rifinisci(self, draft: str, eta: int) -> str:
+    async def rifinisci(self, draft: str, eta: int) -> RisultatoLLM:
         """Rifinitura editoriale finale del racconto."""
         system = (
             f"Sei un editor esperto di letteratura per l'infanzia. "
@@ -105,7 +119,7 @@ class LLMRouter:
     # Metodo interno
     # ------------------------------------------------------------------
 
-    async def _cloud_chat(self, system: str, user: str) -> str:
+    async def _cloud_chat(self, system: str, user: str) -> RisultatoLLM:
         """Tenta Claude (Sonnet 5), poi OpenAI come fallback."""
         if self.anthropic_client:
             try:
@@ -130,7 +144,13 @@ class LLMRouter:
                 )
                 testo = self._estrai_testo(resp.content)
                 if testo:
-                    return self._pulisci(testo)
+                    uso = getattr(resp, "usage", None)
+                    return RisultatoLLM(
+                        testo=self._pulisci(testo),
+                        modello=settings.ANTHROPIC_MODEL,
+                        token_input=getattr(uso, "input_tokens", 0) or 0,
+                        token_output=getattr(uso, "output_tokens", 0) or 0,
+                    )
                 logger.warning("Claude ha risposto senza blocco di testo, provo OpenAI.")
             except Exception as e:
                 logger.warning(f"Claude fallito ({e}), provo OpenAI.")
@@ -148,7 +168,13 @@ class LLMRouter:
                     ),
                     timeout=TIMEOUT_LLM_SECONDI,
                 )
-                return self._pulisci(resp.choices[0].message.content)
+                uso = getattr(resp, "usage", None)
+                return RisultatoLLM(
+                    testo=self._pulisci(resp.choices[0].message.content),
+                    modello=settings.OPENAI_MODEL,
+                    token_input=getattr(uso, "prompt_tokens", 0) or 0,
+                    token_output=getattr(uso, "completion_tokens", 0) or 0,
+                )
             except Exception as e:
                 logger.error(f"Anche OpenAI fallito ({e}) — nessun LLM disponibile per questa richiesta.")
                 raise RuntimeError(f"Entrambi i provider LLM non disponibili: {e}") from e

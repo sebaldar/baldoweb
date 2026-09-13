@@ -1133,6 +1133,11 @@ if (response.ok) {
 				age: selectedAge,
 				geo: geoCache,           // lat/lon del dispositivo, o null
 				session_id: sessionStorage.getItem('SESSIONID'),
+				// Campi distinti oltre al testo intrecciato sopra: servono al
+				// report YAML amministrativo di ogni storia generata.
+				nome: childName || null,
+				coloreP: favoriteColor || null,
+				animaleP: favoriteAnimal || null,
 			});
 		}        
 

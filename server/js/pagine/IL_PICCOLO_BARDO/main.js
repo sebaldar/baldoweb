@@ -32,6 +32,11 @@ async function manage_fastapi(server, ws, message) {
         lon:         data.geo?.lon  ?? null,
         source_geo:  data.geo ? 'device' : 'ip',
         dati_astronomici: null,   // verrà popolato se serve
+        // Campi di personalizzazione: solo per il report YAML amministrativo
+        // della storia, il testo del prompt li contiene già intrecciati.
+        nome:              data.nome || null,
+        colore_preferito:  data.coloreP || null,
+        animale_preferito: data.animaleP || null,
     };
 
     // ── Helper: invia evento al browser ──────────────────────────────────

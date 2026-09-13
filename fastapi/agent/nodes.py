@@ -399,6 +399,23 @@ def _termini_kb_trapelati(termini: list, racconto: str) -> list:
     return trovati
 
 
+def _sostituisci_ultimo_paragrafo(testo: str, nuovo_paragrafo: str) -> str:
+    """
+    Sostituisce l'ultimo paragrafo di `testo` con `nuovo_paragrafo` — usato
+    per il fix della domanda finale: la domanda è sempre il paragrafo di
+    chiusura (uno o due a-capo la separano dal resto), quindi sostituire
+    solo quello evita di dover chiedere all'LLM di riprodurre l'intera
+    favola per cambiare una frase.
+    """
+    testo = (testo or "").rstrip()
+    nuovo_paragrafo = (nuovo_paragrafo or "").strip()
+    if not testo:
+        return nuovo_paragrafo
+    paragrafi = testo.split("\n\n")
+    paragrafi[-1] = nuovo_paragrafo
+    return "\n\n".join(paragrafi)
+
+
 async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     """
     Rete di sicurezza economica: composer.py suggerisce una domanda finale
@@ -524,22 +541,29 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         # coerente (o controllo ambiguo): non tocco nulla
         return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
+    # Chiediamo SOLO la nuova domanda, non l'intera favola riscritta: la
+    # versione precedente chiedeva la favola completa "copiando ogni
+    # paragrafo esattamente com'è" tranne l'ultima frase — in pratica una
+    # seconda riscrittura integrale (osservato: token in uscita quasi pari
+    # al draft e a rifinisci), con relativo costo e un'occasione in più di
+    # deriva sul testo che rifinisci aveva già sistemato. La domanda finale
+    # è quasi sempre il suo paragrafo — la sostituzione avviene qui, per
+    # codice, non chiedendo all'LLM di riprodurre tutto il resto.
     system_fix = (
-        "Sei un revisore di favole per bambini in età prescolare. Ricevi il "
-        "testo COMPLETO di una favola la cui domanda finale NON è coerente "
-        "con la storia. Il tuo compito: restituire l'INTERA favola, dalla "
-        "prima all'ultima riga, copiando ogni paragrafo esattamente com'è, "
-        "tranne l'ultima frase/domanda che devi sostituire con una domanda "
-        "breve coerente con ciò che accade davvero nella storia. "
-        "IMPORTANTE: la tua risposta deve contenere TUTTO il testo originale "
-        "(tutti i paragrafi), non solo la domanda finale — stai correggendo "
-        "una frase dentro un testo lungo, non scrivendone uno nuovo breve. "
-        "Nessun commento, nessuna spiegazione: solo la favola completa corretta."
+        "Sei un revisore di favole per bambini in età prescolare. Leggi la "
+        "favola: la sua domanda finale NON è coerente (cita qualcosa che "
+        "non compare nella storia). Il tuo UNICO compito: scrivere una "
+        "NUOVA domanda finale, breve, rivolta al bambino, che parli di "
+        "personaggi o eventi che compaiono davvero nella storia — nello "
+        "stesso tono con cui il narratore si rivolge già al bambino nel "
+        "resto del testo. Rispondi ESCLUSIVAMENTE con la nuova domanda "
+        "finale (una frase sola): non riscrivere il resto della favola, "
+        "nessun commento, nessuna spiegazione."
     )
 
     try:
         risultato_fix = await llm.chiedi(system=system_fix, user=racconto)
-        corretto = risultato_fix.testo
+        nuova_domanda = (risultato_fix.testo or "").strip()
     except Exception as e:
         logger.warning(f"[verifica_coerenza_domanda] Riscrittura fallita, mantengo il racconto originale: {e}")
         return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
@@ -551,23 +575,21 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         "token_output": risultato_fix.token_output,
     })
 
-    # Rete di sicurezza: se il testo "corretto" è sospettosamente più corto
-    # dell'originale, l'LLM ha quasi certamente scartato il corpo della
-    # storia invece di limitarsi all'ultima frase (successo con un prompt
-    # meno esplicito di questo). Meglio tenere l'originale con la domanda
-    # scorrelata che una storia dimezzata.
-    if not corretto or len(corretto.strip()) < 0.7 * len(racconto.strip()):
+    # Rete di sicurezza adattata al nuovo formato: ci aspettiamo una singola
+    # frase breve, non più un testo lungo quanto l'originale. Se il modello
+    # ha comunque provato a restituire un testo lungo o multi-paragrafo,
+    # ha ignorato l'istruzione — meglio tenere l'originale con la domanda
+    # scorrelata che rischiare di incollare un frammento non affidabile.
+    if not nuova_domanda or "\n\n" in nuova_domanda or len(nuova_domanda) > 400:
         logger.warning(
-            f"[verifica_coerenza_domanda] Riscrittura sospetta (lunghezza "
-            f"{len(corretto.strip()) if corretto else 0} vs originale "
-            f"{len(racconto.strip())}), mantengo il racconto originale."
+            f"[verifica_coerenza_domanda] Risposta del fix non è la domanda "
+            f"breve richiesta (lunghezza {len(nuova_domanda)}), mantengo il "
+            f"racconto originale."
         )
         return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
-    if corretto and corretto.strip():
-        return {"racconto_finale": corretto.strip(), "llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
-
-    return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
+    corretto = _sostituisci_ultimo_paragrafo(racconto, nuova_domanda)
+    return {"racconto_finale": corretto, "llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
 # ---------------------------------------------------------------------------
 # NODE 11 — Salvataggio memoria

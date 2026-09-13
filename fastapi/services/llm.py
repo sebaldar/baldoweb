@@ -106,11 +106,24 @@ class LLMRouter:
                 f"stile, non rimuoverlo. "
             )
         else:
+            # Nessuna frase ripetuta rilevata nel draft: il ritornello è
+            # stato proposto (dal frammento o inventato) ma il draft, lasciato
+            # libero, spesso lo usa una volta sola invece di farlo tornare —
+            # osservato più volte, è la regressione più ricorrente su questo
+            # punto. Non lasciamo la scelta al caso una seconda volta: se c'è
+            # già un candidato concreto nel testo, va sfruttato e ripetuto qui.
             vincolo_ritornello = (
-                "Se il racconto contiene una frase breve ripetuta più volte "
-                "in modo pressoché identico (un ritornello), trattala come "
-                "intoccabile: non parafrasarla, non correggerne lo stile, "
-                "mantienila IDENTICA a ogni ripetizione. "
+                "Il racconto NON ha ancora un ritornello riconoscibile "
+                "(nessuna frase ripetuta 2-3 volte identica). Cercane uno "
+                "già presente nel testo: un'onomatopea, un gesto o una "
+                "frase d'azione breve e concreta legata alla scena (es. "
+                "\"Toc toc toc\", \"Scese, scese, scese\", un'esclamazione "
+                "del narratore usata una sola volta) — se ne trovi uno "
+                "buono, ripetilo IDENTICO altre 1-2 volte nei momenti "
+                "chiave della storia, aggiungendolo dove manca. Non "
+                "inventare una frase nuova dal nulla se ce n'è già una "
+                "buona nel testo: usa quella. Se il racconto è già privo "
+                "di qualunque frase adatta, lascialo così com'è. "
             )
         system = (
             f"Sei un editor esperto di letteratura per l'infanzia. "

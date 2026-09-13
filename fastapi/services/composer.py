@@ -314,6 +314,7 @@ REGOLE DI GENERAZIONE:
 10. Gli oggetti usati per un inganno o un travestimento devono essere cose che il personaggio ha già con sé o trova naturalmente sul posto (un mantello, un ramo, una borsa, un sasso) — evita di far comparire dal nulla un oggetto creato apposta per il trucco e mai menzionato prima (es. una gabbietta con lucciole tenuta pronta per l'occasione): se serve un oggetto specifico, mostralo prima o rendilo qualcosa che il personaggio troverebbe davvero lì.
 11. {regola_numero_inganni}
 12. Se attribuisci un genere grammaticale a un personaggio/creatura tramite l'articolo (es. "il T-Rex", "la strega"), mantieni lo stesso genere nei pronomi per tutta la storia — non alternare "lui" e "lei" per lo stesso personaggio.
+13. Se un personaggio pone una condizione esplicita in un dialogo (es. "non uscirò finché non mi porti X", "ti aiuterò solo se..."), la trama deve poi affrontarla chiaramente: risolta com'è stata posta, sostituita da un'alternativa che il personaggio accetta esplicitamente, o lasciata cadere con un motivo raccontato — mai abbandonata in silenzio, con la storia che prosegue come se non fosse mai stata detta.
 
 GENERA IL RACCONTO:
 """

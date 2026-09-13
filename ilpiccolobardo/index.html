@@ -743,7 +743,7 @@
                       <small>Attendi qualche secondo ✨</small>
                     </div>
                     <button class="btn-success" onclick="listenStory()" id="readBtn" disabled>🔊 Leggi ad Alta Voce</button>
-                    <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled>🎨 Crea Illustrazione</button>
+                    <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled title="Disponibile per gli utenti registrati">🎨 Crea Illustrazione 🔒</button>
                    <button class="btn-danger" onclick="stopReading()" id="stopBtn" disabled style="display: none;">⏹️ Ferma Lettura</button>
                 </div>
             </div>
@@ -836,6 +836,10 @@
         let favorites = [];
         let isNightMode = false;
 		let geoCache = null
+        // Generazione immagini disattivata in demo: costo per chiamata troppo
+        // alto per un pulsante libero senza autenticazione. Riattivare quando
+        // sarà disponibile il login (vedi generateIllustration più sotto).
+        const ILLUSTRAZIONE_DISPONIBILE = false;
 
 
 		async function initGeo() {
@@ -1169,11 +1173,16 @@ if (response.ok) {
 
         // Illustration Generation
         function generateIllustration() {
+            if (!ILLUSTRAZIONE_DISPONIBILE) {
+                alert('La creazione di illustrazioni sarà disponibile per gli utenti registrati. Per ora è disattivata in questa versione demo.');
+                return;
+            }
+
             if (!currentStory || !currentStory.text) return;
 
-            sendMessage('generate_illustration', { 
+            sendMessage('generate_illustration', {
                 text: currentStory.text,
-                storyId: currentStory.timestamp 
+                storyId: currentStory.timestamp
             });
 
             document.getElementById('illustrateBtn').disabled = true;

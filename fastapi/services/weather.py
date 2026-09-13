@@ -50,5 +50,10 @@ class WeatherClient:
         if temp < 24:
             return "una temperatura piacevole, perfetta per giocare fuori"
         if temp < 30:
-            return "un pomeriggio caldo caldo, di quelli in cui si esce senza giacca"
+            # Niente riferimenti al momento della giornata qui ("pomeriggio",
+            # "sera"...): questa funzione non sa che ora è davvero nella
+            # storia (osservato: un caso con ora_storia=12:09 descritto come
+            # "pomeriggio" — un bambino che guarda l'orologio se ne accorge).
+            # Il momento della giornata lo gestisce già composer.py altrove.
+            return "un caldo gradevole, di quelli in cui si esce senza giacca"
         return "un caldo torrido, di quelli da acqua fresca e ombra"

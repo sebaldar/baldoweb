@@ -21,7 +21,7 @@ class StoryComposer:
             "con la fantasia dei frammenti di storia."
         )
 
-    def componi(self, prompt_originale: str, analisi: dict, frammenti: list, **kwargs) -> str:
+    def componi(self, prompt_originale: str, analisi: dict, frammenti: list, **kwargs) -> tuple[str, dict]:
         """
         Assembla il prompt finale per la generazione del draft.
         """
@@ -50,7 +50,11 @@ class StoryComposer:
         # che l'LLM finisce davvero per raccontare.
         frammenti = frammenti or []
         frammento_primario = frammenti[0] if frammenti else {}
-        frammenti_secondari = frammenti[1:]
+        # Al massimo 2 secondari (3 testi completi in tutto): con tutti e 5 i
+        # frammenti trovati nel contesto, il draft si è visto arrivare 4277
+        # token in ingresso e il rischio si capovolge — nelle storie migliori
+        # è il frammento a pesare poco sulla trama, non il contrario.
+        frammenti_secondari = frammenti[1:3]
 
         # --- COSTRUZIONE SEZIONE FRAMMENTI ---
         personaggi_richiesti = analisi.get('personaggi', [])
@@ -280,4 +284,10 @@ REGOLE DI GENERAZIONE:
 
 GENERA IL RACCONTO:
 """
-        return prompt_finale.strip()
+        # Il ritornello del frammento (quando c'è) viene restituito insieme
+        # al prompt: rifinisci lo userà per proteggerlo dalla riscrittura
+        # editoriale, che altrimenti — coprendo l'intero testo — può farlo
+        # sparire o parafrasarlo insieme al resto (osservato: un ritornello
+        # acquisito nel draft, perso nella rifinitura).
+        metadati = {"ritornello_atteso": ritornello}
+        return prompt_finale.strip(), metadati

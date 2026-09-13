@@ -89,8 +89,29 @@ class LLMRouter:
         )
         return await self._cloud_chat(system=system, user=prompt)
 
-    async def rifinisci(self, draft: str, eta: int) -> RisultatoLLM:
+    async def rifinisci(self, draft: str, eta: int, ritornello: str | None = None) -> RisultatoLLM:
         """Rifinitura editoriale finale del racconto."""
+        # Osservato: rifinisci riscrive l'intero testo (token in uscita quasi
+        # pari a quelli in ingresso) e in almeno un caso ha fatto sparire un
+        # ritornello già acquisito nel draft. Quando composer.py conosce in
+        # anticipo il ritornello del frammento, glielo passiamo come vincolo
+        # esplicito da proteggere; l'istruzione generale sotto copre anche il
+        # caso in cui il ritornello sia stato inventato dal modello stesso
+        # (testo non noto in anticipo).
+        if ritornello:
+            vincolo_ritornello = (
+                f"Il racconto usa questo ritornello, che DEVE restare "
+                f"IDENTICO, parola per parola, in ogni sua ripetizione: "
+                f"\"{ritornello}\". Non parafrasarlo, non correggerne lo "
+                f"stile, non rimuoverlo. "
+            )
+        else:
+            vincolo_ritornello = (
+                "Se il racconto contiene una frase breve ripetuta più volte "
+                "in modo pressoché identico (un ritornello), trattala come "
+                "intoccabile: non parafrasarla, non correggerne lo stile, "
+                "mantienila IDENTICA a ogni ripetizione. "
+            )
         system = (
             f"Sei un editor esperto di letteratura per l'infanzia. "
             f"Il racconto è destinato a bambini di circa {eta} anni. "
@@ -103,6 +124,7 @@ class LLMRouter:
             f"testo — lasciala intatta, non sostituirla con una formula fiabesca "
             f"generica (mai \"vissero felici e contenti\" o simili, tanto più al "
             f"plurale se il protagonista è uno solo). "
+            f"{vincolo_ritornello}"
             f"NON far dichiarare a un personaggio o al narratore la morale della "
             f"storia (frasi tipo \"capì una cosa importante\"): se c'è una domanda "
             f"finale rivolta al bambino, deve restare lei a fare quel lavoro. "

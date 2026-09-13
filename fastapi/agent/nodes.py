@@ -240,7 +240,7 @@ async def componi_prompt(state: BaldoState) -> dict:
     logger.info("[NODE] componi_prompt")
     composer = StoryComposer()
     
-    prompt_arricchito = composer.componi(
+    prompt_arricchito, meta_composizione = composer.componi(
         prompt_originale=state["prompt_originale"],
         analisi={
             "personaggi": state["personaggi"],
@@ -268,7 +268,10 @@ async def componi_prompt(state: BaldoState) -> dict:
         lunghezza=state["lunghezza"],
         lingua=state["lingua"],
     )
-    return {"prompt_arricchito": prompt_arricchito}
+    return {
+        "prompt_arricchito": prompt_arricchito,
+        "ritornello_atteso": meta_composizione.get("ritornello_atteso"),
+    }
 
 # ---------------------------------------------------------------------------
 # NODE 7-10 — Generazione e Rifinitura (Draft, Correzione, Rifinitura)
@@ -297,7 +300,11 @@ async def correggi_draft(state: BaldoState, llm: LLMRouter) -> dict:
 
 async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] rifinisci")
-    risultato = await llm.rifinisci(draft=state["draft"], eta=state["eta_bambino"])
+    risultato = await llm.rifinisci(
+        draft=state["draft"],
+        eta=state["eta_bambino"],
+        ritornello=state.get("ritornello_atteso"),
+    )
     return {
         "racconto_finale": risultato.testo,
         "llm_usage": [{
@@ -343,14 +350,21 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     Rete di sicurezza economica: composer.py suggerisce una domanda finale
     presa dal frammento più rilevante, ma il modello di generazione può
     comunque ignorarla, storpiarla o (in rari casi) lasciarne una scollegata
-    dalla trama effettivamente raccontata.
+    dalla trama effettivamente raccontata. Nello stesso nodo, per economia,
+    girano anche altri due controlli a costo quasi nullo: fedeltà del nome
+    del bambino (nessuna chiamata LLM, solo un match di stringa) e coerenza
+    del ritornello (un secondo classificatore SI/NO, stesso principio della
+    domanda ma senza tentativo di riscrittura automatica — un ritornello,
+    a differenza della domanda finale, è ripetuto più volte nel testo: una
+    riscrittura automatica rischierebbe di introdurre incoerenza tra le
+    ripetizioni invece di risolverla).
 
-    In due passaggi, non uno: prima un classificatore SI/NO economico, e solo
-    se la risposta è NO si chiede la riscrittura mirata. Un'unica chiamata
-    "verifica-e-se-serve-correggi" è stata scartata: anche istruita a
-    restituire il testo invariato quando già coerente, un LLM tende comunque
-    a "migliorarlo" — riscriveva domande già valide, vanificando lo scopo di
-    un controllo mirato.
+    In due passaggi, non uno, per la domanda: prima un classificatore SI/NO
+    economico, e solo se la risposta è NO si chiede la riscrittura mirata.
+    Un'unica chiamata "verifica-e-se-serve-correggi" è stata scartata: anche
+    istruita a restituire il testo invariato quando già coerente, un LLM
+    tende comunque a "migliorarlo" — riscriveva domande già valide,
+    vanificando lo scopo di un controllo mirato.
     """
     logger.info("[NODE] verifica_coerenza_domanda")
 
@@ -358,12 +372,59 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     if not racconto:
         return {}
 
+    uso_llm = []
+
     mancanti = _nomi_propri_mancanti(state.get("personaggi", []), racconto)
     if mancanti:
         logger.warning(
             f"[verifica_coerenza_domanda] Nome/i proprio/i richiesti ma assenti "
             f"dal racconto finale (possibile storpiatura): {mancanti}"
         )
+
+    # Controllo dedicato sul campo "nome" della personalizzazione (distinto
+    # da "personaggi" sopra: il nome del form potrebbe non essere mai stato
+    # estratto come personaggio dal RAG, o esserlo con una grafia diversa).
+    # Nessuna chiamata LLM: un confronto di stringa basta ed è gratis.
+    nome_atteso = (state.get("nome") or "").strip()
+    nome_presente = None
+    if nome_atteso:
+        nome_presente = bool(re.search(rf"\b{re.escape(nome_atteso.lower())}\b", racconto.lower()))
+        if not nome_presente:
+            logger.warning(
+                f"[verifica_coerenza_domanda] Nome personalizzato '{nome_atteso}' "
+                f"assente dal racconto finale."
+            )
+
+    # Controllo di coerenza del ritornello: verifica che le figure/elementi
+    # eventualmente nominati in una frase ripetuta compaiano davvero nella
+    # storia (lo stesso difetto già osservato: un ritornello che elenca
+    # qualcosa — es. "un giudice" — mai comparso come scena concreta).
+    system_ritornello = (
+        "Sei un revisore di favole per bambini in età prescolare. Cerca nel "
+        "testo un ritornello: una frase breve ripetuta più volte, quasi "
+        "identica ogni volta. Se non c'è alcuna frase ripetuta, rispondi SI. "
+        "Se c'è, controlla: ogni personaggio, oggetto o figura che il "
+        "ritornello nomina compare DAVVERO altrove nella storia, come scena "
+        "concreta e non solo come parola? Rispondi ESCLUSIVAMENTE con la "
+        "parola SI se sì (o se non c'è ritornello), oppure ESCLUSIVAMENTE "
+        "con la parola NO se il ritornello nomina qualcosa mai comparso "
+        "nella storia. Nessun'altra parola nella risposta."
+    )
+    try:
+        risultato_ritornello = await llm.chiedi(system=system_ritornello, user=racconto)
+        uso_llm.append({
+            "nodo": "verifica_coerenza_domanda.ritornello",
+            "modello": risultato_ritornello.modello,
+            "token_input": risultato_ritornello.token_input,
+            "token_output": risultato_ritornello.token_output,
+        })
+        if not risultato_ritornello.testo or not risultato_ritornello.testo.strip().upper().startswith("SI"):
+            logger.warning(
+                "[verifica_coerenza_domanda] Il ritornello sembra nominare "
+                "qualcosa non presente altrove nella storia."
+            )
+    except Exception as e:
+        logger.warning(f"[verifica_coerenza_domanda] Controllo ritornello fallito, ignorato: {e}")
 
     system_check = (
         "Sei un revisore di favole per bambini in età prescolare. Leggi la favola "
@@ -384,17 +445,18 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         esito = risultato_check.testo
     except Exception as e:
         logger.warning(f"[verifica_coerenza_domanda] Controllo fallito, mantengo il racconto originale: {e}")
-        return {}
+        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
 
-    uso_check = {
+    uso_llm.append({
         "nodo": "verifica_coerenza_domanda.check",
         "modello": risultato_check.modello,
         "token_input": risultato_check.token_input,
         "token_output": risultato_check.token_output,
-    }
+    })
 
     if not esito or esito.strip().upper().startswith("SI"):
-        return {"llm_usage": [uso_check]}  # coerente (o controllo ambiguo): non tocco nulla
+        # coerente (o controllo ambiguo): non tocco nulla
+        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
 
     system_fix = (
         "Sei un revisore di favole per bambini in età prescolare. Ricevi il "
@@ -414,14 +476,14 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         corretto = risultato_fix.testo
     except Exception as e:
         logger.warning(f"[verifica_coerenza_domanda] Riscrittura fallita, mantengo il racconto originale: {e}")
-        return {"llm_usage": [uso_check]}
+        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
 
-    uso_fix = {
+    uso_llm.append({
         "nodo": "verifica_coerenza_domanda.fix",
         "modello": risultato_fix.modello,
         "token_input": risultato_fix.token_input,
         "token_output": risultato_fix.token_output,
-    }
+    })
 
     # Rete di sicurezza: se il testo "corretto" è sospettosamente più corto
     # dell'originale, l'LLM ha quasi certamente scartato il corpo della
@@ -434,12 +496,12 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
             f"{len(corretto.strip()) if corretto else 0} vs originale "
             f"{len(racconto.strip())}), mantengo il racconto originale."
         )
-        return {"llm_usage": [uso_check, uso_fix]}
+        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
 
     if corretto and corretto.strip():
-        return {"racconto_finale": corretto.strip(), "llm_usage": [uso_check, uso_fix]}
+        return {"racconto_finale": corretto.strip(), "llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
 
-    return {"llm_usage": [uso_check, uso_fix]}
+    return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente}
 
 # ---------------------------------------------------------------------------
 # NODE 11 — Salvataggio memoria

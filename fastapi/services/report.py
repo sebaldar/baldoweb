@@ -58,6 +58,10 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "eta": state.get("eta_bambino"),
             "nome": state.get("nome"),
+            # None se non c'era un nome da verificare, altrimenti esito del
+            # controllo di fedeltà (verifica_coerenza_domanda): il nome dato
+            # dal form compare parola per parola nel racconto finale?
+            "nome_presente_in_output": state.get("nome_presente_in_output"),
             "colore_preferito": state.get("colore_preferito"),
             "animale_preferito": state.get("animale_preferito"),
             "prompt": state.get("prompt_originale"),
@@ -69,6 +73,8 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "dettaglio_chiamate_llm": uso["dettaglio_chiamate"],
             "frammenti_usati": state.get("frammenti_usati") or [],
             "personaggi": state.get("personaggi") or [],
+            # None quando il modello lo inventa da sé (non noto in anticipo).
+            "ritornello_atteso": state.get("ritornello_atteso"),
             # Contesto fisico usato per la storia: senza luogo/data/ora
             # i risultati meteo/astro da soli non si possono verificare
             # (es. per capire se la fase lunare riportata è plausibile).

@@ -56,6 +56,12 @@ class BaldoState(TypedDict):
 
     # --- GENERAZIONE ---
     prompt_arricchito: str
+    # Ritornello del frammento primario (se il frammento ne fornisce uno),
+    # noto già al momento della composizione del prompt — passato a
+    # rifinisci come vincolo esplicito da preservare parola per parola,
+    # invece di lasciarlo alla mercé della riscrittura editoriale che
+    # copre l'intero testo. None quando il modello lo inventa da sé.
+    ritornello_atteso: Optional[str]
     draft: str
     valutazione_draft: str                 # "ok" | "spaventoso" | "inadeguato" | "troppo_lungo"
     tentativi_correzione: int
@@ -63,6 +69,9 @@ class BaldoState(TypedDict):
     # --- OUTPUT FINALE ---
     racconto_finale: str
     frammenti_usati: List[str]
+    # None se non c'era un "nome" personalizzato da verificare; altrimenti
+    # True/False a seconda che compaia parola-per-parola nel racconto finale.
+    nome_presente_in_output: Optional[bool]
 
     # --- MEMORIA ---
     storia_id: Optional[str]              

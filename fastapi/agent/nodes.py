@@ -279,7 +279,13 @@ async def componi_prompt(state: BaldoState) -> dict:
 
 # Sotto questa soglia di parole consecutive uguali, il confronto rischia
 # falsi positivi (formule ricorrenti per caso, non un ritornello voluto).
-_RITORNELLO_MIN_PAROLE = 6
+# Abbassata da 6 a 4: i ritornelli migliori per 3 anni sono proprio i più
+# corti ("Piccola piccola, dov'è finita?", "Naso per terra, mondo
+# gigante!" — 4 e 5 parole), e con il confronto per n-grammi (non più per
+# frasi intere) il rischio di falso positivo a questa lunghezza resta
+# basso: entrambi i casi osservati erano ritornelli veri, mai rilevati
+# perché sotto la vecchia soglia di 6.
+_RITORNELLO_MIN_PAROLE = 4
 
 _PUNTEGGIATURA_BORDO_RE = re.compile(r"^[«»\"'“”,.:;!?]+|[«»\"'“”,.:;!?]+$")
 

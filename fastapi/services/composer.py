@@ -21,6 +21,31 @@ class StoryComposer:
             "con la fantasia dei frammenti di storia."
         )
 
+    @staticmethod
+    def _descrizione_illuminazione_luna(percento):
+        """
+        La sola fase ("Crescente") non dice quanto sia vistosa la luna: a
+        15° di elongazione (già fuori dalla soglia di "nuova invisibile")
+        l'illuminazione è ~1,7%, un filo sottilissimo — a 70° (ancora
+        "Crescente") è già il 41%, una mezzaluna ben visibile. Senza questa
+        distinzione il prompt le descrive allo stesso modo, specialmente
+        rilevante per la luna diurna: una falce quasi invisibile non
+        merita lo stesso "che regalo!" di una mezzaluna vistosa.
+        """
+        if percento is None:
+            return None
+        if percento < 5:
+            return "un filo di luce sottilissimo, quasi invisibile"
+        if percento < 25:
+            return "una sottile falce"
+        if percento < 45:
+            return "una falce ben visibile"
+        if percento < 65:
+            return "una mezzaluna"
+        if percento < 90:
+            return "quasi piena, molto luminosa"
+        return "piena e luminosa"
+
     def componi(self, prompt_originale: str, analisi: dict, frammenti: list, **kwargs) -> tuple[str, dict]:
         """
         Assembla il prompt finale per la generazione del draft.
@@ -40,6 +65,12 @@ class StoryComposer:
         astro = analisi.get("dati_astronomici") or kwargs.get("dati_astronomici") or {}
         corpi_celesti = astro.get("corpi", [])
         fase_luna = astro.get("fase_luna", "sconosciuta")
+
+        # Quanto è vistosa la luna adesso, non solo in che fase è (vedi
+        # _descrizione_illuminazione_luna per il perché conta).
+        luna_info = next((c for c in corpi_celesti if c.get("nome") == "Luna"), None)
+        illuminazione_luna = luna_info.get("illuminazione_percento") if luna_info else None
+        descrizione_illuminazione = self._descrizione_illuminazione_luna(illuminazione_luna)
 
         # --- FRAMMENTO PRIMARIO vs SECONDARI ---
         # Solo il frammento con punteggio più alto (il primo: cerca_frammenti
@@ -219,13 +250,15 @@ class StoryComposer:
         ora_num = int(ora_match.group(1)) if ora_match else None
         è_notte = ora_num is not None and (ora_num >= 20 or ora_num < 6)
 
+        suffisso_illuminazione = f" ({descrizione_illuminazione})" if descrizione_illuminazione else ""
+
         if ora_num is None:
-            descrizione_cielo = f"La luna è in fase {fase_luna}."
+            descrizione_cielo = f"La luna è in fase {fase_luna}{suffisso_illuminazione}."
             if corpi_celesti:
                 nomi_corpi = [c.get("nome") for c in corpi_celesti]
                 descrizione_cielo += f" In cielo sono visibili: {', '.join(nomi_corpi)}."
         elif è_notte:
-            descrizione_cielo = f"È notte: il cielo è scuro, le stelle sono visibili. La luna è in fase {fase_luna}."
+            descrizione_cielo = f"È notte: il cielo è scuro, le stelle sono visibili. La luna è in fase {fase_luna}{suffisso_illuminazione}."
             if corpi_celesti:
                 nomi_corpi = [c.get("nome") for c in corpi_celesti]
                 descrizione_cielo += f" Sono visibili anche: {', '.join(nomi_corpi)}."
@@ -244,15 +277,36 @@ class StoryComposer:
             # senza risposta anche quando i dati dicevano che era visibile.
             corpi_diurni = [c.get("nome") for c in corpi_celesti if c.get("nome") in ("Luna", "Venere")]
             if corpi_diurni:
+                if descrizione_illuminazione:
+                    descrizione_aspetto = (
+                        f"la Luna è {descrizione_illuminazione} nel blu del "
+                        "cielo, non luminosa come di notte"
+                    )
+                else:
+                    descrizione_aspetto = (
+                        "appare pallida e sbiadita nel blu del cielo, non "
+                        "luminosa come di notte"
+                    )
+                # Una falce al minimo di illuminazione è un dettaglio sottile,
+                # non uno spettacolare: senza questa distinzione il prompt
+                # tratterebbe un filo quasi invisibile come una mezzaluna
+                # vistosa, con lo stesso "che regalo!".
+                nota_vividezza = (
+                    " Essendo quasi al minimo di illuminazione, è un dettaglio "
+                    "sottile che un personaggio nota solo guardando con "
+                    "attenzione — non descriverla come un evento eclatante."
+                    if illuminazione_luna is not None and illuminazione_luna < 5
+                    else ""
+                )
                 descrizione_cielo += (
                     f" DETTAGLIO REALE DA NON PERDERE: oggi si vede anche "
                     f"{' e '.join(corpi_diurni)} nonostante sia giorno — capita "
-                    "davvero, non è un errore: appare pallida e sbiadita nel blu "
-                    "del cielo, non luminosa come di notte. Se il prompt "
-                    "dell'utente chiede di guardare il cielo o cercare la luna, "
-                    "questo è il posto giusto per usarlo: falla scoprire al "
-                    "personaggio come un piccolo regalo inatteso, non aggiungerla "
-                    "come dettaglio a caso se non c'entra con la trama."
+                    f"davvero, non è un errore: {descrizione_aspetto}."
+                    f"{nota_vividezza} Se il prompt dell'utente chiede di "
+                    "guardare il cielo o cercare la luna, questo è il posto "
+                    "giusto per usarlo: falla scoprire al personaggio come un "
+                    "piccolo regalo inatteso, non aggiungerla come dettaglio "
+                    "a caso se non c'entra con la trama."
                 )
 
         # --- NUMERO DI INGANNI/SVOLTE SCALATO SULL'ETÀ ---

@@ -517,22 +517,6 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         "con la parola NO se il ritornello nomina qualcosa mai comparso "
         "nella storia. Nessun'altra parola nella risposta."
     )
-    try:
-        risultato_ritornello = await llm.chiedi(system=system_ritornello, user=racconto)
-        uso_llm.append({
-            "nodo": "verifica_coerenza_domanda.ritornello",
-            "modello": risultato_ritornello.modello,
-            "token_input": risultato_ritornello.token_input,
-            "token_output": risultato_ritornello.token_output,
-        })
-        if not risultato_ritornello.testo or not risultato_ritornello.testo.strip().upper().startswith("SI"):
-            logger.warning(
-                "[verifica_coerenza_domanda] Il ritornello sembra nominare "
-                "qualcosa non presente altrove nella storia."
-            )
-    except Exception as e:
-        logger.warning(f"[verifica_coerenza_domanda] Controllo ritornello fallito, ignorato: {e}")
-
     system_check = (
         "Sei un revisore di favole per bambini in età prescolare. Leggi la favola "
         "e la domanda con cui si chiude, rivolta al bambino (di solito l'ultima "
@@ -547,13 +531,39 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         "Nessun'altra parola nella risposta."
     )
 
-    try:
-        risultato_check = await llm.chiedi(system=system_check, user=racconto)
-        esito = risultato_check.testo
-    except Exception as e:
-        logger.warning(f"[verifica_coerenza_domanda] Controllo fallito, mantengo il racconto originale: {e}")
+    # Le due verifiche sono indipendenti (leggono solo il racconto, nessuna
+    # dipende dall'esito dell'altra) — in parallelo invece che in sequenza.
+    # Misurato: una chiamata con output di poche parole costa in tempo molto
+    # meno del suo stesso input (~1-1.5s anche con migliaia di token in
+    # ingresso, la latenza è dominata dall'output generato, non da quello
+    # letto) — non è la spesa maggiore della pipeline, ma è comunque un
+    # risparmio reale ottenerlo gratis invece che in sequenza.
+    risultato_ritornello, risultato_check = await asyncio.gather(
+        llm.chiedi(system=system_ritornello, user=racconto),
+        llm.chiedi(system=system_check, user=racconto),
+        return_exceptions=True,
+    )
+
+    if isinstance(risultato_ritornello, Exception):
+        logger.warning(f"[verifica_coerenza_domanda] Controllo ritornello fallito, ignorato: {risultato_ritornello}")
+    else:
+        uso_llm.append({
+            "nodo": "verifica_coerenza_domanda.ritornello",
+            "modello": risultato_ritornello.modello,
+            "token_input": risultato_ritornello.token_input,
+            "token_output": risultato_ritornello.token_output,
+        })
+        if not risultato_ritornello.testo or not risultato_ritornello.testo.strip().upper().startswith("SI"):
+            logger.warning(
+                "[verifica_coerenza_domanda] Il ritornello sembra nominare "
+                "qualcosa non presente altrove nella storia."
+            )
+
+    if isinstance(risultato_check, Exception):
+        logger.warning(f"[verifica_coerenza_domanda] Controllo fallito, mantengo il racconto originale: {risultato_check}")
         return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
 
+    esito = risultato_check.testo
     uso_llm.append({
         "nodo": "verifica_coerenza_domanda.check",
         "modello": risultato_check.modello,

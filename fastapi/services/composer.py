@@ -270,13 +270,16 @@ class StoryComposer:
                 "stelle. Vale per TUTTA la storia, dall'inizio fino alla "
                 "domanda finale compresa: non farle ricomparire in chiusura."
             )
-            # La Luna (e talvolta Venere) sono spesso visibili anche in pieno
-            # giorno — un fenomeno reale, non un errore. Prima di questo fix
-            # la sezione "è giorno" ignorava sempre corpi_celesti: un prompt
-            # che chiedeva esplicitamente "c'è la luna in cielo?" restava
-            # senza risposta anche quando i dati dicevano che era visibile.
-            corpi_diurni = [c.get("nome") for c in corpi_celesti if c.get("nome") in ("Luna", "Venere")]
-            if corpi_diurni:
+            # Solo la Luna, non Venere: la Luna ha un ruolo fiabesco/culturale
+            # per un bambino (fasi, storie, "buonanotte luna"), Venere è solo
+            # "un puntino luminoso" senza identità propria — osservato che
+            # menzionarle insieme ("si vede anche Luna e Venere... falla
+            # scoprire come un regalo") spinge il narratore a introdurre
+            # Venere anche quando il prompt chiedeva solo della luna, senza
+            # che serva mai alla trama. Venere resta comunque nei dati grezzi
+            # (dati_astronomici, per il report), solo non viene spinta qui.
+            luna_diurna = any(c.get("nome") == "Luna" for c in corpi_celesti)
+            if luna_diurna:
                 if descrizione_illuminazione:
                     descrizione_aspetto = (
                         f"la Luna è {descrizione_illuminazione} nel blu del "
@@ -299,14 +302,15 @@ class StoryComposer:
                     else ""
                 )
                 descrizione_cielo += (
-                    f" DETTAGLIO REALE DA NON PERDERE: oggi si vede anche "
-                    f"{' e '.join(corpi_diurni)} nonostante sia giorno — capita "
-                    f"davvero, non è un errore: {descrizione_aspetto}."
-                    f"{nota_vividezza} Se il prompt dell'utente chiede di "
-                    "guardare il cielo o cercare la luna, questo è il posto "
-                    "giusto per usarlo: falla scoprire al personaggio come un "
-                    "piccolo regalo inatteso, non aggiungerla come dettaglio "
-                    "a caso se non c'entra con la trama."
+                    f" DETTAGLIO REALE DA NON PERDERE: oggi si vede anche la "
+                    f"Luna nonostante sia giorno — capita davvero, non è un "
+                    f"errore: {descrizione_aspetto}.{nota_vividezza} Se il "
+                    "prompt dell'utente chiede di guardare il cielo o cercare "
+                    "la luna, questo è il posto giusto per usarlo: falla "
+                    "scoprire al personaggio come un piccolo regalo inatteso, "
+                    "non aggiungerla come dettaglio a caso se non c'entra con "
+                    "la trama. Non introdurre altri pianeti o stelle solo "
+                    "perché presenti nei dati — la Luna basta."
                 )
 
         # --- NUMERO DI INGANNI/SVOLTE SCALATO SULL'ETÀ ---
@@ -369,6 +373,8 @@ REGOLE DI GENERAZIONE:
 11. {regola_numero_inganni}
 12. Se attribuisci un genere grammaticale a un personaggio/creatura tramite l'articolo (es. "il T-Rex", "la strega"), mantieni lo stesso genere nei pronomi per tutta la storia — non alternare "lui" e "lei" per lo stesso personaggio.
 13. Se un personaggio pone una condizione esplicita in un dialogo (es. "non uscirò finché non mi porti X", "ti aiuterò solo se..."), la trama deve poi affrontarla chiaramente: risolta com'è stata posta, sostituita da un'alternativa che il personaggio accetta esplicitamente, o lasciata cadere con un motivo raccontato — mai abbandonata in silenzio, con la storia che prosegue come se non fosse mai stata detta.
+14. La domanda finale deve restare dentro l'esperienza concreta del protagonista, mai diventare una riflessione astratta su percezione, identità o cambiamento (evita domande come "è cambiato lui davvero, o è cambiato il modo in cui lo guardavi?" — un ragionamento di secondo livello troppo concettuale per {eta_bambino} anni). Preferisci una domanda che il bambino risponde pensando a cosa avrebbe fatto lui, o a cosa succede dopo, restando nei panni del protagonista (es. "Tu avresti avuto il coraggio di parlargli?", "Secondo te, potrebbero diventare amici?").
+15. Se un antagonista o un ostacolo minaccioso si ammorbidisce, non farlo cedere dopo un solo scambio di battute (una richiesta gentile e subito "va bene, passa pure" è troppo rapido, indebolisce sia l'antagonista che il coraggio del protagonista): costruisci prima un piccolo momento di esitazione o resistenza — il protagonista ha paura, pensa al motivo per cui è lì, fa comunque un passo avanti — e solo dopo l'antagonista si ferma e ascolta davvero.
 
 GENERA IL RACCONTO:
 """

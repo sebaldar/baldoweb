@@ -1384,8 +1384,40 @@ const response = await this.openai.audio.speech.create({
     // Restituisci URL accessibile dal frontend
     return `/public/audio/${fileName}`;
   }
-  
-  async generateImageFromStory (generatedStory) 
+
+  /**
+   * Genera un titolo breve ed evocativo per una favola, per il pulsante
+   * "Stampa PDF" del frontend (le storie non hanno un titolo proprio,
+   * vengono identificate solo dal prompt originale).
+   * @param {string} storyText - testo completo della favola
+   * @returns {Promise<string>} titolo breve, senza virgolette o punteggiatura finale
+   */
+  async generateTitle(storyText) {
+    const response = await this.openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "system",
+          content: `
+  Sei un editor di libri per l'infanzia. Data una favola per bambini in età
+  prescolare, crea un titolo breve (massimo 5-6 parole), evocativo e adatto
+  all'età, nello stile di un titolo di libro illustrato per bambini.
+  Rispondi ESCLUSIVAMENTE con il titolo: niente virgolette, niente punto
+  finale, nessun'altra parola.
+  `
+        },
+        {
+          role: "user",
+          content: `FAVOLA:\n${storyText}`
+        }
+      ]
+    });
+
+    const titolo = (response.output_text || "").trim().replace(/^["'«]+|["'»]+$/g, "");
+    return titolo || "La mia favola";
+  }
+
+  async generateImageFromStory (generatedStory)
   {
     const visualPrompt = await  this.extractVisualPromptFromStory(generatedStory) ;
     return this.generateImageFromPrompt(visualPrompt) ;

@@ -490,6 +490,15 @@ async function exe(server, ws, message) {
               };
             }
               break;
+            case 'generate_title': {
+              const text = message.data.text;
+              const title = await manager.generateTitle(text);
+              response = {
+                action: 'title_generated',
+                title: title
+              };
+            }
+              break;
              case 'generate_illustration': {
               const text = message.data.text;
               const image_generated = await manager.generateImageFromStory(text);

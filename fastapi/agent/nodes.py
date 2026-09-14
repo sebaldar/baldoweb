@@ -441,17 +441,34 @@ def _rileva_ritornello(testo: str) -> "str | None":
 _REDUPLICAZIONE_RE = re.compile(r"\b(\w+)[ ,]+\1\b(?![!?])", re.IGNORECASE)
 
 
-def _limita_reduplicazioni(testo: str, max_occorrenze: int = 1) -> str:
+def _limita_reduplicazioni(testo: str, ritornello: "str | None" = None, max_occorrenze: int = 1) -> str:
     """
     Riduce le reduplicazioni ritmiche oltre la prima consentita,
     collassando "parola parola" in "parola" — mantiene l'ordine e il
     resto del testo intatti, un fix mirato e deterministico, non
     un'altra istruzione nel prompt che il modello potrebbe ignorare.
+
+    Le reduplicazioni che fanno parte del RITORNELLO riconosciuto (es.
+    "Piccola piccola, dov'è finita?" — la reduplicazione È il suo
+    dispositivo ritmico) sono escluse dal conteggio e mai toccate: senza
+    questa esclusione, una reduplicazione "libera" comparsa prima nel
+    testo (es. "un problema grande grande") consuma l'unico slot
+    consentito e le due occorrenze del ritornello finiscono collassate
+    insieme a lei — osservato su un caso reale, dove "Piccola piccola,
+    dov'è finita?" diventava "Piccola, dov'è finita?" in entrambe le
+    sue occorrenze.
     """
+    protette = set()
+    if ritornello:
+        for m in _REDUPLICAZIONE_RE.finditer(ritornello):
+            protette.add(m.group(1).lower())
+
     contatore = 0
 
     def sostituisci(m):
         nonlocal contatore
+        if m.group(1).lower() in protette:
+            return m.group(0)
         contatore += 1
         if contatore <= max_occorrenze:
             return m.group(0)
@@ -495,7 +512,7 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
         ritornello=state.get("ritornello_atteso"),
     )
     return {
-        "racconto_finale": _limita_reduplicazioni(risultato.testo),
+        "racconto_finale": _limita_reduplicazioni(risultato.testo, ritornello=state.get("ritornello_atteso")),
         "llm_usage": [{
             "nodo": "rifinisci",
             "modello": risultato.modello,

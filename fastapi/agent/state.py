@@ -82,6 +82,11 @@ class BaldoState(TypedDict):
     # racconto finale (lista vuota se nessuno, o se non c'era nulla da
     # controllare).
     termini_kb_trapelati: List[str]
+    # Stima approssimativa (conteggio di "come" comparativi, non una vera
+    # analisi semantica) delle similitudini nel racconto finale — solo
+    # osservabilità per il report, non usata per correggere il testo: il
+    # tetto vero è la Regola 20 nel prompt di generazione.
+    similitudini_stimate: Optional[int]
 
     # --- MEMORIA ---
     storia_id: Optional[str]              

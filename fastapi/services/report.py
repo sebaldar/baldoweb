@@ -90,6 +90,12 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "tecnica_narrativa_kb": state.get("tecnica_narrativa_kb"),
             "archetipo_kb": state.get("archetipo_kb"),
             "termini_kb_trapelati": state.get("termini_kb_trapelati") or [],
+            # Stima approssimativa (conta i "come" comparativi, non una vera
+            # analisi semantica) per tracciare nel tempo se la Regola 20
+            # (massimo 2-3 similitudini per racconto) sta reggendo sui casi
+            # reali — solo osservabilità, il testo non viene mai corretto
+            # sulla base di questo numero.
+            "similitudini_stimate": state.get("similitudini_stimate"),
             # Contesto fisico usato per la storia: senza luogo/data/ora
             # i risultati meteo/astro da soli non si possono verificare
             # (es. per capire se la fase lunare riportata è plausibile).

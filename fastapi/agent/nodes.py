@@ -477,6 +477,31 @@ def _limita_reduplicazioni(testo: str, ritornello: "str | None" = None, max_occo
     return _REDUPLICAZIONE_RE.sub(sostituisci, testo or "")
 
 
+# Frasi con "come" quasi sempre non comparative, da escludere dal conteggio
+# (interrogative/idiomatiche, non similitudini).
+_COME_NON_COMPARATIVO = (
+    "come mai", "come stai", "come sta", "come va", "come si chiama",
+    "come ti chiami", "come faccio", "come fai", "come si fa",
+)
+
+
+def _conta_similitudini_approssimate(testo: str) -> int:
+    """
+    Stima approssimativa (non un'analisi semantica) di quante comparazioni
+    con "come" contiene il testo — serve solo a tracciare nel report se la
+    Regola 20 (massimo 2-3 similitudini per racconto) sta reggendo sui casi
+    reali, MAI a correggere il testo: "come" è troppo ambiguo in italiano
+    (comparativo, interrogativo, causale — "come mai", "come se", "come
+    stai") per un'edit automatica sicura, a differenza della reduplicazione
+    ("parola parola") che è un pattern inequivocabile.
+    """
+    testo_normalizzato = (testo or "").lower()
+    totale = len(re.findall(r"\bcome\b", testo_normalizzato))
+    for idioma in _COME_NON_COMPARATIVO:
+        totale -= testo_normalizzato.count(idioma)
+    return max(totale, 0)
+
+
 # ---------------------------------------------------------------------------
 # NODE 7-10 — Generazione e Rifinitura (Draft, Correzione, Rifinitura)
 # ---------------------------------------------------------------------------
@@ -511,8 +536,10 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
         eta=state["eta_bambino"],
         ritornello=state.get("ritornello_atteso"),
     )
+    racconto = _limita_reduplicazioni(risultato.testo, ritornello=state.get("ritornello_atteso"))
     return {
-        "racconto_finale": _limita_reduplicazioni(risultato.testo, ritornello=state.get("ritornello_atteso")),
+        "racconto_finale": racconto,
+        "similitudini_stimate": _conta_similitudini_approssimate(racconto),
         "llm_usage": [{
             "nodo": "rifinisci",
             "modello": risultato.modello,

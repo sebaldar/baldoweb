@@ -639,6 +639,19 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     istruita a restituire il testo invariato quando già coerente, un LLM
     tende comunque a "migliorarlo" — riscriveva domande già valide,
     vanificando lo scopo di un controllo mirato.
+
+    Alla fine, un quarto controllo indipendente: la Regola 20 in composer.py
+    (massimo 2-3 similitudini con "come" per racconto) è un vincolo di
+    CONTEGGIO — la stessa categoria di istruzione che i modelli seguono meno
+    bene di un divieto puntuale, e infatti su 4 storie reali consecutive non
+    ha retto (4-8 similitudini invece di 2-3). A differenza della
+    reduplicazione, qui non esiste un fix deterministico sicuro ("come" è
+    troppo ambiguo in italiano per un regex che tagli senza rischiare di
+    rovinare frasi che non sono affatto similitudini) — quindi, solo quando
+    il conteggio approssimativo supera la soglia, un editor dedicato
+    riscrive l'intero racconto per diradarle, con verifiche di sicurezza
+    (lunghezza comparabile, ritornello intatto) prima di accettare il
+    risultato.
     """
     logger.info("[NODE] verifica_coerenza_domanda")
 
@@ -738,71 +751,125 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
 
     if isinstance(risultato_check, Exception):
         logger.warning(f"[verifica_coerenza_domanda] Controllo fallito, mantengo il racconto originale: {risultato_check}")
-        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
+    else:
+        esito = risultato_check.testo
+        uso_llm.append({
+            "nodo": "verifica_coerenza_domanda.check",
+            "modello": risultato_check.modello,
+            "token_input": risultato_check.token_input,
+            "token_output": risultato_check.token_output,
+            "durata_secondi": round(risultato_check.durata_secondi, 2),
+        })
 
-    esito = risultato_check.testo
-    uso_llm.append({
-        "nodo": "verifica_coerenza_domanda.check",
-        "modello": risultato_check.modello,
-        "token_input": risultato_check.token_input,
-        "token_output": risultato_check.token_output,
-        "durata_secondi": round(risultato_check.durata_secondi, 2),
-    })
+        if esito and not esito.strip().upper().startswith("SI"):
+            # Chiediamo SOLO la nuova domanda, non l'intera favola riscritta:
+            # la versione precedente chiedeva la favola completa "copiando
+            # ogni paragrafo esattamente com'è" tranne l'ultima frase — in
+            # pratica una seconda riscrittura integrale (osservato: token in
+            # uscita quasi pari al draft e a rifinisci), con relativo costo
+            # e un'occasione in più di deriva sul testo che rifinisci aveva
+            # già sistemato. La domanda finale è quasi sempre il suo
+            # paragrafo — la sostituzione avviene qui, per codice, non
+            # chiedendo all'LLM di riprodurre tutto il resto.
+            system_fix = (
+                "Sei un revisore di favole per bambini in età prescolare. Leggi la "
+                "favola: la sua domanda finale NON è coerente (cita qualcosa che "
+                "non compare nella storia). Il tuo UNICO compito: scrivere una "
+                "NUOVA domanda finale, breve, rivolta al bambino, che parli di "
+                "personaggi o eventi che compaiono davvero nella storia — nello "
+                "stesso tono con cui il narratore si rivolge già al bambino nel "
+                "resto del testo. Rispondi ESCLUSIVAMENTE con la nuova domanda "
+                "finale (una frase sola): non riscrivere il resto della favola, "
+                "nessun commento, nessuna spiegazione."
+            )
+            try:
+                risultato_fix = await llm.chiedi(system=system_fix, user=racconto)
+                nuova_domanda = (risultato_fix.testo or "").strip()
+                uso_llm.append({
+                    "nodo": "verifica_coerenza_domanda.fix",
+                    "modello": risultato_fix.modello,
+                    "token_input": risultato_fix.token_input,
+                    "token_output": risultato_fix.token_output,
+                    "durata_secondi": round(risultato_fix.durata_secondi, 2),
+                })
+                # Rete di sicurezza adattata al nuovo formato: ci aspettiamo
+                # una singola frase breve, non più un testo lungo quanto
+                # l'originale. Se il modello ha comunque provato a restituire
+                # un testo lungo o multi-paragrafo, ha ignorato l'istruzione
+                # — meglio tenere l'originale con la domanda scorrelata che
+                # rischiare di incollare un frammento non affidabile.
+                if nuova_domanda and "\n\n" not in nuova_domanda and len(nuova_domanda) <= 400:
+                    racconto = _sostituisci_ultimo_paragrafo(racconto, nuova_domanda)
+                else:
+                    logger.warning(
+                        f"[verifica_coerenza_domanda] Risposta del fix non è la domanda "
+                        f"breve richiesta (lunghezza {len(nuova_domanda)}), mantengo il "
+                        f"racconto originale."
+                    )
+            except Exception as e:
+                logger.warning(f"[verifica_coerenza_domanda] Riscrittura fallita, mantengo il racconto originale: {e}")
 
-    if not esito or esito.strip().upper().startswith("SI"):
-        # coerente (o controllo ambiguo): non tocco nulla
-        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
-
-    # Chiediamo SOLO la nuova domanda, non l'intera favola riscritta: la
-    # versione precedente chiedeva la favola completa "copiando ogni
-    # paragrafo esattamente com'è" tranne l'ultima frase — in pratica una
-    # seconda riscrittura integrale (osservato: token in uscita quasi pari
-    # al draft e a rifinisci), con relativo costo e un'occasione in più di
-    # deriva sul testo che rifinisci aveva già sistemato. La domanda finale
-    # è quasi sempre il suo paragrafo — la sostituzione avviene qui, per
-    # codice, non chiedendo all'LLM di riprodurre tutto il resto.
-    system_fix = (
-        "Sei un revisore di favole per bambini in età prescolare. Leggi la "
-        "favola: la sua domanda finale NON è coerente (cita qualcosa che "
-        "non compare nella storia). Il tuo UNICO compito: scrivere una "
-        "NUOVA domanda finale, breve, rivolta al bambino, che parli di "
-        "personaggi o eventi che compaiono davvero nella storia — nello "
-        "stesso tono con cui il narratore si rivolge già al bambino nel "
-        "resto del testo. Rispondi ESCLUSIVAMENTE con la nuova domanda "
-        "finale (una frase sola): non riscrivere il resto della favola, "
-        "nessun commento, nessuna spiegazione."
-    )
-
-    try:
-        risultato_fix = await llm.chiedi(system=system_fix, user=racconto)
-        nuova_domanda = (risultato_fix.testo or "").strip()
-    except Exception as e:
-        logger.warning(f"[verifica_coerenza_domanda] Riscrittura fallita, mantengo il racconto originale: {e}")
-        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
-
-    uso_llm.append({
-        "nodo": "verifica_coerenza_domanda.fix",
-        "modello": risultato_fix.modello,
-        "token_input": risultato_fix.token_input,
-        "token_output": risultato_fix.token_output,
-        "durata_secondi": round(risultato_fix.durata_secondi, 2),
-    })
-
-    # Rete di sicurezza adattata al nuovo formato: ci aspettiamo una singola
-    # frase breve, non più un testo lungo quanto l'originale. Se il modello
-    # ha comunque provato a restituire un testo lungo o multi-paragrafo,
-    # ha ignorato l'istruzione — meglio tenere l'originale con la domanda
-    # scorrelata che rischiare di incollare un frammento non affidabile.
-    if not nuova_domanda or "\n\n" in nuova_domanda or len(nuova_domanda) > 400:
-        logger.warning(
-            f"[verifica_coerenza_domanda] Risposta del fix non è la domanda "
-            f"breve richiesta (lunghezza {len(nuova_domanda)}), mantengo il "
-            f"racconto originale."
+    # --- Controllo similitudini (Regola 20), indipendente dalla domanda ---
+    ritornello_atteso = state.get("ritornello_atteso")
+    similitudini = _conta_similitudini_approssimate(racconto)
+    SOGLIA_SIMILITUDINI = 3
+    if similitudini > SOGLIA_SIMILITUDINI:
+        vincolo_ritornello_sim = (
+            f"Il racconto usa questo ritornello, che deve restare IDENTICO, "
+            f"parola per parola, in ogni sua ripetizione: \"{ritornello_atteso}\". "
+            f"Non parafrasarlo, non correggerne lo stile, non rimuoverlo. "
+        ) if ritornello_atteso else ""
+        system_similitudini = (
+            "Sei un editor di favole per bambini in età prescolare. Il "
+            "racconto qui sotto usa troppe similitudini con \"come\" "
+            "(paragoni tipo \"grande come un pugno\", \"come se...\"). "
+            "Riscrivi il racconto intero riducendo le similitudini a un "
+            "massimo di 2-3 in tutto il testo — sostituisci le altre con "
+            "descrizioni dirette e concrete (es. \"le assicelle tremavano "
+            "al vento\" invece di \"tremavano come i denti di un vecchio "
+            "pettine\"). Non aggiungere né togliere eventi della trama, non "
+            "cambiare i personaggi, non toccare la cornice di apertura/"
+            "chiusura di Baldo né la domanda finale. "
+            f"{vincolo_ritornello_sim}"
+            "Rispondi ESCLUSIVAMENTE con il racconto riscritto per intero, "
+            "senza commenti né spiegazioni."
         )
-        return {"llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
+        try:
+            risultato_sim = await llm.chiedi(system=system_similitudini, user=racconto)
+            testo_corretto = (risultato_sim.testo or "").strip()
+            uso_llm.append({
+                "nodo": "verifica_coerenza_domanda.similitudini",
+                "modello": risultato_sim.modello,
+                "token_input": risultato_sim.token_input,
+                "token_output": risultato_sim.token_output,
+                "durata_secondi": round(risultato_sim.durata_secondi, 2),
+            })
+            # Rete di sicurezza: una riscrittura integrale è più rischiosa
+            # della sostituzione dell'ultimo paragrafo sopra — un testo
+            # troppo corto/lungo rispetto all'originale, o che ha perso il
+            # ritornello, è il segnale che qualcosa è andato storto: meglio
+            # tenere l'originale con troppe similitudini che un testo
+            # danneggiato.
+            lunghezza_ok = bool(testo_corretto) and 0.5 * len(racconto) <= len(testo_corretto) <= 1.6 * len(racconto)
+            ritornello_ok = (not ritornello_atteso) or (ritornello_atteso.lower() in testo_corretto.lower())
+            if lunghezza_ok and ritornello_ok:
+                racconto = _limita_reduplicazioni(testo_corretto, ritornello=ritornello_atteso)
+            else:
+                logger.warning(
+                    f"[verifica_coerenza_domanda] Riscrittura similitudini scartata "
+                    f"(lunghezza_ok={lunghezza_ok}, ritornello_ok={ritornello_ok}), "
+                    f"mantengo il racconto originale."
+                )
+        except Exception as e:
+            logger.warning(f"[verifica_coerenza_domanda] Riduzione similitudini fallita, mantengo il racconto originale: {e}")
 
-    corretto = _sostituisci_ultimo_paragrafo(racconto, nuova_domanda)
-    return {"racconto_finale": corretto, "llm_usage": uso_llm, "nome_presente_in_output": nome_presente, "termini_kb_trapelati": termini_trapelati}
+    return {
+        "racconto_finale": racconto,
+        "similitudini_stimate": _conta_similitudini_approssimate(racconto),
+        "llm_usage": uso_llm,
+        "nome_presente_in_output": nome_presente,
+        "termini_kb_trapelati": termini_trapelati,
+    }
 
 # ---------------------------------------------------------------------------
 # NODE 11 — Salvataggio memoria

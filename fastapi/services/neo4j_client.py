@@ -96,7 +96,7 @@ class Neo4jClient:
                      END AS match_eta
                 RETURN f.id AS id, f.text AS testo, f.setting AS ambientazione,
                        f.tecnica_narrativa AS tecnica_narrativa, f.domanda AS domanda,
-                       f.ritornello AS ritornello,
+                       f.ritornello AS ritornello, f.archetipo AS archetipo,
                        (match_p * 2 + match_e + match_t + match_eta) AS score
                 ORDER BY score DESC, rand()
                 LIMIT $limit
@@ -124,7 +124,7 @@ class Neo4jClient:
                 WHERE toLower(f.setting) CONTAINS toLower($keyword)
                 RETURN f.id AS id, f.text AS testo, f.setting AS ambientazione,
                        f.tecnica_narrativa AS tecnica_narrativa, f.domanda AS domanda,
-                       f.ritornello AS ritornello,
+                       f.ritornello AS ritornello, f.archetipo AS archetipo,
                        CASE
                          WHEN $eta_bambino IS NULL OR f.fascia_eta IS NULL THEN 0
                          WHEN $eta_bambino >= toInteger(trim(split(f.fascia_eta, '-')[0]))

@@ -385,7 +385,7 @@ class StoryComposer:
         prompt_finale = f"""
 {self.base_instruction}
 
-CONTESTO REALE (Usa questi dettagli per l'ambientazione):
+CONTESTO REALE (Usa questi dettagli per l'ambientazione — sono ispirazione per TE, l'autore: non copiare mai le frasi qui sotto alla lettera nel racconto, riformulale sempre con parole tue e nella voce di Baldo):
 - Luogo: {luogo}
 - Data e Ora: {data} alle {ora}
 - Meteo attuale: {meteo}

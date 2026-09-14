@@ -312,6 +312,26 @@ class StoryComposer:
                     "la trama. Non introdurre altri pianeti o stelle solo "
                     "perché presenti nei dati — la Luna basta."
                 )
+            else:
+                # Assenza esplicita, non silenzio: senza questa frase il
+                # modello, davanti a un prompt che chiede di "guardare il
+                # cielo e cercare la luna", risolve la tensione a favore del
+                # prompt e ne inventa comunque una visibile (osservato in
+                # una storia reale: "vide luccicare... era lei, la luna",
+                # con fase_luna "non visibile" nei dati). Il vincolo riguarda
+                # solo il cielo reale: se il prompt insiste, la luna può
+                # comparire in altro modo, non come bugia sul cielo.
+                descrizione_cielo += (
+                    " La Luna oggi NON è visibile in cielo (è sotto "
+                    "l'orizzonte o troppo vicina al sole): un personaggio "
+                    "che guarda in alto non la trova, e la storia non deve "
+                    "far finta che ci sia. Se il prompt dell'utente chiede "
+                    "comunque di cercarla o seguirla, non ignorare la "
+                    "richiesta e non falsificare il cielo: trasformala "
+                    "narrativamente — un riflesso nell'acqua, un ricordo, "
+                    "la promessa che tornerà stasera — così il bambino ha "
+                    "comunque la sua luna, ma il cielo raccontato resta vero."
+                )
 
         # --- NUMERO DI INGANNI/SVOLTE SCALATO SULL'ETÀ ---
         # Osservato: una storia con 3 inganni in sequenza, ognuno con il suo

@@ -313,6 +313,19 @@ _RITORNELLO_MIN_PAROLE = 4
 
 _PUNTEGGIATURA_BORDO_RE = re.compile(r"^[«»\"'“”,.:;!?]+|[«»\"'“”,.:;!?]+$")
 
+# Confine di CHIUSURA DI UNA BATTUTA VIRGOLETTATA (non punteggiatura forte
+# in generale: un ritornello narrato, non in discorso diretto, può
+# legittimamente attraversare un "!" o un "?" interni — es. "Drin drin!
+# Pronto? Una storia piccola piccola" è un unico ritornello valido, non va
+# troncato al primo "!"). Solo la chiusura di un dialogo (» " ”) segna un
+# confine affidabile: dopo una battuta chiusa, il testo che segue è
+# narrazione libera, non più parte del ritornello — osservato su un caso
+# reale dove "«Anch'io ho un'idea piccola!» e propose..." (ripetuto per
+# ogni personaggio con finale diverso dopo "propose") veniva incluso per
+# intero nel ritornello rilevato, perché le occorrenze coincidevano anche
+# lì per puro caso di template narrativo.
+_TERMINALE_RE = re.compile(r"[»”\"]$")
+
 
 def _parola_normalizzata(parola: str) -> str:
     return _PUNTEGGIATURA_BORDO_RE.sub("", parola).lower()
@@ -320,9 +333,9 @@ def _parola_normalizzata(parola: str) -> str:
 
 def _rileva_ritornello(testo: str) -> "str | None":
     """
-    Cerca la sequenza di parole più lunga che si ripete almeno 2 volte nel
-    testo (almeno _RITORNELLO_MIN_PAROLE parole) — più affidabile che
-    fidarsi del campo "ritornello" del frammento KB: quel testo può
+    Cerca la sequenza di parole che si ripete più volte nel testo (almeno
+    _RITORNELLO_MIN_PAROLE parole, almeno 2 occorrenze) — più affidabile
+    che fidarsi del campo "ritornello" del frammento KB: quel testo può
     contenere un nome proprio specifico della fiaba d'origine (es.
     "Mangiafuoco") che il draft, lasciato libero di scrivere, sostituisce
     già con i personaggi della propria trama. Imporre il testo del
@@ -337,30 +350,79 @@ def _rileva_ritornello(testo: str) -> "str | None":
     ("qui!\" E Marco...") che spezzava la frase nel punto sbagliato. I
     confini di frase in una prosa piena di dialoghi sono troppo fragili
     per un regex su ".!?"; i confini di parola no.
+
+    Valuta TUTTI gli n-grammi ripetuti nel testo, non solo il primo che
+    compare (versione precedente): su una storia reale, il nome di un
+    personaggio ripetuto per riferirsi a lui ("il cavallo a dondolo",
+    2 occorrenze) compariva prima nel testo del vero ritornello voluto
+    dal draft ("Anch'io ho un'idea piccola!", 3 occorrenze identiche nei
+    momenti chiave) — restituire il primo match trovato "rubava" la
+    rilevazione al ritornello vero. Ora si raccolgono tutti i candidati e
+    si preferisce quello con più occorrenze (a parità, il più lungo): un
+    nome di personaggio ricorre quasi sempre meno volte di un ritornello
+    deliberato, che per istruzione va ripetuto 2-3 volte apposta.
     """
     parole = re.findall(r"\S+", testo or "")
     n = _RITORNELLO_MIN_PAROLE
     if len(parole) < n * 2:
         return None
 
-    visti = {}
+    normalizzate = [_parola_normalizzata(p) for p in parole]
+
+    posizioni: dict = {}
     for i in range(len(parole) - n + 1):
-        chiave = tuple(_parola_normalizzata(p) for p in parole[i:i + n])
+        chiave = tuple(normalizzate[i:i + n])
         if not all(chiave):  # n-gramma con solo punteggiatura in qualche slot
             continue
-        if chiave in visti:
-            j = visti[chiave]
-            # Estende la ripetizione oltre le n parole minime, finché le due
-            # occorrenze continuano a coincidere parola per parola.
-            k = n
-            while (
-                i + k < len(parole) and j + k < i
-                and _parola_normalizzata(parole[i + k]) == _parola_normalizzata(parole[j + k])
-            ):
-                k += 1
-            return " ".join(parole[i:i + k]).strip("«»\"'“”,.:;!? ")
-        visti.setdefault(chiave, i)
-    return None
+        posizioni.setdefault(chiave, []).append(i)
+
+    candidati = []  # (occorrenze, lunghezza_parole, testo)
+    for chiave, idxs in posizioni.items():
+        if len(idxs) < 2:
+            continue
+        # Estende la ripetizione oltre le n parole minime, usando le prime
+        # due occorrenze, finché le due sequenze continuano a coincidere.
+        j, i = idxs[0], idxs[1]
+        k = n
+        while (
+            i + k < len(parole) and j + k < i
+            and normalizzate[i + k] == normalizzate[j + k]
+        ):
+            k += 1
+
+        # Tronca al primo confine di frase/battuta trovato DENTRO la
+        # sequenza — anche se cade a metà della finestra minima di n
+        # parole. Senza questo, una finestra "sfalsata" di una parola che
+        # parte proprio dopo l'inizio di una battuta (es. "ho un'idea
+        # piccola!» e propose" invece di "Anch'io ho un'idea piccola!")
+        # può risultare più lunga e vincere il confronto, pur scavalcando
+        # la punteggiatura che chiude la battuta vera — osservato su una
+        # storia reale. Un ritornello è un'unità autonoma (una frase, una
+        # battuta), non deve scavalcarla né iniziare a metà.
+        confine = None
+        for m in range(k):
+            if _TERMINALE_RE.search(parole[i + m]):
+                confine = m
+                break
+        if confine is not None:
+            k = confine + 1
+        if k < n:
+            continue  # troppo corto dopo il taglio: non è un candidato valido
+
+        chiave_estesa = tuple(normalizzate[i:i + k])
+        occorrenze = sum(
+            1 for start in range(len(parole) - k + 1)
+            if tuple(normalizzate[start:start + k]) == chiave_estesa
+        )
+        testo_candidato = " ".join(parole[i:i + k]).strip("«»\"'“”,.:;!? ")
+        if testo_candidato:
+            candidati.append((occorrenze, k, testo_candidato))
+
+    if not candidati:
+        return None
+
+    candidati.sort(key=lambda c: (c[0], c[1]), reverse=True)
+    return candidati[0][2]
 
 
 # ---------------------------------------------------------------------------

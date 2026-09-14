@@ -203,6 +203,24 @@ class StoryComposer:
                 "dentro il racconto (mai scrivere frasi come \"ed ecco il "
                 f"{tecnica_narrativa}\" — applica la tecnica, non nominarla).\n"
             )
+            if tecnica_narrativa.strip().lower() == "accumulazione":
+                # Osservato: con più personaggi/compiti da coordinare, il
+                # modello tende a risolverli in parallelo e in modo identico
+                # ("lumaca: problema → soluzione. grillo: problema →
+                # soluzione. topolino: problema → soluzione.") — leggibile,
+                # ma piatto: sembra una lista spuntata, non una storia dove
+                # le cose si influenzano a vicenda.
+                sezione_tecnica += (
+                    "L'accumulazione non deve ridursi alla semplice "
+                    "enumerazione di elementi o compiti risolti uno per uno, "
+                    "in modo identico e indipendente l'uno dall'altro. Gli "
+                    "elementi introdotti devono, quando possibile, "
+                    "modificare progressivamente la situazione e interagire "
+                    "tra loro (un compito che va storto complica un altro, "
+                    "un personaggio interrompe o aiuta un altro senza "
+                    "essere stato richiesto) — non tre episodi paralleli "
+                    "che si concludono ciascuno per conto proprio.\n"
+                )
 
         # --- COSTRUZIONE SEZIONE DOMANDA FINALE ---
         domanda_finale = frammento_primario.get("domanda")
@@ -464,6 +482,7 @@ REGOLE DI GENERAZIONE:
 16. La TECNICA NARRATIVA indicata sopra deve arricchire la sequenza di eventi che il prompt richiede esplicitamente, non prenderne il posto. Se il prompt descrive un'azione o una sequenza precisa (es. "osserva X, seguilo, attraversa Y"), quella resta il nucleo della trama dall'inizio alla fine; la tecnica va applicata DENTRO quella sequenza (nel modo in cui viene raccontata, in una svolta, in un dettaglio), non usata per introdurre una deviazione che finisce per diventare il centro della storia al posto dell'azione richiesta.
 17. La reduplicazione ritmica di una parola (es. "piccola piccola", "forte forte", "vicino vicino") è una tecnica legittima — non evitarla del tutto — ma sta diventando un tic se ricorre più di una volta nello stesso racconto: usala AL MASSIMO una volta in tutta la storia, nel punto che la merita di più. Per esprimere intensità o vicinanza altrove, trova un modo diverso ogni volta (un paragone, un dettaglio concreto, il ritmo della frase stessa) invece di ricadere sempre sullo stesso trucco.
 18. Il protagonista (o chi aiuta gli altri nella storia) non deve risultare perfettamente paziente, saggio e infallibile con tutti i personaggi che incontra. Se aiuta più personaggi in sequenza, evita lo schema meccanico "personaggio ha un problema → il protagonista offre subito la soluzione giusta", ripetuto identico per ciascuno — un bambino non se ne accorge consapevolmente, ma il risultato suona costruito, non raccontato. Varia invece la reazione da un personaggio all'altro: un'esitazione, una battuta, un piccolo errore che poi corregge, un momento di stanchezza o di insofferenza vera (anche solo un attimo) prima di aiutare comunque. Non deve diventare un personaggio-guida infallibile: un'imperfezione piccola e umana lo rende più vero.
+19. Preferisci sempre mostrare un'emozione attraverso comportamento, dialogo, esitazione o reazione fisica, invece di dichiararla direttamente. Non scrivere "Marco era molto triste perché aveva paura di perdere il suo amico" — scrivi cosa fa Marco (abbassa gli occhi, non risponde subito, stringe qualcosa tra le mani) e lascia che il bambino capisca da solo cosa sta provando. Vale anche per le emozioni positive (sorpresa, gioia, sollievo): un'azione concreta comunica di più di un aggettivo che la nomina.
 
 GENERA IL RACCONTO:
 """

@@ -425,6 +425,41 @@ def _rileva_ritornello(testo: str) -> "str | None":
     return candidati[0][2]
 
 
+# Reduplicazione ritmica ("piano piano", "forte forte", "bene bene"): la
+# Regola 17 in composer.py chiede al modello di usarla al massimo una
+# volta per racconto, ma è un vincolo di CONTEGGIO — la stessa categoria
+# di istruzione che i modelli seguono meno bene di un divieto puntuale su
+# una frase specifica (osservato: 3 occorrenze in una storia reale
+# nonostante l'istruzione). Corretto qui in modo deterministico invece di
+# insistere solo a livello di prompt.
+#
+# Il "(?![!?])" esclude le onomatopee ("Toc toc!", "Drin drin!" — un
+# dispositivo diverso e legittimo, già protetto come ritornello): si
+# riconoscono perché il "!"/"?" segue subito la parola ripetuta, a
+# differenza di una reduplicazione aggettivale/avverbiale che continua la
+# frase con una virgola o il resto del periodo.
+_REDUPLICAZIONE_RE = re.compile(r"\b(\w+)[ ,]+\1\b(?![!?])", re.IGNORECASE)
+
+
+def _limita_reduplicazioni(testo: str, max_occorrenze: int = 1) -> str:
+    """
+    Riduce le reduplicazioni ritmiche oltre la prima consentita,
+    collassando "parola parola" in "parola" — mantiene l'ordine e il
+    resto del testo intatti, un fix mirato e deterministico, non
+    un'altra istruzione nel prompt che il modello potrebbe ignorare.
+    """
+    contatore = 0
+
+    def sostituisci(m):
+        nonlocal contatore
+        contatore += 1
+        if contatore <= max_occorrenze:
+            return m.group(0)
+        return m.group(1)
+
+    return _REDUPLICAZIONE_RE.sub(sostituisci, testo or "")
+
+
 # ---------------------------------------------------------------------------
 # NODE 7-10 — Generazione e Rifinitura (Draft, Correzione, Rifinitura)
 # ---------------------------------------------------------------------------
@@ -460,7 +495,7 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
         ritornello=state.get("ritornello_atteso"),
     )
     return {
-        "racconto_finale": risultato.testo,
+        "racconto_finale": _limita_reduplicazioni(risultato.testo),
         "llm_usage": [{
             "nodo": "rifinisci",
             "modello": risultato.modello,

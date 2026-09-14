@@ -321,16 +321,36 @@ class StoryComposer:
                 # con fase_luna "non visibile" nei dati). Il vincolo riguarda
                 # solo il cielo reale: se il prompt insiste, la luna può
                 # comparire in altro modo, non come bugia sul cielo.
+                #
+                # Prima versione di questa regola offriva 3 alternative alla
+                # pari (riflesso/ricordo/promessa per stasera): il modello ha
+                # scelto quella più comoda da scrivere (promessa per dopo),
+                # che risolve il conflitto astronomico ma abbandona
+                # un'azione che il prompt chiedeva esplicitamente (in un
+                # caso reale: "seguila e attraversa il lago" — con la
+                # "promessa per stasera" quell'attraversamento non avviene
+                # più). La priorità va quindi decisa in base a COSA chiede
+                # il prompt, non fissata una volta per tutte sulla luna: se
+                # l'utente vuole un'azione con l'oggetto assente, la
+                # soluzione deve permettere che quell'azione avvenga
+                # comunque, non solo evocarlo.
                 descrizione_cielo += (
                     " La Luna oggi NON è visibile in cielo (è sotto "
                     "l'orizzonte o troppo vicina al sole): un personaggio "
                     "che guarda in alto non la trova, e la storia non deve "
                     "far finta che ci sia. Se il prompt dell'utente chiede "
-                    "comunque di cercarla o seguirla, non ignorare la "
-                    "richiesta e non falsificare il cielo: trasformala "
-                    "narrativamente — un riflesso nell'acqua, un ricordo, "
-                    "la promessa che tornerà stasera — così il bambino ha "
-                    "comunque la sua luna, ma il cielo raccontato resta vero."
+                    "comunque di cercarla, non ignorare la richiesta e non "
+                    "falsificare il cielo: trasformala narrativamente. Se il "
+                    "prompt chiede solo di vederla o menzionarla, un ricordo "
+                    "o la promessa che tornerà stasera bastano. Ma se il "
+                    "prompt chiede un'AZIONE che coinvolge la luna — "
+                    "seguirla, raggiungerla, orientarsi con lei, parlarle — "
+                    "scegli una soluzione che permetta quell'azione di "
+                    "avvenire comunque (es. una traccia luminosa, un "
+                    "riflesso che si muove e si può seguire davvero): "
+                    "rimandare l'incontro a un altro momento la farebbe "
+                    "sparire dalla trama, e quell'azione richiesta non "
+                    "accadrebbe più."
                 )
 
         # --- NUMERO DI INGANNI/SVOLTE SCALATO SULL'ETÀ ---
@@ -381,7 +401,7 @@ FRAMMENTI DI TRAMA DAL DATABASE:
 {sezione_tecnica}{sezione_ritornello}{sezione_domanda}
 REGOLE DI GENERAZIONE:
 1. Rivolgiti al bambino con dolcezza.
-2. Se la storia è ambientata all'aperto, o il prompt fa in qualche modo riferimento al cielo, al meteo o a un momento preciso della giornata, apri menzionando cosa Baldo vede davvero dalla sua torre a {luogo} in questo momento (leggi la sezione Cielo sopra: se è giorno, niente stelle). Se invece la storia si svolge interamente al chiuso o in un contesto dove il cielo non c'entra nulla (es. un oggetto animato in una stanza, un salone, una cameretta), tieni l'apertura di Baldo breve — un saluto naturale e uno o due dettagli concreti, anche solo un accenno rapido al meteo se viene spontaneo — senza costruire un intero paragrafo di cielo scollegato da quello che state per raccontare. In ogni caso, quello che il prompt dell'utente chiede esplicitamente viene sempre prima della cornice di Baldo, mai il contrario.
+2. L'apertura di Baldo resta breve in ogni caso — una o due frasi, mai un intero paragrafo di cielo prima che la storia cominci davvero. Se la storia è ambientata all'aperto, o il prompt fa in qualche modo riferimento al cielo, al meteo o a un momento preciso della giornata, la frase d'apertura può accennare a cosa Baldo vede davvero dalla sua torre a {luogo} in questo momento (leggi la sezione Cielo sopra: se è giorno, niente stelle) — UN dettaglio scelto, non un elenco di tutto quello che c'è in cielo. Se invece la storia si svolge interamente al chiuso o in un contesto dove il cielo non c'entra nulla (es. un oggetto animato in una stanza, un salone, una cameretta), un saluto naturale basta, con al massimo un accenno rapido al meteo se viene spontaneo. In entrambi i casi varia i dettagli concreti che scegli da una storia all'altra — non tornare sempre sulla stessa manciata di immagini (la torre, "non c'è nemmeno una nuvola", il sole come una caramella). In ogni caso, quello che il prompt dell'utente chiede esplicitamente viene sempre prima della cornice di Baldo, mai il contrario.
 3. La lunghezza deve essere {kwargs.get('lunghezza', 'media')}.
 4. Rispondi esclusivamente in lingua: {kwargs.get('lingua', 'Italiano')}.
 5. Età del bambino: {kwargs.get('eta_bambino', 4)} anni (usa un vocabolario appropriato).
@@ -395,6 +415,7 @@ REGOLE DI GENERAZIONE:
 13. Se un personaggio pone una condizione esplicita in un dialogo (es. "non uscirò finché non mi porti X", "ti aiuterò solo se..."), la trama deve poi affrontarla chiaramente: risolta com'è stata posta, sostituita da un'alternativa che il personaggio accetta esplicitamente, o lasciata cadere con un motivo raccontato — mai abbandonata in silenzio, con la storia che prosegue come se non fosse mai stata detta.
 14. La domanda finale deve restare dentro l'esperienza concreta del protagonista, mai diventare una riflessione astratta su percezione, identità o cambiamento (evita domande come "è cambiato lui davvero, o è cambiato il modo in cui lo guardavi?" — un ragionamento di secondo livello troppo concettuale per {eta_bambino} anni). Preferisci una domanda che il bambino risponde pensando a cosa avrebbe fatto lui, o a cosa succede dopo, restando nei panni del protagonista (es. "Tu avresti avuto il coraggio di parlargli?", "Secondo te, potrebbero diventare amici?").
 15. Se un antagonista o un ostacolo minaccioso si ammorbidisce, non farlo cedere dopo un solo scambio di battute (una richiesta gentile e subito "va bene, passa pure" è troppo rapido, indebolisce sia l'antagonista che il coraggio del protagonista): costruisci prima un piccolo momento di esitazione o resistenza — il protagonista ha paura, pensa al motivo per cui è lì, fa comunque un passo avanti — e solo dopo l'antagonista si ferma e ascolta davvero.
+16. La TECNICA NARRATIVA indicata sopra deve arricchire la sequenza di eventi che il prompt richiede esplicitamente, non prenderne il posto. Se il prompt descrive un'azione o una sequenza precisa (es. "osserva X, seguilo, attraversa Y"), quella resta il nucleo della trama dall'inizio alla fine; la tecnica va applicata DENTRO quella sequenza (nel modo in cui viene raccontata, in una svolta, in un dettaglio), non usata per introdurre una deviazione che finisce per diventare il centro della storia al posto dell'azione richiesta.
 
 GENERA IL RACCONTO:
 """

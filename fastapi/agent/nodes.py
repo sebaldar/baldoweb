@@ -71,7 +71,31 @@ async def analizza_prompt(state: BaldoState, llm: LLMRouter) -> dict:
 # ---------------------------------------------------------------------------
 async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] valuta_prompt")
-    system = """Sei un supervisore di storie per bambini. Valuta se il prompt è adeguato.
+    # Scoping esplicito dopo un caso reale: senza criteri, il giudice si
+    # inventava da solo standard che non gli competono — es. bocciava "guarda
+    # la luna a mezzogiorno" per implausibilità astronomica (valutata "a
+    # mano", senza i dati reali che ha invece composer.py più a valle) o
+    # "supera tre ostacoli" per trama non abbastanza specifica (compito di
+    # genera_draft, non dell'utente). Risultato misurato: stesso prompt,
+    # 5 rifiuti su 8 tentativi identici — incoerente perché il criterio non
+    # era mai stato definito, non perché il prompt fosse davvero borderline.
+    system = """Sei un supervisore di SICUREZZA per storie destinate a bambini.
+    Il tuo UNICO compito è verificare che il prompt non contenga contenuti
+    inadatti a un bambino: violenza esplicita o realistica, paura/orrore
+    genuino, temi sessuali, autolesionismo, odio o discriminazione, o
+    qualunque cosa un genitore troverebbe inaccettabile in un racconto per
+    l'infanzia.
+
+    NON è compito tuo valutare:
+    - la plausibilità fisica o astronomica di quello che l'utente chiede
+      (es. "guardare la luna a mezzogiorno"): un modulo dedicato più a valle
+      controlla i dati reali del cielo e adatta la storia di conseguenza —
+      tu non hai questi dati, non provare a indovinarli;
+    - quanto la trama sia dettagliata o specifica: un prompt che lascia
+      dettagli da inventare (es. "supera tre ostacoli" senza dire quali) è
+      normale e atteso, non un difetto — inventarli è il lavoro del
+      narratore, non dell'utente.
+
     Rispondi SOLO JSON: {"chiaro": true/false, "motivo": "..."}"""
     
     risultato = await llm.chiedi(

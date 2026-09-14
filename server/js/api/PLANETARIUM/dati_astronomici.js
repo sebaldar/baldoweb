@@ -50,36 +50,73 @@ export default {
         }
 
 // 2. SEMPLIFICAZIONE NARRATIVA
+        //
+        // NOTA sulla fase lunare: "elongation_deg" dal motore C++ è la
+        // differenza grezza di ascensione retta (luna - sole), NON
+        // normalizzata in [0°,360°) e trattata a lungo come se fosse
+        // un'elongazione assoluta 0-180°. Due difetti, corretti qui:
+        // 1) senza normalizzazione, per circa metà delle configurazioni
+        //    reali il valore esce dal range 0-180 atteso (può essere molto
+        //    negativo o >180), e la fase non veniva assegnata affatto
+        //    (restava "non visibile" per il fallback, anche a luna piena).
+        // 2) un valore assoluto non distingue mai crescente da calante:
+        //    normalizzando in [0°,360°) invece, il segno si conserva —
+        //    0°=nuova, 90°=primo quarto, 180°=piena, 270°=ultimo quarto,
+        //    esattamente la convenzione standard di "fase lunare".
+        const elongazioneNormalizzata = (deg) => ((deg % 360) + 360) % 360;
+
+        const FASE_LUNA_NUOVA_SOGLIA = 10; // gradi di elongazione entro cui la luna è troppo vicina al sole per essere vista
+
+        // Frazione illuminata dall'angolo di fase (approssimazione standard,
+        // errore trascurabile per la Luna: il Sole è ~390 volte più lontano
+        // della Luna). 0°=nuova→0%, 90°=primo quarto→50%, 180°=piena→100%,
+        // esattamente la stessa parametrizzazione già usata per "fase" sopra.
+        // Perché conta oltre alla fase testuale: a 15° di elongazione
+        // (già fuori dalla soglia di "nuova invisibile") l'illuminazione è
+        // solo ~1,7%, un filo sottilissimo — a 70° (ancora "Crescente") è
+        // già il 41%, una mezzaluna ben visibile. "Crescente" da solo non
+        // distingue i due casi.
+        const illuminazionePercento = (elonDeg) =>
+            Math.round((1 - Math.cos(elonDeg * Math.PI / 180)) / 2 * 100);
+
         const simplified_bodies = (raw_json.bodies || [])
-            .filter(b => b.visible === true)
             .map(b => {
+                let elonNorm = null;
+                let fase = null;
+                let eNuova = false;
+                let illuminazione = null;
+                if (b.name === "luna") {
+                    elonNorm = elongazioneNormalizzata(b.elongation_deg);
+                    eNuova = elonNorm < FASE_LUNA_NUOVA_SOGLIA || elonNorm > 360 - FASE_LUNA_NUOVA_SOGLIA;
+                    illuminazione = illuminazionePercento(elonNorm);
+                    if (eNuova) fase = "Nuova (invisibile)";
+                    else if (elonNorm < 80) fase = "Crescente";
+                    else if (elonNorm < 100) fase = "Primo Quarto";
+                    else if (elonNorm < 170) fase = "Gibbosa Crescente";
+                    else if (elonNorm <= 190) fase = "Piena";
+                    else if (elonNorm < 260) fase = "Gibbosa Calante";
+                    else if (elonNorm < 280) fase = "Ultimo Quarto";
+                    else fase = "Calante";
+                }
+                return { body: b, fase, eNuova, illuminazione };
+            })
+            // Una luna nuova non si vede a occhio nudo (troppo vicina al
+            // sole nel cielo) anche se geometricamente sopra l'orizzonte —
+            // il flag "visible" del motore C++ guarda solo l'altezza.
+            .filter(({ body, eNuova }) => body.visible === true && !eNuova)
+            .map(({ body: b, fase, illuminazione }) => {
                 const alt = b.altitude_deg;
                 let posizione = "all'orizzonte";
                 if (alt > 20) posizione = "nel cielo";
                 if (alt > 50) posizione = "alto sopra la testa";
-
-                let info_extra = {};
-                
-                // CALCOLO FASE LUNARE basato su elongation_deg
-                if (b.name === "luna") {
-                    const elon = b.elongation_deg;
-                    let fase = "";
-                    if (elon < 10) fase = "Nuova (invisibile)";
-                    else if (elon < 80) fase = "Crescente";
-                    else if (elon < 100) fase = "Primo Quarto";
-                    else if (elon < 170) fase = "Gibbosa Crescente";
-                    else if (elon <= 180) fase = "Piena";
-                    // Nota: per distinguere calante/crescente servirebbe sapere se l'elongazione aumenta o diminuisce, 
-                    // ma per una fiaba "Crescente/Piena" è già un ottimo dettaglio.
-                    info_extra.fase = fase;
-                }
 
                 return {
                     nome: b.name.charAt(0).toUpperCase() + b.name.slice(1),
                     posizione_testuale: posizione,
                     altezza_deg: Math.round(alt),
                     costellazione: b.constellation,
-                    ...info_extra, // Aggiunge la fase solo se è la luna
+                    ...(fase ? { fase } : {}),
+                    ...(illuminazione !== null ? { illuminazione_percento: illuminazione } : {}),
                     stelle_vicine: (b.constellation_stars || []).slice(0, 2)
                 };
             });

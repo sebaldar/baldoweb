@@ -7,6 +7,8 @@ session/
 server/logs/*.log
 server/logs/out*
 server/logs/err*
+fastapi/logs/
+fastapi/stories/
 server/*.tar.gz
 server/config.json
 

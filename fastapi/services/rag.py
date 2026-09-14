@@ -33,14 +33,25 @@ class RAGExtractor:
         self.llm = llm
 
     async def analizza(self, prompt: str) -> dict:
-        risposta = await self.llm.chiedi(
+        risultato = await self.llm.chiedi(
             system=SYSTEM_ANALISI,
             user=f"Analizza questo prompt: {prompt}",
         )
+        # Riportato dentro il dict (chiave "_uso_llm") invece di cambiare la
+        # firma in una tupla: il chiamante (analizza_prompt) lo estrae per il
+        # report YAML della storia, tutti gli altri consumer ignorano una
+        # chiave in più senza modifiche.
+        uso_llm = {
+            "nodo": "analizza_prompt",
+            "modello": risultato.modello,
+            "token_input": risultato.token_input,
+            "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2),
+        }
 
         try:
             # Pulizia markdown e spazi
-            testo = risposta.strip().strip("```json").strip("```").strip()
+            testo = risultato.testo.strip().strip("```json").strip("```").strip()
             analisi = json.loads(testo)
 
             # Normalizzazione con fallback
@@ -50,7 +61,8 @@ class RAGExtractor:
                 "ambientazione": analisi.get("ambientazione") or "un posto magico",
                 "luogo": analisi.get("luogo"),
                 "data_storia": analisi.get("data_storia"),
-                "ora_storia": analisi.get("ora_storia")
+                "ora_storia": analisi.get("ora_storia"),
+                "_uso_llm": uso_llm,
             }
 
         except Exception as e:
@@ -61,5 +73,6 @@ class RAGExtractor:
                 "ambientazione": "un posto magico",
                 "luogo": None,
                 "data_storia": None,
-                "ora_storia": None
+                "ora_storia": None,
+                "_uso_llm": uso_llm,
             }

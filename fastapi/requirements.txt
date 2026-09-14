@@ -27,3 +27,6 @@ dateparser
 
 # Utility per il fuso orario (Necessario per sincronizzare Astro e Meteo)
 pytz
+
+# Report YAML amministrativo per ogni storia generata
+pyyaml

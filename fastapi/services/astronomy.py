@@ -7,9 +7,14 @@ Supporta coordinate geografiche e timestamp storici.
 
 import logging
 import httpx
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+FUSO_UTENZA = ZoneInfo("Europe/Rome")
+UTC = ZoneInfo("UTC")
 
 class AstronomyClient:
     def __init__(self, http_client: httpx.AsyncClient):
@@ -34,12 +39,33 @@ class AstronomyClient:
             
             if lat is not None and lon is not None:
                 params.update({"lat": lat, "lon": lon})
-            
+
+            # data_storia/ora_storia sono in ora locale Europe/Rome (l'utenza
+            # dell'app), ma il motore C++ tratta l'input come già UTC senza
+            # convertirlo (verificato nel sorgente: WSsrv.cpp lo interpreta
+            # come UTC a meno di non passargli esplicitamente il flag "DT",
+            # cosa che il servizio Node non fa). Va convertito qui: altrimenti
+            # il cielo calcolato è sfasato di 1-2 ore (CET/CEST) rispetto a
+            # quello reale visto dall'utente.
+            if data_storia and ora_storia:
+                try:
+                    locale_dt = datetime.strptime(
+                        f"{data_storia} {ora_storia}", "%d-%m-%Y %H:%M:%S"
+                    ).replace(tzinfo=FUSO_UTENZA)
+                    utc_dt = locale_dt.astimezone(UTC)
+                    data_storia = utc_dt.strftime("%d-%m-%Y")
+                    ora_storia = utc_dt.strftime("%H:%M:%S")
+                except ValueError as e:
+                    logger.warning(
+                        f"Formato data/ora inatteso ({data_storia} {ora_storia}), "
+                        f"invio senza conversione UTC: {e}"
+                    )
+
             if data_storia:
                 params["data"] = data_storia
-            
+
             if ora_storia:
-                params["ora"] = ora_storia # <--- Passiamo l'ora al server Node
+                params["ora"] = ora_storia # <--- Passiamo l'ora (UTC) al server Node
 
             logger.info(f"Chiamata Astronomy API: {params}")
 
@@ -60,10 +86,16 @@ class AstronomyClient:
                 return {
                     "corpi": oggetti,
                     "fase_giorno": info.get("fase_giorno"),
-                    "fase_luna": info.get("fase_luna"), 
-                    "ora_locale": info.get("data_osservazione"), # Formattato da Node
+                    "fase_luna": info.get("fase_luna"),
+                    # NON è l'ora locale: il motore si limita a echeggiare
+                    # indietro l'istante che gli abbiamo inviato, che qui è
+                    # già stato convertito in UTC (vedi sopra) — chiamarlo
+                    # "ora_locale" ha già generato un falso allarme di un
+                    # apparente sfasamento di 2 ore che non esiste (verificato:
+                    # le altezze sono corrette per l'istante UTC reale).
+                    "ora_utc_motore": info.get("data_osservazione"), # Formattato da Node
                     "status": "reale"
-                } 
+                }
             
             logger.warning("Risposta Node.js non valida o status != success. Uso fallback.")
             return self._cielo_fallback()
@@ -85,6 +117,6 @@ class AstronomyClient:
             ],
             "fase_giorno": "notte",
             "fase_luna": "crescente",
-            "ora_locale": "ora non pervenuta",
+            "ora_utc_motore": "ora non pervenuta",
             "status": "fallback"
         }

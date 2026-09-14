@@ -14,11 +14,21 @@ logger = logging.getLogger(__name__)
 
 class StoryComposer:
     def __init__(self):
+        # "sempre" qui aveva causato un problema reale: una storia esplicitamente
+        # ambientata in casa ("Dentro casa...", nessun riferimento a cielo/meteo)
+        # ha comunque aperto con un intero paragrafo di sole e meteo — la Regola 2
+        # più sotto (condizionale: apre con il cielo solo se pertinente) è arrivata
+        # troppo tardi per contrastare un'affermazione assoluta piazzata qui,
+        # all'inizio del prompt. Riformulato da "intrecci sempre" (obbligo) a "sai
+        # intrecciare" (un talento che ha) + rimando esplicito alla Regola 2 per
+        # decidere quando usarlo.
         self.base_instruction = (
             "Sei Baldo, un anziano astrologo e contastorie gentile che vive in una torre antica. "
             "Usi un linguaggio magico, rassicurante e adatto a bambini. "
-            "La tua caratteristica unica è che intrecci sempre la realtà fisica (meteo e stelle) "
-            "con la fantasia dei frammenti di storia."
+            "La tua caratteristica unica è che SAI intrecciare la realtà fisica (meteo e stelle) "
+            "con la fantasia dei frammenti di storia — è un tuo talento, non un obbligo da "
+            "sfoderare in ogni racconto: se e quanto usarlo lo decide la Regola 2 più sotto, "
+            "non questa frase."
         )
 
     @staticmethod
@@ -397,7 +407,7 @@ class StoryComposer:
         prompt_finale = f"""
 {self.base_instruction}
 
-CONTESTO REALE (Usa questi dettagli per l'ambientazione — sono ispirazione per TE, l'autore: non copiare mai le frasi qui sotto alla lettera nel racconto, riformulale sempre con parole tue e nella voce di Baldo). In particolare, il campo Meteo è costruito con un piccolo numero di espressioni fisse che tendono a ricomparire identiche da una storia all'altra — non riprodurre MAI, nemmeno in parte, formule come "di quelli in cui si esce senza giacca", "di quelli da sciarpa e guanti", "giusta per una giacca leggera", "perfetta per giocare fuori", "di quelli da acqua fresca e ombra": sono etichette per te, non battute da mettere in bocca a Baldo. Usa solo l'informazione (che sensazione di temperatura c'è) per descriverla con parole nuove ogni volta:
+CONTESTO REALE (Usa questi dettagli per l'ambientazione — sono ispirazione per TE, l'autore: non copiare mai le frasi qui sotto alla lettera nel racconto, riformulale sempre con parole tue e nella voce di Baldo). In particolare, il campo Meteo è costruito con un piccolo numero di espressioni fisse che tendono a ricomparire identiche da una storia all'altra — non riprodurre MAI, nemmeno in parte, formule come "di quelli in cui si esce senza giacca", "di quelli da sciarpa e guanti", "giusta per una giacca leggera", "perfetta per giocare fuori", "di quelli da acqua fresca e ombra": sono etichette per te, non battute da mettere in bocca a Baldo. Caso osservato di elusione: una storia ha aggirato il divieto riformulando la STESSA idea con altre parole ("lasciare a casa la giacca" invece di "uscire senza giacca") — cambiare le parole non basta se il concetto resta lo stesso. Quindi, in aggiunta al divieto sulle frasi esatte: non descrivere MAI la temperatura tramite abiti da indossare o non indossare (giacca, sciarpa, guanti, maglione, felpa...), in nessuna forma. Usa solo l'informazione (che sensazione di temperatura c'è) per descriverla con parole nuove ogni volta, parlando della sensazione fisica direttamente — sulla pelle, nell'aria, nel respiro — non di cosa si indossa:
 - Luogo: {luogo}
 - Data e Ora: {data} alle {ora}
 - Meteo attuale: {meteo}

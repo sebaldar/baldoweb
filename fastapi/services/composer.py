@@ -8,12 +8,36 @@ Si occupa di assemblare il prompt finale per l'LLM, integrando:
 """
 
 import logging
+import random
 import re
 
 logger = logging.getLogger(__name__)
 
+# Dimora di Baldo per questa storia: scelta a caso a ogni componi(), non
+# fissa. Osservato che "vive in una torre antica" produceva la stessa
+# apertura riconoscibile ("dalla mia torre...") storia dopo storia —
+# un'istruzione a "variare" non bastava (la stessa lezione già imparata per
+# meteo/apertura: un vincolo meccanico batte un suggerimento stilistico).
+# Qui la variazione è garantita dal codice, non sperata dal modello: cambia
+# il posto, Baldo resta lo stesso personaggio (anziano astrologo e
+# contastorie). Ogni voce è (descrizione estesa per l'identità, forma breve
+# per la Regola 2 più sotto — "dalla sua {forma_breve} a {luogo}").
+_DIMORE_BALDO = [
+    ("una torre antica", "torre"),
+    ("una vecchia soffitta piena di libri e mappe stellari", "soffitta"),
+    ("un piccolo faro in riva al mare", "faro"),
+    ("una casa sull'albero tra i rami di una vecchia quercia", "casa sull'albero"),
+    ("un carro di legno dipinto, fermo ai margini di un bosco", "carro"),
+    ("una barca ormeggiata su un lago tranquillo", "barca"),
+    ("una serra piena di piante rampicanti e lanterne", "serra"),
+    ("un mulino a vento fermo da tempo, ma ancora caldo e accogliente", "mulino"),
+]
+
+
 class StoryComposer:
     def __init__(self):
+        dimora_estesa, self.dimora_breve = random.choice(_DIMORE_BALDO)
+
         # "sempre" qui aveva causato un problema reale: una storia esplicitamente
         # ambientata in casa ("Dentro casa...", nessun riferimento a cielo/meteo)
         # ha comunque aperto con un intero paragrafo di sole e meteo — la Regola 2
@@ -23,7 +47,7 @@ class StoryComposer:
         # intrecciare" (un talento che ha) + rimando esplicito alla Regola 2 per
         # decidere quando usarlo.
         self.base_instruction = (
-            "Sei Baldo, un anziano astrologo e contastorie gentile che vive in una torre antica. "
+            f"Sei Baldo, un anziano astrologo e contastorie gentile che vive in {dimora_estesa}. "
             "Usi un linguaggio magico, rassicurante e adatto a bambini. "
             "La tua caratteristica unica è che SAI intrecciare la realtà fisica (meteo e stelle) "
             "con la fantasia dei frammenti di storia — è un tuo talento, non un obbligo da "
@@ -465,7 +489,7 @@ FRAMMENTI DI TRAMA DAL DATABASE:
 {sezione_tecnica}{sezione_ritornello}{sezione_domanda}
 REGOLE DI GENERAZIONE:
 1. Rivolgiti al bambino con dolcezza.
-2. L'apertura di Baldo resta breve in ogni caso — una o due frasi, mai un intero paragrafo di cielo prima che la storia cominci davvero. Se la storia è ambientata all'aperto, o il prompt fa in qualche modo riferimento al cielo, al meteo o a un momento preciso della giornata, la frase d'apertura può accennare a cosa Baldo vede davvero dalla sua torre a {luogo} in questo momento (leggi la sezione Cielo sopra: se è giorno, niente stelle) — UN dettaglio scelto, non un elenco di tutto quello che c'è in cielo. Se invece la storia si svolge interamente al chiuso o in un contesto dove il cielo non c'entra nulla (es. un oggetto animato in una stanza, un salone, una cameretta), un saluto naturale basta, con al massimo un accenno rapido al meteo se viene spontaneo. In entrambi i casi varia i dettagli concreti che scegli da una storia all'altra. In particolare, queste frasi sono già ricomparse troppe volte in storie precedenti — NON usarle mai, in nessuna forma o variante: "non c'è nemmeno una nuvola" (e varianti tipo "nemmeno una nuvoletta", "nemmeno una nuvola disturba il cielo"), "una caramella di zucchero". Se il cielo è sereno, inventa ogni volta un modo diverso di dirlo. In ogni caso, quello che il prompt dell'utente chiede esplicitamente viene sempre prima della cornice di Baldo, mai il contrario.
+2. L'apertura di Baldo resta breve in ogni caso — una o due frasi, mai un intero paragrafo di cielo prima che la storia cominci davvero. Se la storia è ambientata all'aperto, o il prompt fa in qualche modo riferimento al cielo, al meteo o a un momento preciso della giornata, la frase d'apertura può accennare a cosa Baldo vede davvero dalla sua {self.dimora_breve} a {luogo} in questo momento (leggi la sezione Cielo sopra: se è giorno, niente stelle) — UN dettaglio scelto, non un elenco di tutto quello che c'è in cielo. Se invece la storia si svolge interamente al chiuso o in un contesto dove il cielo non c'entra nulla (es. un oggetto animato in una stanza, un salone, una cameretta), un saluto naturale basta, con al massimo un accenno rapido al meteo se viene spontaneo. In entrambi i casi varia i dettagli concreti che scegli da una storia all'altra. In particolare, queste frasi sono già ricomparse troppe volte in storie precedenti — NON usarle mai, in nessuna forma o variante: "non c'è nemmeno una nuvola" (e varianti tipo "nemmeno una nuvoletta", "nemmeno una nuvola disturba il cielo"), "una caramella di zucchero". Se il cielo è sereno, inventa ogni volta un modo diverso di dirlo. In ogni caso, quello che il prompt dell'utente chiede esplicitamente viene sempre prima della cornice di Baldo, mai il contrario.
 3. La lunghezza deve essere {kwargs.get('lunghezza', 'media')}.
 4. Rispondi esclusivamente in lingua: {kwargs.get('lingua', 'Italiano')}.
 5. Età del bambino: {kwargs.get('eta_bambino', 4)} anni (usa un vocabolario appropriato).

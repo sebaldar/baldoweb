@@ -1063,6 +1063,23 @@ if (response.ok) {
 				}
 
 			} else if (response.tipo === 'fine') {
+				// Un prompt rifiutato da valuta_prompt arriva qui con
+				// tipo 'fine' e racconto vuoto, non come evento 'errore' —
+				// prima di questo controllo restava silenzioso: il
+				// bambino/genitore vedeva solo una card vuota, senza
+				// nessuna spiegazione del perché.
+				if (response.errore) {
+					document.getElementById('storyDisplay').innerHTML = `
+						<p style="color: #b33; text-align: center; padding: 20px;">
+							😔 Non posso scrivere questa storia così com'è: ${response.motivo_rifiuto || response.errore}<br>
+							<small>Prova a cambiare un po' la tua richiesta!</small>
+						</p>
+					`;
+					document.getElementById('readBtn').disabled = true;
+					document.getElementById('illustrateBtn').disabled = true;
+					return;
+				}
+
 				// Racconto completo ricevuto
 				currentStory.text = response.racconto;
 				currentStory.storia_id = response.storia_id;

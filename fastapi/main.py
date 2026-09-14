@@ -222,6 +222,13 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
             if v.get("racconto_finale") and not v.get("errore"):
                 salva_report_storia(v, time.monotonic() - t0)
 
+            # 'errore'/'motivo_rifiuto' non arrivavano mai al frontend: né
+            # qui (il payload 'fine' non li includeva, il browser vedeva solo
+            # un racconto vuoto senza spiegazione) né via un evento SSE
+            # dedicato (nodo_errore produce un 'nodo_end' con stato.errore,
+            # ma il frontend non ha mai gestito 'nodo_end', solo 'nodo_start'
+            # /'token'/'fine'/'errore' — quell'evento veniva ricevuto e
+            # silenziosamente ignorato).
             yield f"data: {json.dumps({
                 'tipo': 'fine',
                 'racconto': v.get('racconto_finale', ''),
@@ -230,7 +237,9 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
                 'ambientazione': v.get('ambientazione', ''),
                 'usa_astronomia': v.get('usa_astronomia', False),
                 'storia_id': v.get('storia_id'),
-                'meteo': v.get('dati_meteo') # Inviato al frontend
+                'meteo': v.get('dati_meteo'), # Inviato al frontend
+                'errore': v.get('errore'),
+                'motivo_rifiuto': v.get('motivo_rifiuto'),
             })}\n\n"
 
         except Exception as e:

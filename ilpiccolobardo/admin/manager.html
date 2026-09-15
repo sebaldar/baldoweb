@@ -362,6 +362,7 @@
         <div class="main-tabs">
             <button class="main-tab active" onclick="switchMainTab('fragments')">📄 Frammenti</button>
             <button class="main-tab" onclick="switchMainTab('characters')">👤 Personaggi</button>
+            <button class="main-tab" onclick="switchMainTab('modelli')">🤖 Modelli</button>
         </div>
 
         <!-- TAB: FRAMMENTI -->
@@ -460,6 +461,27 @@
             </div>
         </div>
 
+        <!-- TAB: MODELLI -->
+        <div id="modelli-content" class="main-tab-content">
+            <div class="grid">
+                <div class="card" style="grid-column: 1 / -1;">
+                    <h2>🤖 Provider LLM per fase</h2>
+                    <p style="color:#666; margin-bottom: 15px; line-height: 1.5;">
+                        Ogni fase della pipeline può usare un provider diverso.
+                        Le fasi di scrittura creativa (<strong>genera_draft</strong>,
+                        <strong>rifinisci</strong>, <strong>similitudini</strong>) dipendono da
+                        un lungo lavoro di prompt-engineering verificato su Claude: spostarle
+                        su un altro provider senza aver prima confrontato la qualità va fatto
+                        con cautela. I controlli SI/NO sono invece buoni candidati per un
+                        provider più economico. Un provider senza API key configurata
+                        ripiega automaticamente su Claude → OpenAI al momento della chiamata.
+                    </p>
+                    <button class="btn-success btn-small" onclick="refreshModelRouting()" style="margin-bottom: 10px;">🔄 Aggiorna</button>
+                    <div class="list-container" id="modelRoutingList"></div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -533,6 +555,10 @@
             } else if (response.action === 'fragment_deleted' || response.action === 'character_deleted') {
                 alert('✓ Eliminazione riuscita!');
                 refreshAll();
+            } else if (response.action === 'model_routing_list') {
+                displayModelRouting(response.data);
+            } else if (response.action === 'model_routing_updated') {
+                console.log(`✓ Fase '${response.data.fase}' → ${response.data.provider}`);
             } else if (response.action === 'error') {
                 alert('✗ Errore: ' + (response.message || 'Operazione fallita'));
             }
@@ -559,6 +585,7 @@
         function refreshAll() {
             refreshFragments();
             refreshCharacters();
+            refreshModelRouting();
         }
 
         function refreshFragments() {
@@ -567,6 +594,14 @@
 
         function refreshCharacters() {
             sendMessage('list_characters');
+        }
+
+        function refreshModelRouting() {
+            sendMessage('list_model_routing');
+        }
+
+        function setModelRouting(fase, provider) {
+            sendMessage('set_model_routing', { fase, provider });
         }
 
         // Display Functions
@@ -619,6 +654,55 @@
                 item.onclick = () => selectCharacter(character);
                 container.appendChild(item);
             });
+        }
+
+        // Nomi leggibili e nota breve per ciascuna fase — stessi nomi usati nel
+        // campo "nodo" dei report YAML delle storie, per riconoscerle subito.
+        const MODELLI_DESCRIZIONE_FASE = {
+            'analizza_prompt':                             'Estrae personaggi, emozioni, luogo, data/ora dal prompt utente',
+            'valuta_prompt':                                'Controllo di sicurezza SI/NO sul prompt',
+            'decide_tools':                                 'Decide se servono dati astronomici',
+            'valuta_frammenti._riformula_termini':          'Riformula i termini di ricerca se la KB non trova nulla',
+            'genera_draft':                                 '✍️ Scrittura del racconto — creativo, tarato su Claude',
+            'rifinisci':                                    '✍️ Rifinitura editoriale — creativo, tarato su Claude',
+            'verifica_coerenza_domanda.ritornello':         'Controllo SI/NO sul ritornello',
+            'verifica_coerenza_domanda.check':              'Controllo SI/NO sulla domanda finale',
+            'verifica_coerenza_domanda.fix':                'Riscrive la domanda finale se incoerente',
+            'verifica_coerenza_domanda.similitudini':       '✍️ Riscrive il racconto se ha troppe similitudini — creativo',
+        };
+
+        function displayModelRouting(data) {
+            const container = document.getElementById('modelRoutingList');
+            const fasi = (data && data.fasi) || {};
+            const providerInfo = (data && data.provider_disponibili) || {};
+
+            const nomeProvider = { anthropic: 'Claude', openai: 'OpenAI', deepseek: 'DeepSeek' };
+            const legenda = Object.entries(providerInfo).map(([id, info]) => {
+                const bollino = info.disponibile ? '🟢' : '⚪';
+                return `<span class="badge badge-type" style="margin-right:8px;">${bollino} ${nomeProvider[id] || id} (${info.modello})</span>`;
+            }).join('');
+
+            const righe = Object.keys(fasi).map(fase => {
+                const providerAttuale = fasi[fase];
+                const opzioni = Object.keys(providerInfo).map(id => {
+                    const sel = id === providerAttuale ? 'selected' : '';
+                    const disp = providerInfo[id].disponibile ? '' : ' (manca API key)';
+                    return `<option value="${id}" ${sel}>${nomeProvider[id] || id}${disp}</option>`;
+                }).join('');
+                return `
+                    <div class="list-item" style="cursor:default;">
+                        <div class="list-item-header">
+                            <div class="list-item-title">${fase}</div>
+                            <select onchange="setModelRouting('${fase}', this.value)" style="width:auto; min-width:160px;">
+                                ${opzioni}
+                            </select>
+                        </div>
+                        <p style="margin-top:6px; font-size:0.85em; color:#666;">${MODELLI_DESCRIZIONE_FASE[fase] || ''}</p>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `<div style="margin-bottom:15px;">${legenda}</div>${righe}`;
         }
 
         // Selection Functions

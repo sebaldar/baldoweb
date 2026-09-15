@@ -508,7 +508,29 @@ async function exe(server, ws, message) {
               };
             }
               break;
- 
+
+            case 'list_model_routing': {
+                const result = await callFastApi('/admin/modelli');
+                response = {
+                    action: 'model_routing_list',
+                    data: result
+                };
+              }
+                break;
+
+            case 'set_model_routing': {
+                const { fase, provider } = message.data;
+                const result = await callFastApi(`/admin/modelli/${encodeURIComponent(fase)}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ provider }),
+                });
+                response = {
+                    action: 'model_routing_updated',
+                    data: result
+                };
+              }
+                break;
+
               default:
                 response = {
                     action: 'error',

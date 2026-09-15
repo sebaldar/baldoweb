@@ -9,6 +9,7 @@ server/logs/out*
 server/logs/err*
 fastapi/logs/
 fastapi/stories/
+fastapi/config_data/
 server/*.tar.gz
 server/config.json
 

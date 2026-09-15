@@ -1,9 +1,12 @@
 """
 agent/nodes.py
 ==============
-Tutti i nodi del grafo LangGraph. 
+Tutti i nodi del grafo LangGraph.
 Gestisce l'analisi, il recupero di dati fisici (Geo/Meteo/Astro),
 la memoria Neo4j e la composizione narrativa.
+
+Ogni nodo emette eventi di streaming descrittivi tramite la callback
+`stream_event(event_type, message, payload?)` presente nello state.
 """
 
 import json
@@ -13,6 +16,7 @@ import uuid
 import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from typing import Callable, Optional
 
 # Stesso fuso usato in rag.py: quando il prompt non specifica un momento, il
 # fallback "adesso" deve rappresentare l'ora locale dell'utenza (Italia), non
@@ -32,45 +36,105 @@ from services.composer import StoryComposer
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Helper: emissione eventi di streaming
+# ---------------------------------------------------------------------------
+
+def _emit(state: BaldoState, event_type: str, message: str, payload: Optional[dict] = None):
+    """
+    Emette un evento di streaming narrativo se lo state contiene una callback.
+
+    Lo state deve esporre:
+        state["stream_callback"]: Callable[[str, str, dict | None], None]
+
+    Parametri:
+        event_type  – categoria dell'evento  (es. "analisi", "meteo", "draft" …)
+        message     – testo leggibile dall'utente, in italiano colloquiale/narrativo
+        payload     – dati extra opzionali da allegare all'evento
+    """
+    cb: Optional[Callable] = state.get("stream_callback")
+    if cb:
+        try:
+            cb(event_type, message, payload or {})
+        except Exception as e:
+            logger.warning(f"[STREAM] Callback fallita per evento '{event_type}': {e}")
+
+
 # ---------------------------------------------------------------------------
 # NODE 1 — Analisi del prompt
 # ---------------------------------------------------------------------------
 async def analizza_prompt(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] analizza_prompt")
+
+    _emit(state, "analisi:inizio",
+          "📖  Sto leggendo la tua idea… lascio che le parole prendano forma.")
+
     rag = RAGExtractor(llm=llm)
-    
-    # Estrazione entità: personaggi, emozioni, ambientazione, luogo, data
     analisi = await rag.analizza(state["prompt_originale"])
 
-    # Gestione Fallback Temporale (Data e Ora attuali se non specificate)
-    data_target = analisi.get("data_storia") or datetime.now(FUSO_UTENZA).strftime("%d-%m-%Y")
-    ora_target = analisi.get("ora_storia") or datetime.now(FUSO_UTENZA).strftime("%H:%M:%S")
-    
-    # Gestione Fallback Geografico (Default: Roma)
-    luogo_target = analisi.get("luogo") or "Roma"
+    personaggi = analisi.get("personaggi", [])
+    emozioni   = analisi.get("emozioni", [])
 
-    termini = analisi.get("personaggi", []) + analisi.get("emozioni", [])
+    # Fallback temporale
+    data_target = analisi.get("data_storia") or datetime.now(FUSO_UTENZA).strftime("%d-%m-%Y")
+    ora_target  = analisi.get("ora_storia")  or datetime.now(FUSO_UTENZA).strftime("%H:%M:%S")
+
+    # Fallback geografico
+    luogo_target = analisi.get("luogo") or ""
+
+    termini = personaggi + emozioni
+
+    # Messaggio descrittivo arricchito con i dati estratti
+    if personaggi:
+        nomi = ", ".join(personaggi)
+        _emit(state, "analisi:personaggi",
+              f"🧒  Ho trovato i protagonisti della storia: {nomi}.",
+              {"personaggi": personaggi})
+    else:
+        _emit(state, "analisi:personaggi",
+              "🧒  Nessun personaggio esplicito: inventerò io un eroe adatto.",
+              {"personaggi": []})
+
+    if emozioni:
+        _emit(state, "analisi:emozioni",
+              f"💛  Le emozioni che guidano il racconto: {', '.join(emozioni)}.",
+              {"emozioni": emozioni})
+
+    _emit(state, "analisi:luogo_tempo",
+          f"🗺️  Ambientazione rilevata: {luogo_target} — "
+          f"data {data_target} alle {ora_target}.",
+          {"luogo": luogo_target, "data": data_target, "ora": ora_target})
+
+    _emit(state, "analisi:fine",
+          "✅  Analisi completata. Il cantastorie ha capito tutto.")
+
     uso_llm = analisi.get("_uso_llm")
 
     return {
-        "personaggi": analisi.get("personaggi", []),
-        "emozioni": analisi.get("emozioni", []),
-        "ambientazione": analisi.get("ambientazione", ""),
-        "luogo": luogo_target,
-        "data_storia": data_target,
-        "ora_storia": ora_target,
+        "personaggi":            personaggi,
+        "emozioni":              emozioni,
+        "ambientazione":         analisi.get("ambientazione", ""),
+        "luogo":                 luogo_target,
+        "data_storia":           data_target,
+        "ora_storia":            ora_target,
         "termini_ricerca_neo4j": termini,
-        "tentativi_neo4j": 0,
-        "tentativi_correzione": 0,
-        "iterazioni_totali": 1,
-        "llm_usage": [uso_llm] if uso_llm else [],
+        "tentativi_neo4j":       0,
+        "tentativi_correzione":  0,
+        "iterazioni_totali":     1,
+        "llm_usage":             [uso_llm] if uso_llm else [],
     }
+
 
 # ---------------------------------------------------------------------------
 # NODE 2 — Valutazione prompt
 # ---------------------------------------------------------------------------
 async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] valuta_prompt")
+
+    _emit(state, "valutazione:inizio",
+          "🔍  Verifico che la storia sia adatta ai piccoli lettori…")
+
     # Scoping esplicito dopo un caso reale: senza criteri, il giudice si
     # inventava da solo standard che non gli competono — es. bocciava "guarda
     # la luna a mezzogiorno" per implausibilità astronomica (valutata "a
@@ -97,157 +161,274 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
       narratore, non dell'utente.
 
     Rispondi SOLO JSON: {"chiaro": true/false, "motivo": "..."}"""
-    
+
     risultato = await llm.chiedi(
         system=system,
         user=f"Prompt: {state['prompt_originale']}\nPersonaggi: {state['personaggi']}",
         fase="valuta_prompt",
     )
-    uso_llm = {
-        "nodo": "valuta_prompt",
-        "modello": risultato.modello,
-        "token_input": risultato.token_input,
-        "token_output": risultato.token_output,
-        "durata_secondi": round(risultato.durata_secondi, 2),
-    }
+
     try:
-        dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
-        return {
-            "prompt_chiaro": dati.get("chiaro", True),
-            "motivo_rifiuto": dati.get("motivo"),
-            "llm_usage": [uso_llm],
-        }
+        dati   = json.loads(risultato.testo.strip().strip("```json").strip("```"))
+        chiaro = dati.get("chiaro", True)
+        motivo = dati.get("motivo")
     except Exception:
-        return {"prompt_chiaro": True, "motivo_rifiuto": None, "llm_usage": [uso_llm]}
+        chiaro, motivo = True, None
+
+    if chiaro:
+        _emit(state, "valutazione:ok",
+              "✅  Prompt approvato! Il racconto può cominciare.")
+    else:
+        _emit(state, "valutazione:rifiuto",
+              f"⚠️  Il prompt non è adatto: {motivo}. "
+              "Prova a riformulare la tua idea.",
+              {"motivo": motivo})
+
+    return {
+        "prompt_chiaro": chiaro,
+        "motivo_rifiuto": motivo,
+        "llm_usage": [{
+            "nodo": "valuta_prompt",
+            "modello": risultato.modello,
+            "token_input": risultato.token_input,
+            "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2),
+        }],
+    }
+
 
 # ---------------------------------------------------------------------------
 # NODE 3 — Decisione tool
 # ---------------------------------------------------------------------------
 async def decide_tools(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] decide_tools")
+
+    _emit(state, "tools:decisione",
+          "🛠️  Scelgo quali strumenti magici usare per arricchire la storia…")
+
     system = 'Decidi se usare l\'astronomia. Rispondi SOLO JSON: {"usa_astronomia": true/false}'
     risultato = await llm.chiedi(system=system, user=state['prompt_originale'], fase="decide_tools")
-    uso_llm = {
-        "nodo": "decide_tools",
-        "modello": risultato.modello,
-        "token_input": risultato.token_input,
-        "token_output": risultato.token_output,
-        "durata_secondi": round(risultato.durata_secondi, 2),
-    }
+
     try:
-        dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
-        return {"usa_astronomia": dati.get("usa_astronomia", True), "llm_usage": [uso_llm]}
-    except:
-        return {"usa_astronomia": True, "llm_usage": [uso_llm]}
+        dati         = json.loads(risultato.testo.strip().strip("```json").strip("```"))
+        usa_astro    = dati.get("usa_astronomia", True)
+    except Exception:
+        usa_astro = True
+
+    if usa_astro:
+        _emit(state, "tools:astronomia_attiva",
+              "🔭  Attivo il telescopio virtuale: recupererò la mappa del cielo "
+              "per la notte della storia.")
+    else:
+        _emit(state, "tools:astronomia_disattiva",
+              "☀️  La storia si svolge di giorno: il telescopio può riposare.")
+
+    return {
+        "usa_astronomia": usa_astro,
+        "llm_usage": [{
+            "nodo": "decide_tools",
+            "modello": risultato.modello,
+            "token_input": risultato.token_input,
+            "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2),
+        }],
+    }
+
 
 # ---------------------------------------------------------------------------
 # NODE 4a — Query Neo4j
 # ---------------------------------------------------------------------------
 async def query_neo4j(state: BaldoState, neo4j: Neo4jClient) -> dict:
-    logger.info(f"[NODE] query_neo4j (tentativo {state['tentativi_neo4j'] + 1})")
+    tentativo = state["tentativi_neo4j"] + 1
+    logger.info(f"[NODE] query_neo4j (tentativo {tentativo})")
+
+    _emit(state, "memoria:ricerca",
+          f"🗄️  Sfoglio il libro dei ricordi (tentativo {tentativo})… "
+          "cerco storie passate con personaggi simili.",
+          {"tentativo": tentativo})
 
     frammenti = await neo4j.cerca_frammenti(
-        characters=state["personaggi"],
-        emotions=state["emozioni"],
-        setting=state["ambientazione"],
-        extra_terms=state.get("termini_ricerca_neo4j", []),
-        eta_bambino=state.get("eta_bambino"),
+        characters  = state["personaggi"],
+        emotions    = state["emozioni"],
+        setting     = state["ambientazione"],
+        extra_terms = state.get("termini_ricerca_neo4j", []),
+        eta_bambino = state.get("eta_bambino"),
     )
 
     storie_precedenti = await neo4j.cerca_storie_precedenti(
-        characters=state["personaggi"],
-        emotions=state["emozioni"],
+        characters = state["personaggi"],
+        emotions   = state["emozioni"],
     )
 
     # Descrizione/tratti dei personaggi coinvolti (se qualcuno li ha compilati
     # a mano dal pannello Personaggi), per mantenerli coerenti tra le storie.
     personaggi_bio = await neo4j.get_character_bios(state["personaggi"])
 
+    n_frammenti = len(frammenti) if frammenti else 0
+    n_storie    = len(storie_precedenti) if storie_precedenti else 0
+
+    if n_frammenti or n_storie:
+        _emit(state, "memoria:trovata",
+              f"📚  Trovati {n_frammenti} frammenti e {n_storie} storie precedenti. "
+              "Il passato illuminerà il racconto di oggi.",
+              {"frammenti": n_frammenti, "storie_precedenti": n_storie})
+    else:
+        _emit(state, "memoria:vuota",
+              "📭  Nessun ricordo utile nel database. "
+              "Questa storia nascerà completamente nuova.")
+
     return {
-        "frammenti": frammenti,
-        "storie_precedenti": storie_precedenti,
-        "personaggi_bio": personaggi_bio,
-        "tentativi_neo4j": state["tentativi_neo4j"] + 1,
+        "frammenti":          frammenti,
+        "storie_precedenti":  storie_precedenti,
+        "personaggi_bio":     personaggi_bio,
+        "tentativi_neo4j":    tentativo,
     }
 
+
 # ---------------------------------------------------------------------------
-# NODE 4b — Recupero dati fisici (Geo + Meteo + Astro) - CORRETTO
+# NODE 4b — Recupero dati fisici (Geo + Meteo + Astro)
 # ---------------------------------------------------------------------------
 async def fetch_contesto_fisico(
-    state: BaldoState, 
-    astronomy: AstronomyClient, 
-    weather: WeatherClient,
-    geo: GeoService
+    state:     BaldoState,
+    astronomy: AstronomyClient,
+    weather:   WeatherClient,
+    geo:       GeoService,
 ) -> dict:
-    luogo_nome = state.get("luogo") or "Roma"
+    luogo_nome = state.get("luogo") or ""
     logger.info(f"[NODE] fetch_contesto_fisico avviato per: {luogo_nome}")
 
-    lat, lon = 41.8928, 12.4964  # Default Roma
-    meteo_res, astro_res = "cielo sereno", {}
+    _emit(state, "fisico:inizio",
+          f"🌍  Mi sintonizo con il mondo reale: recupero meteo e cielo "
+          f"per {luogo_nome}…",
+          {"luogo": luogo_nome})
+
+    lat, lon   = 41.8928, 12.4964  # Saranno sovrascritti da GeoService
+    meteo_res  = "cielo sereno"
+    astro_res  = {}
 
     try:
-        # 1. Geocoding (Verifica il nome del metodo nel tuo GeoService!)
-        # Se il tuo servizio usa get_coords invece di get_coordinates, correggi qui:
+        # 1. Geocoding — passa anche le coordinate del dispositivo come fallback
         try:
-            coords = await geo.get_coordinates(luogo_nome)
-            if coords:
-                lat, lon = coords
-                logger.info(f"📍 Coordinate ottenute: {lat}, {lon}")
+            client_lat = state.get("lat")
+            client_lon = state.get("lon")
+            lat, lon = await geo.get_coordinates(
+                luogo_nome,
+                client_lat=client_lat,
+                client_lon=client_lon,
+            )
+            if luogo_nome and luogo_nome.strip() != "":
+                _emit(state, "fisico:geo",
+                      f"\U0001f4cd  Coordinate per '{luogo_nome}': {lat:.4f}\u00b0N, {lon:.4f}\u00b0E.",
+                      {"lat": lat, "lon": lon, "luogo": luogo_nome})
+            elif client_lat is not None:
+                _emit(state, "fisico:geo",
+                      f"\U0001f4cd  Uso la tua posizione attuale: {lat:.4f}\u00b0N, {lon:.4f}\u00b0E.",
+                      {"lat": lat, "lon": lon, "source": "client"})
+            else:
+                _emit(state, "fisico:geo_fallback",
+                      "📍  Posizione non rilevata: uso le coordinate del dispositivo.")
         except Exception as geoe:
-            logger.warning(f"Geocoding fallito per {luogo_nome}, uso Roma. Errore: {geoe}")
+            logger.warning(f"Geocoding fallito per {luogo_nome}: {geoe}")
+            _emit(state, "fisico:geo_fallback",
+                  f"\U0001f4cd  Non riesco a localizzare '{luogo_nome}': "
+                  "uso le coordinate del dispositivo come riferimento geografico.")
 
-        # 2. Esecuzione parallela
-        # Creiamo i task solo se usa_astronomia è True
-        tasks = [weather.get_weather(lat, lon)]
-        
+        # 2. Esecuzione parallela meteo + astronomia
+        _emit(state, "fisico:meteo_avvio",
+              "🌤️  Chiedo al cielo com'è il tempo in questo momento…")
+
         usa_astro = state.get("usa_astronomia", True)
+        tasks     = [weather.get_weather(lat, lon)]
+
         if usa_astro:
-            logger.info(f"🔭 Preparazione chiamata Astronomy per {luogo_nome}...")
+            _emit(state, "fisico:astro_avvio",
+                  "✨  Interrogo le stelle: calcolo la posizione di pianeti "
+                  "e costellazioni per questa notte…")
             tasks.append(astronomy.get_sky_data(
-                client_ip=state.get("client_ip", "127.0.0.1"),
-                lat=lat,
-                lon=lon,
-                data_storia=state.get("data_storia"),
-                ora_storia=state.get("ora_storia")
+                client_ip   = state.get("client_ip", "127.0.0.1"),
+                lat         = lat,
+                lon         = lon,
+                data_storia = state.get("data_storia"),
+                ora_storia  = state.get("ora_storia"),
             ))
 
-        # Attesa risultati
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        meteo_res = results[0] if not isinstance(results[0], Exception) else "meteo non disponibile"
+
+        # Meteo
+        if isinstance(results[0], Exception):
+            logger.error(f"Errore meteo: {results[0]}")
+            _emit(state, "fisico:meteo_errore",
+                  "🌧️  Non riesco a ottenere i dati meteo: "
+                  "procedo con un cielo generico.")
+        else:
+            meteo_res = results[0]
+            _emit(state, "fisico:meteo_ok",
+                  f"🌤️  Meteo ottenuto: {meteo_res}.",
+                  {"meteo": meteo_res})
+
+        # Astronomia
         if usa_astro and len(results) > 1:
-            astro_res = results[1] if not isinstance(results[1], Exception) else {}
             if isinstance(results[1], Exception):
-                logger.error(f"Errore specifico AstronomyClient: {results[1]}")
-        
-        logger.info(f"✅ Dati recuperati: Meteo={meteo_res}, Astro={'Sì' if astro_res else 'No'}")
+                logger.error(f"Errore AstronomyClient: {results[1]}")
+                _emit(state, "fisico:astro_errore",
+                      "🔭  Il telescopio non risponde: la storia userà "
+                      "un cielo stellato di fantasia.")
+            else:
+                astro_res = results[1]
+                corpi = list(astro_res.keys()) if isinstance(astro_res, dict) else []
+                desc  = f" Rilevati: {', '.join(corpi[:4])}." if corpi else ""
+                _emit(state, "fisico:astro_ok",
+                      f"🌙  Mappa celeste acquisita.{desc}",
+                      {"corpi_celesti": corpi})
+
+        _emit(state, "fisico:fine",
+              "✅  Contesto fisico completo. La scena è pronta.")
 
     except Exception as e:
         logger.error(f"❌ Errore generale nel nodo fisico: {e}", exc_info=True)
+        _emit(state, "fisico:errore_generale",
+              "❌  Qualcosa è andato storto nel recupero del contesto fisico. "
+              "Continuo comunque con i dati disponibili.")
 
     return {
-        "lat": lat,
-        "lon": lon,
-        "dati_meteo": meteo_res,
-        "dati_astronomici": astro_res
+        "lat":              lat,
+        "lon":              lon,
+        "dati_meteo":       meteo_res,
+        "dati_astronomici": astro_res,
     }
+
+
 # ---------------------------------------------------------------------------
 # NODE 5 — Valutazione qualità frammenti
 # ---------------------------------------------------------------------------
 async def valuta_frammenti(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] valuta_frammenti")
+
     if not state["frammenti"]:
+        _emit(state, "frammenti:riformula",
+              "🔄  I ricordi trovati non bastano: cerco nuove parole chiave "
+              "per scavare più in profondità nella memoria.")
         nuovi_termini, uso_llm = await _riformula_termini(state, llm)
+        _emit(state, "frammenti:nuovi_termini",
+              f"🔑  Nuovi termini di ricerca pronti: {', '.join(nuovi_termini) or 'nessuno'}.",
+              {"termini": nuovi_termini})
         return {
             "qualita_frammenti": "assente",
             "termini_ricerca_neo4j": nuovi_termini,
             "llm_usage": [uso_llm] if uso_llm else [],
         }
+
+    n = len(state["frammenti"])
+    _emit(state, "frammenti:ok",
+          f"✅  {n} frammenti di memoria sono di buona qualità "
+          "e alimenteranno la storia.",
+          {"n_frammenti": n})
     return {"qualita_frammenti": "buona"}
+
 
 async def _riformula_termini(state: BaldoState, llm: LLMRouter) -> tuple[list[str], dict]:
     system = 'Suggerisci termini di ricerca alternativi in JSON: {"termini": []}'
-    risultato = await llm.chiedi(system=system, user=state['ambientazione'], fase="valuta_frammenti._riformula_termini")
+    risultato = await llm.chiedi(system=system, user=state["ambientazione"], fase="valuta_frammenti._riformula_termini")
     uso_llm = {
         "nodo": "valuta_frammenti._riformula_termini",
         "modello": risultato.modello,
@@ -258,49 +439,60 @@ async def _riformula_termini(state: BaldoState, llm: LLMRouter) -> tuple[list[st
     try:
         dati = json.loads(risultato.testo.strip().strip("```json").strip("```"))
         return dati.get("termini", []), uso_llm
-    except:
+    except Exception:
         return [], uso_llm
+
 
 # ---------------------------------------------------------------------------
 # NODE 6 — Composizione prompt
 # ---------------------------------------------------------------------------
 async def componi_prompt(state: BaldoState) -> dict:
     logger.info("[NODE] componi_prompt")
+
+    _emit(state, "composizione:inizio",
+          "🖊️  Intrecciо tutti gli ingredienti: personaggi, meteo, stelle e ricordi "
+          "per costruire il prompt narrativo definitivo…")
+
     composer = StoryComposer()
-    
     prompt_arricchito, meta_composizione = composer.componi(
-        prompt_originale=state["prompt_originale"],
-        analisi={
-            "personaggi": state["personaggi"],
-            "emozioni": state["emozioni"],
+        prompt_originale = state["prompt_originale"],
+        analisi = {
+            "personaggi":  state["personaggi"],
+            "emozioni":    state["emozioni"],
             "ambientazione": state["ambientazione"],
-            "luogo": state.get("luogo"),
+            "luogo":       state.get("luogo"),
             # Nomi chiave allineati a quelli letti da composer.py — prima
             # erano "data"/"meteo" (mai letti: composer cerca data_storia/
             # dati_meteo), quindi il prompt mostrava sempre i placeholder
             # generici "oggi"/"sereno" invece dei dati reali già raccolti
             # da fetch_contesto_fisico, indipendentemente dal meteo/data vero.
             "data_storia": state.get("data_storia"),
-            "ora_storia": state.get("ora_storia"),
-            "dati_meteo": state.get("dati_meteo"),
+            "ora_storia":  state.get("ora_storia"),
+            "dati_meteo":  state.get("dati_meteo"),
         },
-        frammenti=state["frammenti"],
-        dati_astronomici=state.get("dati_astronomici") if state.get("usa_astronomia") else None,
-        storie_precedenti=state.get("storie_precedenti", []),
-        personaggi_bio=state.get("personaggi_bio", {}),
+        frammenti          = state["frammenti"],
+        dati_astronomici   = state.get("dati_astronomici") if state.get("usa_astronomia") else None,
+        storie_precedenti  = state.get("storie_precedenti", []),
+        personaggi_bio     = state.get("personaggi_bio", {}),
         # "eta_bambino", non "eta": composer.py legge kwargs.get('eta_bambino',
         # ...) — con la chiave sbagliata l'età reale non arrivava mai e ogni
         # regola che dipende dall'età (vocabolario, numero di inganni) cadeva
         # sempre sul valore di default, qualunque età fosse stata scelta.
-        eta_bambino=state["eta_bambino"],
-        lunghezza=state["lunghezza"],
-        lingua=state["lingua"],
+        eta_bambino        = state["eta_bambino"],
+        lunghezza          = state["lunghezza"],
+        lingua             = state["lingua"],
     )
+
+    _emit(state, "composizione:fine",
+          "✅  Il telaio narrativo è pronto. "
+          "Ora il cantastorie può finalmente scrivere.")
+
     return {
         "prompt_arricchito": prompt_arricchito,
         "tecnica_narrativa_kb": meta_composizione.get("tecnica_narrativa"),
         "archetipo_kb": meta_composizione.get("archetipo"),
     }
+
 
 # Sotto questa soglia di parole consecutive uguali, il confronto rischia
 # falsi positivi (formule ricorrenti per caso, non un ritornello voluto).
@@ -332,7 +524,7 @@ def _parola_normalizzata(parola: str) -> str:
     return _PUNTEGGIATURA_BORDO_RE.sub("", parola).lower()
 
 
-def _rileva_ritornello(testo: str) -> "str | None":
+def _rileva_ritornello(testo: str) -> Optional[str]:
     """
     Cerca la sequenza di parole che si ripete più volte nel testo (almeno
     _RITORNELLO_MIN_PAROLE parole, almeno 2 occorrenze) — più affidabile
@@ -393,7 +585,7 @@ def _rileva_ritornello(testo: str) -> "str | None":
 
         # Tronca al primo confine di frase/battuta trovato DENTRO la
         # sequenza — anche se cade a metà della finestra minima di n
-        # parole. Senza questo, una finestra "sfalsata" di una parola che
+        # parole. Senza questo, una finestra sfalsata di una parola che
         # parte proprio dopo l'inizio di una battuta (es. "ho un'idea
         # piccola!» e propose" invece di "Anch'io ho un'idea piccola!")
         # può risultare più lunga e vincere il confronto, pur scavalcando
@@ -513,15 +705,28 @@ def _conta_similitudini_approssimate(testo: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# NODE 7-10 — Generazione e Rifinitura (Draft, Correzione, Rifinitura)
+# NODE 7 — Generazione draft
 # ---------------------------------------------------------------------------
 async def genera_draft(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] genera_draft")
+
+    _emit(state, "draft:inizio",
+          "✍️  Il cantastorie prende la penna… la storia sta nascendo, "
+          "parola dopo parola.")
+
     prompt_input = state.get("prompt_arricchito") or state["prompt_originale"]
     risultato = await llm.genera_racconto(prompt_input)
+    draft = risultato.testo
+
+    parole = len(draft.split()) if draft else 0
+    _emit(state, "draft:completato",
+          f"📝  Prima bozza completata — {parole} parole scritte. "
+          "Il racconto esiste, ma ha ancora bisogno di cure.",
+          {"parole": parole})
+
     return {
-        "draft": risultato.testo,
-        "ritornello_atteso": _rileva_ritornello(risultato.testo),
+        "draft": draft,
+        "ritornello_atteso": _rileva_ritornello(draft),
         "llm_usage": [{
             "nodo": "genera_draft",
             "modello": risultato.modello,
@@ -531,22 +736,62 @@ async def genera_draft(state: BaldoState, llm: LLMRouter) -> dict:
         }],
     }
 
+
+# ---------------------------------------------------------------------------
+# NODE 8 — Valutazione draft
+# ---------------------------------------------------------------------------
 async def valuta_draft(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] valuta_draft")
+
+    _emit(state, "draft:valutazione",
+          "🧐  Rileggo la bozza con occhio critico: "
+          "controllo ritmo, coerenza e adeguatezza per i bambini…")
+
+    # TODO: logica reale di valutazione
+    _emit(state, "draft:valutazione_ok",
+          "✅  La bozza supera l'esame. Si può procedere alla rifinitura.")
+
     return {"valutazione_draft": "ok"}
 
+
+# ---------------------------------------------------------------------------
+# NODE 9 — Correzione draft
+# ---------------------------------------------------------------------------
 async def correggi_draft(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] correggi_draft")
-    return {"tentativi_correzione": state["tentativi_correzione"] + 1}
+    tentativo = state["tentativi_correzione"] + 1
 
+    _emit(state, "draft:correzione",
+          f"🔧  Correzione {tentativo}: lima gli spigoli del racconto, "
+          "sistemo i passaggi che non scorrevano bene.",
+          {"tentativo": tentativo})
+
+    return {"tentativi_correzione": tentativo}
+
+
+# ---------------------------------------------------------------------------
+# NODE 10 — Rifinitura finale
+# ---------------------------------------------------------------------------
 async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] rifinisci")
+
+    eta = state["eta_bambino"]
+    _emit(state, "rifinitura:inizio",
+          f"💎  Lucido le parole per un bambino di {eta} anni: "
+          "scelgo il vocabolario giusto, aggiungo musicalità alle frasi…",
+          {"eta": eta})
+
     risultato = await llm.rifinisci(
         draft=state["draft"],
-        eta=state["eta_bambino"],
+        eta=eta,
         ritornello=state.get("ritornello_atteso"),
     )
     racconto = _limita_reduplicazioni(risultato.testo, ritornello=state.get("ritornello_atteso"))
+
+    _emit(state, "rifinitura:fine",
+          "🎉  La storia è pronta! Ogni parola è al suo posto.",
+          {"lunghezza_finale": len(racconto.split()) if racconto else 0})
+
     return {
         "racconto_finale": racconto,
         "similitudini_stimate": _conta_similitudini_approssimate(racconto),
@@ -558,6 +803,7 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
             "durata_secondi": round(risultato.durata_secondi, 2),
         }],
     }
+
 
 # ---------------------------------------------------------------------------
 # NODE 10b — Verifica coerenza della domanda finale
@@ -637,11 +883,10 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     lessico tecnico della KB (idem, nessuna chiamata LLM — tecnica_narrativa/
     archetipo comparsi alla lettera nel testo, es. "Ed ecco il capovolgimento,
     piccolo mio") e coerenza del ritornello (un secondo classificatore SI/NO,
-    stesso principio della
-    domanda ma senza tentativo di riscrittura automatica — un ritornello,
-    a differenza della domanda finale, è ripetuto più volte nel testo: una
-    riscrittura automatica rischierebbe di introdurre incoerenza tra le
-    ripetizioni invece di risolverla).
+    stesso principio della domanda ma senza tentativo di riscrittura
+    automatica — un ritornello, a differenza della domanda finale, è
+    ripetuto più volte nel testo: una riscrittura automatica rischierebbe di
+    introdurre incoerenza tra le ripetizioni invece di risolverla).
 
     In due passaggi, non uno, per la domanda: prima un classificatore SI/NO
     economico, e solo se la risposta è NO si chiede la riscrittura mirata.
@@ -810,6 +1055,8 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
                 # rischiare di incollare un frammento non affidabile.
                 if nuova_domanda and "\n\n" not in nuova_domanda and len(nuova_domanda) <= 400:
                     racconto = _sostituisci_ultimo_paragrafo(racconto, nuova_domanda)
+                    _emit(state, "revisione:domanda_corretta",
+                          "🔎  Ho controllato la domanda finale della storia... e non tornava. L'ho aggiustata.")
                 else:
                     logger.warning(
                         f"[verifica_coerenza_domanda] Risposta del fix non è la domanda "
@@ -881,28 +1128,48 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         "termini_kb_trapelati": termini_trapelati,
     }
 
+
 # ---------------------------------------------------------------------------
 # NODE 11 — Salvataggio memoria
 # ---------------------------------------------------------------------------
 async def salva_memoria(state: BaldoState, neo4j: Neo4jClient) -> dict:
     logger.info("[NODE] salva_memoria")
-    storia_id = str(uuid.uuid4())
+
+    _emit(state, "memoria:salvataggio",
+          "💾  Affido la storia alla memoria del cantastorie… "
+          "sarà un ricordo prezioso per le avventure future.")
+
+    storia_id    = str(uuid.uuid4())
     ids_frammenti = [f["id"] for f in state.get("frammenti", []) if f.get("id")]
 
     await neo4j.salva_storia(
-        story_id=storia_id,
-        text=state["racconto_finale"],
-        characters=state["personaggi"],
-        emotions=state["emozioni"],
-        setting=state["ambientazione"],
-        original_prompt=state["prompt_originale"],
-        used_fragments=ids_frammenti,
-        timestamp=datetime.utcnow().isoformat(),
+        story_id         = storia_id,
+        text             = state["racconto_finale"],
+        characters       = state["personaggi"],
+        emotions         = state["emozioni"],
+        setting          = state["ambientazione"],
+        original_prompt  = state["prompt_originale"],
+        used_fragments   = ids_frammenti,
+        timestamp        = datetime.utcnow().isoformat(),
     )
+
+    _emit(state, "memoria:salvata",
+          f"✅  Storia salvata con ID {storia_id}. "
+          f"Usati {len(ids_frammenti)} frammenti di memoria.",
+          {"storia_id": storia_id, "frammenti_usati": len(ids_frammenti)})
+
     return {"storia_id": storia_id, "frammenti_usati": ids_frammenti}
+
 
 # ---------------------------------------------------------------------------
 # NODE — Errore
 # ---------------------------------------------------------------------------
 async def nodo_errore(state: BaldoState) -> dict:
-    return {"racconto_finale": "", "errore": state.get("motivo_rifiuto")}
+    motivo = state.get("motivo_rifiuto", "errore sconosciuto")
+
+    _emit(state, "errore",
+          f"😔  Mi dispiace, non posso scrivere questa storia: {motivo}. "
+          "Prova a cambiare la tua richiesta!",
+          {"motivo": motivo})
+
+    return {"racconto_finale": "", "errore": motivo}

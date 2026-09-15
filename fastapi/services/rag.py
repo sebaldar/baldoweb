@@ -76,6 +76,7 @@ class RAGExtractor:
         risultato = await self.llm.chiedi(
             system=system,
             user=f"Analizza questo prompt: {prompt}",
+            fase="analizza_prompt",
         )
         # Riportato dentro il dict (chiave "_uso_llm") invece di cambiare la
         # firma in una tupla: il chiamante (analizza_prompt) lo estrae per il

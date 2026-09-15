@@ -1,8 +1,13 @@
 """
 LLMRouter
 =========
-Usa Claude o OpenAI (in ordine di preferenza).
-Tenta Claude (Sonnet 5) come provider principale, OpenAI come fallback automatico.
+Instrada ogni chiamata verso il provider configurato per la sua fase
+(services/model_routing.py — modificabile a runtime dall'admin), con
+Claude e OpenAI come catena di ripiego fissa se il provider scelto non è
+disponibile o fallisce. Un provider non richiesto esplicitamente per una
+fase non viene mai usato come ripiego automatico: DeepSeek entra in gioco
+solo dove l'admin lo ha assegnato di persona, non come sostituto silenzioso
+di Claude/OpenAI quando quelli falliscono.
 """
 
 import asyncio
@@ -10,10 +15,12 @@ import logging
 import re
 import time
 from dataclasses import dataclass
+from typing import Optional
 import openai
 import anthropic
 
 from config import settings
+from services.model_routing import ModelRoutingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -68,16 +75,31 @@ class LLMRouter:
             anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=TIMEOUT_LLM_SECONDI)
             if settings.ANTHROPIC_API_KEY else None
         )
+        # DeepSeek: stesso SDK di OpenAI, solo base_url diverso — la loro API
+        # è dichiaratamente compatibile con lo schema chat.completions.
+        self.deepseek_client = (
+            openai.AsyncOpenAI(
+                api_key=settings.DEEPSEEK_API_KEY,
+                base_url=settings.DEEPSEEK_BASE_URL,
+                timeout=TIMEOUT_LLM_SECONDI,
+            )
+            if settings.DEEPSEEK_API_KEY else None
+        )
 
-        if not self.openai_client and not self.anthropic_client:
-            raise RuntimeError("Nessun LLM configurato. Imposta OPENAI_API_KEY o ANTHROPIC_API_KEY nel .env")
+        if not self.openai_client and not self.anthropic_client and not self.deepseek_client:
+            raise RuntimeError(
+                "Nessun LLM configurato. Imposta OPENAI_API_KEY, ANTHROPIC_API_KEY "
+                "o DEEPSEEK_API_KEY nel .env"
+            )
 
-        provider = "Claude" if self.anthropic_client else "OpenAI"
+        self.routing = ModelRoutingConfig()
+
+        provider = "Claude" if self.anthropic_client else ("OpenAI" if self.openai_client else "DeepSeek")
         logger.info(f"LLMRouter pronto — provider principale: {provider}")
 
-    async def chiedi(self, system: str, user: str) -> RisultatoLLM:
+    async def chiedi(self, system: str, user: str, fase: str = "generico") -> RisultatoLLM:
         """Chiamata generica per RAG, analisi e valutazioni."""
-        return await self._cloud_chat(system=system, user=user)
+        return await self._cloud_chat(system=system, user=user, fase=fase)
 
     async def genera_racconto(self, prompt: str) -> RisultatoLLM:
         """Genera il draft del racconto tramite cloud LLM."""
@@ -94,7 +116,7 @@ class LLMRouter:
             "incollato così com'è in una pagina web, senza rendering Markdown — "
             "se vuoi enfasi o un'onomatopea, scrivila in testo semplice."
         )
-        return await self._cloud_chat(system=system, user=prompt)
+        return await self._cloud_chat(system=system, user=prompt, fase="genera_draft")
 
     async def rifinisci(self, draft: str, eta: int, ritornello: str | None = None) -> RisultatoLLM:
         """Rifinitura editoriale finale del racconto."""
@@ -160,77 +182,119 @@ class LLMRouter:
         )
         return await self._cloud_chat(
             system=system,
-            user=f"Raffina questo racconto:\n\n{draft}"
+            user=f"Raffina questo racconto:\n\n{draft}",
+            fase="rifinisci",
         )
 
     # ------------------------------------------------------------------
     # Metodo interno
     # ------------------------------------------------------------------
 
-    async def _cloud_chat(self, system: str, user: str) -> RisultatoLLM:
-        """Tenta Claude (Sonnet 5), poi OpenAI come fallback."""
-        t0 = time.monotonic()
-        if self.anthropic_client:
-            try:
-                resp = await asyncio.wait_for(
-                    self.anthropic_client.messages.create(
-                        model=settings.ANTHROPIC_MODEL,
-                        # Margine ampio: con il thinking adattivo attivo, un tetto
-                        # basso rischia di esaurirsi nel ragionamento interno prima
-                        # ancora di produrre il testo visibile (successo in test:
-                        # nessun blocco "text" nella risposta, scattato il
-                        # fallback). Alzare il tetto non costa di più: si paga
-                        # solo per i token davvero generati, non per il tetto.
-                        max_tokens=8192,
-                        system=system,
-                        messages=[{"role": "user", "content": user}],
-                        thinking={"type": "adaptive"},
-                        # "low": scrittura creativa breve per bambini, non
-                        # ragionamento complesso — riduce anche il rischio sopra.
-                        output_config={"effort": "low"},
-                    ),
-                    timeout=TIMEOUT_LLM_SECONDI,
-                )
-                testo = self._estrai_testo(resp.content)
-                if testo:
-                    uso = getattr(resp, "usage", None)
-                    return RisultatoLLM(
-                        testo=self._pulisci(testo),
-                        modello=settings.ANTHROPIC_MODEL,
-                        token_input=getattr(uso, "input_tokens", 0) or 0,
-                        token_output=getattr(uso, "output_tokens", 0) or 0,
-                        durata_secondi=time.monotonic() - t0,
-                    )
-                logger.warning("Claude ha risposto senza blocco di testo, provo OpenAI.")
-            except Exception as e:
-                logger.warning(f"Claude fallito ({e}), provo OpenAI.")
+    # Catena di ripiego "storica", usata solo quando il provider scelto per
+    # la fase non è disponibile o fallisce. DeepSeek non ne fa parte
+    # deliberatamente: essendo nuovo e non ancora verificato sulla tenuta
+    # delle regole di stile italiane fini (apertura di Baldo, ritornello,
+    # reduplicazioni...), lo usiamo solo dove l'admin lo ha assegnato di
+    # persona a una fase — mai come sostituto silenzioso altrove.
+    _CATENA_RIPIEGO = ("anthropic", "openai")
 
-        if self.openai_client:
+    async def _cloud_chat(self, system: str, user: str, fase: str = "generico") -> RisultatoLLM:
+        """Prova il provider configurato per `fase`, poi la catena di
+        ripiego Claude → OpenAI se quello scelto manca o fallisce."""
+        provider_scelto = self.routing.get_provider(fase)
+        catena = [provider_scelto] + [p for p in self._CATENA_RIPIEGO if p != provider_scelto]
+
+        ultimo_errore: Optional[Exception] = None
+        for provider in catena:
+            client, modello = self._client_e_modello(provider)
+            if not client:
+                continue
+            t0 = time.monotonic()
             try:
-                resp = await asyncio.wait_for(
-                    self.openai_client.chat.completions.create(
-                        model=settings.OPENAI_MODEL,
-                        messages=[
-                            {"role": "system", "content": system},
-                            {"role": "user", "content": user},
-                        ],
-                        temperature=0.8,
-                    ),
-                    timeout=TIMEOUT_LLM_SECONDI,
-                )
-                uso = getattr(resp, "usage", None)
-                return RisultatoLLM(
-                    testo=self._pulisci(resp.choices[0].message.content),
-                    modello=settings.OPENAI_MODEL,
-                    token_input=getattr(uso, "prompt_tokens", 0) or 0,
-                    token_output=getattr(uso, "completion_tokens", 0) or 0,
-                    durata_secondi=time.monotonic() - t0,
+                if provider == "anthropic":
+                    risultato = await self._chiedi_anthropic(client, modello, system, user, t0)
+                else:
+                    risultato = await self._chiedi_openai_compatibile(client, modello, system, user, t0)
+                if risultato:
+                    return risultato
+                logger.warning(
+                    f"[{fase}] {provider} ha risposto senza testo utile, provo il prossimo."
                 )
             except Exception as e:
-                logger.error(f"Anche OpenAI fallito ({e}) — nessun LLM disponibile per questa richiesta.")
-                raise RuntimeError(f"Entrambi i provider LLM non disponibili: {e}") from e
+                ultimo_errore = e
+                logger.warning(f"[{fase}] {provider} fallito ({e}), provo il prossimo.")
 
-        raise RuntimeError("Nessun LLM disponibile — Claude e OpenAI entrambi offline.")
+        raise RuntimeError(
+            f"Nessun provider LLM disponibile per la fase '{fase}'"
+            + (f": {ultimo_errore}" if ultimo_errore else "")
+        )
+
+    def _client_e_modello(self, provider: str):
+        if provider == "anthropic":
+            return self.anthropic_client, settings.ANTHROPIC_MODEL
+        if provider == "openai":
+            return self.openai_client, settings.OPENAI_MODEL
+        if provider == "deepseek":
+            return self.deepseek_client, settings.DEEPSEEK_MODEL
+        return None, None
+
+    async def _chiedi_anthropic(self, client, modello, system, user, t0) -> Optional["RisultatoLLM"]:
+        resp = await asyncio.wait_for(
+            client.messages.create(
+                model=modello,
+                # Margine ampio: con il thinking adattivo attivo, un tetto
+                # basso rischia di esaurirsi nel ragionamento interno prima
+                # ancora di produrre il testo visibile (successo in test:
+                # nessun blocco "text" nella risposta, scattato il
+                # fallback). Alzare il tetto non costa di più: si paga
+                # solo per i token davvero generati, non per il tetto.
+                max_tokens=8192,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+                thinking={"type": "adaptive"},
+                # "low": scrittura creativa breve per bambini, non
+                # ragionamento complesso — riduce anche il rischio sopra.
+                output_config={"effort": "low"},
+            ),
+            timeout=TIMEOUT_LLM_SECONDI,
+        )
+        testo = self._estrai_testo(resp.content)
+        if not testo:
+            return None
+        uso = getattr(resp, "usage", None)
+        return RisultatoLLM(
+            testo=self._pulisci(testo),
+            modello=modello,
+            token_input=getattr(uso, "input_tokens", 0) or 0,
+            token_output=getattr(uso, "output_tokens", 0) or 0,
+            durata_secondi=time.monotonic() - t0,
+        )
+
+    async def _chiedi_openai_compatibile(self, client, modello, system, user, t0) -> Optional["RisultatoLLM"]:
+        """Usato sia per OpenAI sia per DeepSeek: stesso schema di chiamata
+        (l'API di DeepSeek dichiara compatibilità con l'SDK OpenAI)."""
+        resp = await asyncio.wait_for(
+            client.chat.completions.create(
+                model=modello,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=0.8,
+            ),
+            timeout=TIMEOUT_LLM_SECONDI,
+        )
+        testo = resp.choices[0].message.content if resp.choices else ""
+        if not testo:
+            return None
+        uso = getattr(resp, "usage", None)
+        return RisultatoLLM(
+            testo=self._pulisci(testo),
+            modello=modello,
+            token_input=getattr(uso, "prompt_tokens", 0) or 0,
+            token_output=getattr(uso, "completion_tokens", 0) or 0,
+            durata_secondi=time.monotonic() - t0,
+        )
 
     @staticmethod
     def _pulisci(testo: str) -> str:

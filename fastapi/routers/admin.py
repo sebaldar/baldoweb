@@ -15,6 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from services.neo4j_client import Neo4jClient
+from services.llm import LLMRouter
+from services.model_routing import FASI, PROVIDER_VALIDI
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,17 @@ class BulkLoadResponse(BaseModel):
 class FragmentDeleteRequest(BaseModel):
     ids: list[str]
 
+class ProviderInfo(BaseModel):
+    disponibile: bool   = Field(..., description="True se la relativa API key è configurata")
+    modello:     str    = Field(..., description="Modello attualmente configurato per questo provider")
+
+class ModelRoutingResponse(BaseModel):
+    fasi:                 dict[str, str]
+    provider_disponibili: dict[str, ProviderInfo]
+
+class ModelRoutingUpdate(BaseModel):
+    provider: str = Field(..., description="'anthropic' | 'openai' | 'deepseek'")
+
 
 # ---------------------------------------------------------------------------
 # Dipendenza Neo4j (iniettata da main.py via app.state)
@@ -60,6 +74,13 @@ def get_neo4j() -> Neo4jClient:
     if not neo4j_client:
         raise HTTPException(status_code=503, detail="Neo4j non disponibile")
     return neo4j_client
+
+
+def get_llm_router() -> LLMRouter:
+    from main import llm_router
+    if not llm_router:
+        raise HTTPException(status_code=503, detail="LLMRouter non disponibile")
+    return llm_router
 
 
 # ---------------------------------------------------------------------------
@@ -254,3 +275,56 @@ async def stats_db(neo4j: Neo4jClient = Depends(get_neo4j)):
             counts[label] = rec["n"] if rec else 0
 
     return {"labels": counts}
+
+
+# ---------------------------------------------------------------------------
+# GET/PUT /admin/modelli — Routing dei provider LLM per fase della pipeline
+# ---------------------------------------------------------------------------
+
+@router.get("/modelli", response_model=ModelRoutingResponse)
+async def leggi_routing_modelli(llm: LLMRouter = Depends(get_llm_router)):
+    """
+    Provider configurato per ciascuna fase della pipeline, più la
+    disponibilità/modello di ciascun provider (una fase assegnata a un
+    provider senza API key configurata userà comunque la catena di ripiego
+    Claude → OpenAI al momento della chiamata, ma qui la segnaliamo per
+    evitare configurazioni che sembrano attive e non lo sono).
+    """
+    return ModelRoutingResponse(
+        fasi=llm.routing.get_tutti(),
+        provider_disponibili={
+            "anthropic": ProviderInfo(
+                disponibile=llm.anthropic_client is not None,
+                modello=settings.ANTHROPIC_MODEL,
+            ),
+            "openai": ProviderInfo(
+                disponibile=llm.openai_client is not None,
+                modello=settings.OPENAI_MODEL,
+            ),
+            "deepseek": ProviderInfo(
+                disponibile=llm.deepseek_client is not None,
+                modello=settings.DEEPSEEK_MODEL,
+            ),
+        },
+    )
+
+
+@router.put("/modelli/{fase}")
+async def imposta_routing_modello(
+    fase: str,
+    body: ModelRoutingUpdate,
+    llm: LLMRouter = Depends(get_llm_router),
+):
+    """Assegna un provider a una singola fase della pipeline."""
+    if fase not in FASI:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Fase sconosciuta: '{fase}'. Fasi valide: {', '.join(FASI)}",
+        )
+    if body.provider not in PROVIDER_VALIDI:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Provider sconosciuto: '{body.provider}'. Validi: {', '.join(PROVIDER_VALIDI)}",
+        )
+    llm.routing.set_provider(fase, body.provider)
+    return {"fase": fase, "provider": body.provider}

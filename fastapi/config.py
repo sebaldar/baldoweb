@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
 
+    # LLM - DeepSeek (API compatibile OpenAI, base_url diverso). "deepseek-flash"
+    # è l'ID canonico corrente di DeepSeek-V4.1-Flash su api.deepseek.com.
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_MODEL: str = "deepseek-flash"
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+
     # LLM - Ollama (servizio interno Docker o locale)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "llama3.2"

@@ -494,8 +494,17 @@ def _conta_similitudini_approssimate(testo: str) -> int:
     (comparativo, interrogativo, causale — "come mai", "come se", "come
     stai") per un'edit automatica sicura, a differenza della reduplicazione
     ("parola parola") che è un pattern inequivocabile.
+
+    Esclude l'ultimo paragrafo (la domanda finale) dal conteggio: osservato
+    ripetutamente, tre casi reali diversi, che la domanda finale usa spesso
+    "come" in senso interrogativo ("come avresti aiutato...", "come lo
+    chiameresti...") — falso positivo sistematico, non un paragone. Stesso
+    confine di paragrafo già usato da _sostituisci_ultimo_paragrafo.
     """
-    testo_normalizzato = (testo or "").lower()
+    testo = testo or ""
+    paragrafi = testo.split("\n\n")
+    corpo = "\n\n".join(paragrafi[:-1]) if len(paragrafi) > 1 else testo
+    testo_normalizzato = corpo.lower()
     totale = len(re.findall(r"\bcome\b", testo_normalizzato))
     for idioma in _COME_NON_COMPARATIVO:
         totale -= testo_normalizzato.count(idioma)

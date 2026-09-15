@@ -100,7 +100,8 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
     
     risultato = await llm.chiedi(
         system=system,
-        user=f"Prompt: {state['prompt_originale']}\nPersonaggi: {state['personaggi']}"
+        user=f"Prompt: {state['prompt_originale']}\nPersonaggi: {state['personaggi']}",
+        fase="valuta_prompt",
     )
     uso_llm = {
         "nodo": "valuta_prompt",
@@ -125,7 +126,7 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
 async def decide_tools(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] decide_tools")
     system = 'Decidi se usare l\'astronomia. Rispondi SOLO JSON: {"usa_astronomia": true/false}'
-    risultato = await llm.chiedi(system=system, user=state['prompt_originale'])
+    risultato = await llm.chiedi(system=system, user=state['prompt_originale'], fase="decide_tools")
     uso_llm = {
         "nodo": "decide_tools",
         "modello": risultato.modello,
@@ -246,7 +247,7 @@ async def valuta_frammenti(state: BaldoState, llm: LLMRouter) -> dict:
 
 async def _riformula_termini(state: BaldoState, llm: LLMRouter) -> tuple[list[str], dict]:
     system = 'Suggerisci termini di ricerca alternativi in JSON: {"termini": []}'
-    risultato = await llm.chiedi(system=system, user=state['ambientazione'])
+    risultato = await llm.chiedi(system=system, user=state['ambientazione'], fase="valuta_frammenti._riformula_termini")
     uso_llm = {
         "nodo": "valuta_frammenti._riformula_termini",
         "modello": risultato.modello,
@@ -737,8 +738,8 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     # letto) — non è la spesa maggiore della pipeline, ma è comunque un
     # risparmio reale ottenerlo gratis invece che in sequenza.
     risultato_ritornello, risultato_check = await asyncio.gather(
-        llm.chiedi(system=system_ritornello, user=racconto),
-        llm.chiedi(system=system_check, user=racconto),
+        llm.chiedi(system=system_ritornello, user=racconto, fase="verifica_coerenza_domanda.ritornello"),
+        llm.chiedi(system=system_check, user=racconto, fase="verifica_coerenza_domanda.check"),
         return_exceptions=True,
     )
 
@@ -792,7 +793,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
                 "nessun commento, nessuna spiegazione."
             )
             try:
-                risultato_fix = await llm.chiedi(system=system_fix, user=racconto)
+                risultato_fix = await llm.chiedi(system=system_fix, user=racconto, fase="verifica_coerenza_domanda.fix")
                 nuova_domanda = (risultato_fix.testo or "").strip()
                 uso_llm.append({
                     "nodo": "verifica_coerenza_domanda.fix",
@@ -844,7 +845,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
             "senza commenti né spiegazioni."
         )
         try:
-            risultato_sim = await llm.chiedi(system=system_similitudini, user=racconto)
+            risultato_sim = await llm.chiedi(system=system_similitudini, user=racconto, fase="verifica_coerenza_domanda.similitudini")
             testo_corretto = (risultato_sim.testo or "").strip()
             uso_llm.append({
                 "nodo": "verifica_coerenza_domanda.similitudini",

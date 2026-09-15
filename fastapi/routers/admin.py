@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from services.neo4j_client import Neo4jClient
 from services.llm import LLMRouter
-from services.model_routing import FASI, PROVIDER_VALIDI
+from services.model_routing import FASI, FASI_CON_BYPASS
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -60,9 +60,13 @@ class ProviderInfo(BaseModel):
 class ModelRoutingResponse(BaseModel):
     fasi:                 dict[str, str]
     provider_disponibili: dict[str, ProviderInfo]
+    fasi_con_bypass:       list[str] = Field(
+        default_factory=list,
+        description="Fasi dove 'nessuno' è un valore accettato (salta la chiamata LLM)",
+    )
 
 class ModelRoutingUpdate(BaseModel):
-    provider: str = Field(..., description="'anthropic' | 'openai' | 'deepseek'")
+    provider: str = Field(..., description="'anthropic' | 'openai' | 'deepseek', o 'nessuno' solo per le fasi con bypass")
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +310,7 @@ async def leggi_routing_modelli(llm: LLMRouter = Depends(get_llm_router)):
                 modello=settings.DEEPSEEK_MODEL,
             ),
         },
+        fasi_con_bypass=sorted(FASI_CON_BYPASS),
     )
 
 
@@ -315,16 +320,15 @@ async def imposta_routing_modello(
     body: ModelRoutingUpdate,
     llm: LLMRouter = Depends(get_llm_router),
 ):
-    """Assegna un provider a una singola fase della pipeline."""
+    """Assegna un provider a una singola fase della pipeline (o 'nessuno'
+    per le fasi in FASI_CON_BYPASS, per saltare del tutto la chiamata)."""
     if fase not in FASI:
         raise HTTPException(
             status_code=404,
             detail=f"Fase sconosciuta: '{fase}'. Fasi valide: {', '.join(FASI)}",
         )
-    if body.provider not in PROVIDER_VALIDI:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Provider sconosciuto: '{body.provider}'. Validi: {', '.join(PROVIDER_VALIDI)}",
-        )
-    llm.routing.set_provider(fase, body.provider)
+    try:
+        llm.routing.set_provider(fase, body.provider)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return {"fase": fase, "provider": body.provider}

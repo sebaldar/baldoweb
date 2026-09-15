@@ -29,10 +29,33 @@ from typing import Literal, Optional
 
 logger = logging.getLogger(__name__)
 
-Provider = Literal["anthropic", "openai", "deepseek"]
+Provider = Literal["anthropic", "openai", "deepseek", "nessuno"]
 
 PROVIDER_DEFAULT: Provider = "anthropic"
 PROVIDER_VALIDI: tuple[Provider, ...] = ("anthropic", "openai", "deepseek")
+
+# Valore speciale: non instrada verso un provider diverso, salta del tutto
+# la chiamata LLM di quella fase (il nodo in nodes.py sostituisce un
+# comportamento di default sensato — es. il draft diventa il racconto
+# finale senza rifinitura). Non è un "provider" in senso proprio, quindi
+# resta fuori da PROVIDER_VALIDI: ogni chiamante che instrada verso un
+# vero LLM (services/llm.py) deve continuare a trattarlo come invalido.
+BYPASS: Provider = "nessuno"
+
+# Solo le fasi dove saltare la chiamata ha un sostituto sicuro e ovvio:
+# rifinisci (il draft resta com'è, la coerenza della domanda finale è
+# comunque presidiata da verifica_coerenza_domanda.check/.fix, un nodo
+# indipendente), il rewrite delle similitudini (si accetta il rischio di
+# qualche similitudine in più) e il retry di ricerca KB (si va avanti
+# senza frammenti invece di riprovare). Le altre fasi — in particolare
+# valuta_prompt, il controllo di sicurezza sul prompt — restano escluse
+# deliberatamente: un bypass lì va deciso con più attrito di un menu a
+# tendina, non aggiunto qui come le altre.
+FASI_CON_BYPASS: frozenset[str] = frozenset({
+    "rifinisci",
+    "verifica_coerenza_domanda.similitudini",
+    "valuta_frammenti._riformula_termini",
+})
 
 # Stessi nomi usati nel campo "nodo" di dettaglio_chiamate_llm nei report
 # YAML delle storie — così l'amministratore riconosce le fasi guardando i
@@ -75,14 +98,20 @@ class ModelRoutingConfig:
         self._mtime: Optional[float] = None
         self._carica()
 
+    @staticmethod
+    def _valore_valido(fase: str, valore) -> bool:
+        if valore in PROVIDER_VALIDI:
+            return True
+        return valore == BYPASS and fase in FASI_CON_BYPASS
+
     def _carica(self) -> None:
         with self._lock:
             if self._path.exists():
                 try:
                     dati = json.loads(self._path.read_text())
                     self._config = {
-                        fase: dati.get(fase, PROVIDER_DEFAULT)
-                        if dati.get(fase) in PROVIDER_VALIDI
+                        fase: dati.get(fase)
+                        if self._valore_valido(fase, dati.get(fase))
                         else PROVIDER_DEFAULT
                         for fase in FASI
                     }
@@ -126,8 +155,12 @@ class ModelRoutingConfig:
     def set_provider(self, fase: str, provider: str) -> None:
         if fase not in FASI:
             raise ValueError(f"Fase sconosciuta: '{fase}'")
-        if provider not in PROVIDER_VALIDI:
-            raise ValueError(f"Provider sconosciuto: '{provider}'")
+        if not self._valore_valido(fase, provider):
+            validi = PROVIDER_VALIDI + ((BYPASS,) if fase in FASI_CON_BYPASS else ())
+            raise ValueError(
+                f"Provider non valido per la fase '{fase}': '{provider}'. "
+                f"Validi: {', '.join(validi)}"
+            )
         with self._lock:
             self._config[fase] = provider  # type: ignore[assignment]
         self._salva()

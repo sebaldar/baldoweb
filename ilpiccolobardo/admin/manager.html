@@ -662,19 +662,20 @@
             'analizza_prompt':                             'Estrae personaggi, emozioni, luogo, data/ora dal prompt utente',
             'valuta_prompt':                                'Controllo di sicurezza SI/NO sul prompt',
             'decide_tools':                                 'Decide se servono dati astronomici',
-            'valuta_frammenti._riformula_termini':          'Riformula i termini di ricerca se la KB non trova nulla',
+            'valuta_frammenti._riformula_termini':          'Riformula i termini di ricerca se la KB non trova nulla — "Nessuno" disponibile',
             'genera_draft':                                 '✍️ Scrittura del racconto — creativo, tarato su Claude',
-            'rifinisci':                                    '✍️ Rifinitura editoriale — creativo, tarato su Claude',
+            'rifinisci':                                    '✍️ Rifinitura editoriale — creativo, tarato su Claude — "Nessuno" disponibile (il draft diventa il racconto finale)',
             'verifica_coerenza_domanda.ritornello':         'Controllo SI/NO sul ritornello',
             'verifica_coerenza_domanda.check':              'Controllo SI/NO sulla domanda finale',
             'verifica_coerenza_domanda.fix':                'Riscrive la domanda finale se incoerente',
-            'verifica_coerenza_domanda.similitudini':       '✍️ Riscrive il racconto se ha troppe similitudini — creativo',
+            'verifica_coerenza_domanda.similitudini':       '✍️ Riscrive il racconto se ha troppe similitudini — creativo — "Nessuno" disponibile',
         };
 
         function displayModelRouting(data) {
             const container = document.getElementById('modelRoutingList');
             const fasi = (data && data.fasi) || {};
             const providerInfo = (data && data.provider_disponibili) || {};
+            const fasiConBypass = new Set((data && data.fasi_con_bypass) || []);
 
             const nomeProvider = { anthropic: 'Claude', openai: 'OpenAI', deepseek: 'DeepSeek' };
             const legenda = Object.entries(providerInfo).map(([id, info]) => {
@@ -684,11 +685,18 @@
 
             const righe = Object.keys(fasi).map(fase => {
                 const providerAttuale = fasi[fase];
-                const opzioni = Object.keys(providerInfo).map(id => {
+                let opzioni = Object.keys(providerInfo).map(id => {
                     const sel = id === providerAttuale ? 'selected' : '';
                     const disp = providerInfo[id].disponibile ? '' : ' (manca API key)';
                     return `<option value="${id}" ${sel}>${nomeProvider[id] || id}${disp}</option>`;
                 }).join('');
+                // "Nessuno" salta del tutto la chiamata LLM di questa fase — solo
+                // dove un salto ha un sostituto sicuro (vedi FASI_CON_BYPASS lato
+                // backend), non un'opzione generica per tutte le fasi.
+                if (fasiConBypass.has(fase)) {
+                    const sel = providerAttuale === 'nessuno' ? 'selected' : '';
+                    opzioni += `<option value="nessuno" ${sel}>— Nessuno (salta questa fase) —</option>`;
+                }
                 return `
                     <div class="list-item" style="cursor:default;">
                         <div class="list-item-header">

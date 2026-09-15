@@ -427,6 +427,10 @@ async def valuta_frammenti(state: BaldoState, llm: LLMRouter) -> dict:
 
 
 async def _riformula_termini(state: BaldoState, llm: LLMRouter) -> tuple[list[str], dict]:
+    if llm.routing.get_provider("valuta_frammenti._riformula_termini") == "nessuno":
+        # Bypass deliberato: niente retry con termini riformulati, si va
+        # avanti senza frammenti invece di tentare una seconda ricerca.
+        return [], {}
     system = 'Suggerisci termini di ricerca alternativi in JSON: {"termini": []}'
     risultato = await llm.chiedi(system=system, user=state["ambientazione"], fase="valuta_frammenti._riformula_termini")
     uso_llm = {
@@ -793,12 +797,33 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
           "scelgo il vocabolario giusto, aggiungo musicalità alle frasi…",
           {"eta": eta})
 
-    risultato = await llm.rifinisci(
-        draft=state["draft"],
-        eta=eta,
-        ritornello=state.get("ritornello_atteso"),
-    )
-    racconto = _limita_reduplicazioni(risultato.testo, ritornello=state.get("ritornello_atteso"))
+    ritornello_atteso = state.get("ritornello_atteso")
+    if llm.routing.get_provider("rifinisci") == "nessuno":
+        # Bypass deliberato: il draft diventa il racconto finale così com'è,
+        # senza la chiamata LLM di rifinitura (semplificazione lessicale,
+        # conversione emozioni dichiarate in reazioni fisiche, protezione
+        # della cornice di Baldo). Il rischio principale che rifinisci
+        # copriva — una domanda finale malformata — resta comunque
+        # presidiato da verifica_coerenza_domanda.check/.fix, un nodo
+        # indipendente da questo.
+        testo_base = state["draft"]
+        uso_llm = []
+    else:
+        risultato = await llm.rifinisci(
+            draft=state["draft"],
+            eta=eta,
+            ritornello=ritornello_atteso,
+        )
+        testo_base = risultato.testo
+        uso_llm = [{
+            "nodo": "rifinisci",
+            "modello": risultato.modello,
+            "token_input": risultato.token_input,
+            "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2),
+        }]
+
+    racconto = _limita_reduplicazioni(testo_base, ritornello=ritornello_atteso)
 
     _emit(state, "rifinitura:fine",
           "🎉  La storia è pronta! Ogni parola è al suo posto.",
@@ -806,14 +831,8 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
 
     return {
         "racconto_finale": racconto,
-        "similitudini_stimate": _conta_similitudini_approssimate(racconto, ritornello=state.get("ritornello_atteso")),
-        "llm_usage": [{
-            "nodo": "rifinisci",
-            "modello": risultato.modello,
-            "token_input": risultato.token_input,
-            "token_output": risultato.token_output,
-            "durata_secondi": round(risultato.durata_secondi, 2),
-        }],
+        "similitudini_stimate": _conta_similitudini_approssimate(racconto, ritornello=ritornello_atteso),
+        "llm_usage": uso_llm,
     }
 
 
@@ -1082,7 +1101,8 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     ritornello_atteso = state.get("ritornello_atteso")
     similitudini = _conta_similitudini_approssimate(racconto, ritornello=ritornello_atteso)
     SOGLIA_SIMILITUDINI = 3
-    if similitudini > SOGLIA_SIMILITUDINI:
+    bypass_similitudini = llm.routing.get_provider("verifica_coerenza_domanda.similitudini") == "nessuno"
+    if similitudini > SOGLIA_SIMILITUDINI and not bypass_similitudini:
         vincolo_ritornello_sim = (
             f"Il racconto usa questo ritornello, che deve restare IDENTICO, "
             f"parola per parola, in ogni sua ripetizione: \"{ritornello_atteso}\". "

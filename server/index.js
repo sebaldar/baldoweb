@@ -83,10 +83,22 @@ class the_server extends Server {
                 clearInterval(ws.clientData?.intervalId);
                 return;
             }
-            
+
             try {
                 const command = solar.do_sendLoop(id);
-                ws.send(command);
+                // do_sendLoop() è agganciato a OGNI connessione WS del server,
+                // non solo a quelle del planetario (l'endpoint /ws è condiviso
+                // da tutte le pagine, incluso admin/manager.html) — per un
+                // client senza una vera sessione astronomica registrata
+                // restituisce una stringa vuota ogni 500ms. Inviarla comunque
+                // manda un frame WS vuoto a QUALUNQUE pagina connessa, che poi
+                // fallisce JSON.parse(event.data) lato client (osservato:
+                // "Unexpected end of JSON input" ripetuto ogni 500ms sul
+                // pannello admin). Non inviamo nulla se non c'è davvero un
+                // comando da mandare.
+                if (command) {
+                    ws.send(command);
+                }
             } catch (err) {
                 console.error(`Error sending to client ${id}:`, err.message);
                 clearInterval(ws.clientData.intervalId);

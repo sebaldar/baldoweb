@@ -678,7 +678,7 @@ _COME_NON_COMPARATIVO = (
 )
 
 
-def _conta_similitudini_approssimate(testo: str) -> int:
+def _conta_similitudini_approssimate(testo: str, ritornello: "str | None" = None) -> int:
     """
     Stima approssimativa (non un'analisi semantica) di quante comparazioni
     con "come" contiene il testo — serve solo a tracciare nel report se la
@@ -693,10 +693,22 @@ def _conta_similitudini_approssimate(testo: str) -> int:
     "come" in senso interrogativo ("come avresti aiutato...", "come lo
     chiameresti...") — falso positivo sistematico, non un paragone. Stesso
     confine di paragrafo già usato da _sostituisci_ultimo_paragrafo.
+
+    Esclude anche il testo del ritornello, se presente: un ritornello può
+    contenere "come" per costruzione (es. "Quella luna come la chiamo", un
+    gioco di nomi) e si ripete 2-3 volte di proposito — senza questa
+    esclusione ogni ripetizione veniva contata come una similitudine in
+    più, gonfiando il numero e potendo far scattare inutilmente il rewrite
+    di verifica_coerenza_domanda anche quando le similitudini vere erano
+    sotto soglia (osservato: un ritornello con "come" ripetuto 3 volte +
+    1 similitudine vera = 4, sopra soglia, con lo stesso identico problema
+    già risolto per _limita_reduplicazioni ma mai esteso qui).
     """
     testo = testo or ""
     paragrafi = testo.split("\n\n")
     corpo = "\n\n".join(paragrafi[:-1]) if len(paragrafi) > 1 else testo
+    if ritornello:
+        corpo = corpo.replace(ritornello, "")
     testo_normalizzato = corpo.lower()
     totale = len(re.findall(r"\bcome\b", testo_normalizzato))
     for idioma in _COME_NON_COMPARATIVO:
@@ -794,7 +806,7 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
 
     return {
         "racconto_finale": racconto,
-        "similitudini_stimate": _conta_similitudini_approssimate(racconto),
+        "similitudini_stimate": _conta_similitudini_approssimate(racconto, ritornello=state.get("ritornello_atteso")),
         "llm_usage": [{
             "nodo": "rifinisci",
             "modello": risultato.modello,
@@ -1068,7 +1080,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
 
     # --- Controllo similitudini (Regola 20), indipendente dalla domanda ---
     ritornello_atteso = state.get("ritornello_atteso")
-    similitudini = _conta_similitudini_approssimate(racconto)
+    similitudini = _conta_similitudini_approssimate(racconto, ritornello=ritornello_atteso)
     SOGLIA_SIMILITUDINI = 3
     if similitudini > SOGLIA_SIMILITUDINI:
         vincolo_ritornello_sim = (
@@ -1122,7 +1134,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
 
     return {
         "racconto_finale": racconto,
-        "similitudini_stimate": _conta_similitudini_approssimate(racconto),
+        "similitudini_stimate": _conta_similitudini_approssimate(racconto, ritornello=ritornello_atteso),
         "llm_usage": uso_llm,
         "nome_presente_in_output": nome_presente,
         "termini_kb_trapelati": termini_trapelati,

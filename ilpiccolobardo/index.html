@@ -1037,17 +1037,28 @@ if (response.ok) {
                 `;
 			// ── Nuovi eventi SSE ritrasmessi da Node ────────────────────────
 			} else if (response.tipo === 'nodo_start') {
-				// Aggiorna il messaggio di stato mentre LangGraph avanza
 				const statusEl = document.getElementById('loadingStatus');
 				if (statusEl) {
 					const messaggi = {
-						'analizza_prompt':      '🔍 Analizzo la tua richiesta...',
-						'recupera_astronomia':  '🌌 Guardo il cielo di stanotte...',
-						'recupera_frammenti':   '📚 Sfoglio il libro delle storie...',
-						'genera_racconto':      '✍️ Il Bardo sta scrivendo...',
-						'valida_racconto':      '✨ Rifinitura magica in corso...',
+						'avvio':                 '🪄 Il Piccolo Bardo si sveglia...',
+						'analizza_prompt':       '🔍 Leggo la tua idea e cerco i protagonisti...',
+						'valuta_prompt':         '🛡️ Verifico che la storia sia adatta ai bambini...',
+						'decide_tools':          '🛠️ Scelgo quali magie usare per la favola...',
+						'fetch_contesto_fisico': '🌍 Meteo e cielo stellato in arrivo...',
+						'query_neo4j':           '📚 Sfoglio il libro dei ricordi del Bardo...',
+						'valuta_frammenti':      '🔎 Valuto i ricordi trovati...',
+						'componi_prompt':        '🖊️ Intrecciо personaggi, stelle e ricordi...',
+						'genera_draft':          '✍️ Il Bardo prende la penna... la storia sta nascendo!',
+						'valuta_draft':          '🧐 Rileggo la bozza con occhio critico...',
+						'correggi_draft':        '🔧 Limo gli spigoli del racconto...',
+						'rifinisci':             '💎 Scelgo ogni parola per le orecchie dei bambini...',
+						'salva_memoria':         '💾 Affido la storia alla memoria del Bardo...',
+						'nodo_errore':           '😔 Qualcosa non va... riprovo!',
 					};
-					statusEl.textContent = messaggi[response.nodo] ?? `⚙️ ${response.nodo}...`;
+					const testo = messaggi[response.nodo] ?? `✨ ${response.nodo.replace(/_/g, ' ')}...`;
+					statusEl.style.transition = 'opacity 0.2s';
+					statusEl.style.opacity = '0';
+					setTimeout(() => { statusEl.textContent = testo; statusEl.style.opacity = '1'; }, 200);
 				}
 
 			} else if (response.tipo === 'token') {
@@ -1156,6 +1167,22 @@ if (response.ok) {
 				<div class="loading" id="loadingIndicator">
 					<div class="loading-spinner"></div>
 					<p id="loadingStatus">Il Piccolo Bardo sta preparando la tua favola magica... ✨</p>
+				</div>
+				<div id="streamingText" style="display:none; white-space: pre-wrap; line-height: 1.8;"></div>
+			`;
+			document.getElementById('readBtn').disabled = true;
+			document.getElementById('illustrateBtn').disabled = true;
+			document.getElementById('storyIllustration').style.display = 'none';
+			document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
+
+			// Prepara il DOM PRIMA di inviare, così loadingStatus esiste
+			// quando arrivano i primi eventi nodo_start dal server
+			document.getElementById('storyCard').style.display = 'block';
+			document.getElementById('storyDisplay').innerHTML = `
+				<button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
+				<div class="loading" id="loadingIndicator">
+					<div class="loading-spinner"></div>
+					<p id="loadingStatus">🪄 Il Piccolo Bardo si sveglia...</p>
 				</div>
 				<div id="streamingText" style="display:none; white-space: pre-wrap; line-height: 1.8;"></div>
 			`;

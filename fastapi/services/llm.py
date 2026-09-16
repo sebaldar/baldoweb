@@ -214,7 +214,19 @@ class LLMRouter:
                 if provider == "anthropic":
                     risultato = await self._chiedi_anthropic(client, modello, system, user, t0)
                 else:
-                    risultato = await self._chiedi_openai_compatibile(client, modello, system, user, t0)
+                    # DeepSeek ha il "thinking mode" attivo di default, anche
+                    # su richieste banali: osservato in test diretto, 107
+                    # token di output per rispondere "OK" contro 1 token con
+                    # il thinking disattivato esplicitamente. Per le fasi
+                    # classificatorie (l'uso previsto qui) quel ragionamento
+                    # nascosto non serve e mangerebbe buona parte del
+                    # risparmio di prezzo che DeepSeek offrirebbe altrimenti.
+                    # OpenAI non ha questo parametro: lo passiamo solo se il
+                    # provider è davvero DeepSeek.
+                    extra_body = {"thinking": {"type": "disabled"}} if provider == "deepseek" else None
+                    risultato = await self._chiedi_openai_compatibile(
+                        client, modello, system, user, t0, extra_body=extra_body
+                    )
                 if risultato:
                     return risultato
                 logger.warning(
@@ -270,18 +282,27 @@ class LLMRouter:
             durata_secondi=time.monotonic() - t0,
         )
 
-    async def _chiedi_openai_compatibile(self, client, modello, system, user, t0) -> Optional["RisultatoLLM"]:
+    async def _chiedi_openai_compatibile(
+        self, client, modello, system, user, t0, extra_body: Optional[dict] = None
+    ) -> Optional["RisultatoLLM"]:
         """Usato sia per OpenAI sia per DeepSeek: stesso schema di chiamata
-        (l'API di DeepSeek dichiara compatibilità con l'SDK OpenAI)."""
+        (l'API di DeepSeek dichiara compatibilità con l'SDK OpenAI).
+        `extra_body` è un passthrough di campi specifici del provider
+        (es. il thinking mode di DeepSeek) — None per OpenAI, che non lo
+        conosce e lo ignorerebbe comunque se lo passassimo sempre, ma è più
+        chiaro ometterlo del tutto quando non serve."""
+        kwargs = dict(
+            model=modello,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.8,
+        )
+        if extra_body:
+            kwargs["extra_body"] = extra_body
         resp = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=modello,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                temperature=0.8,
-            ),
+            client.chat.completions.create(**kwargs),
             timeout=TIMEOUT_LLM_SECONDI,
         )
         testo = resp.choices[0].message.content if resp.choices else ""

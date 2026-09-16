@@ -4,17 +4,169 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Planetarium 3D</title>
-    <!-- v2.4 - Clickable keyboard commands for mobile support -->
     <link rel="stylesheet" href="planetarium.css">
+    <style>
+        /* ── Gyro Mode Button (nel panel) ─────────────────────────── */
+        #gyro-mode-btn {
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(74, 158, 255, 0.15);
+            border: 1px solid rgba(74, 158, 255, 0.4);
+            border-radius: 6px;
+            color: #4a9eff;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+            text-align: center;
+        }
+        #gyro-mode-btn:hover {
+            background: rgba(74, 158, 255, 0.3);
+            border-color: rgba(74, 158, 255, 0.7);
+        }
+        #gyro-mode-btn.active {
+            background: rgba(255, 152, 0, 0.25);
+            border-color: rgba(255, 152, 0, 0.7);
+            color: #ff9800;
+        }
+
+        /* ── Gyro HUD overlay ──────────────────────────────────────── */
+        #gyro-hud {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #gyro-hud-inner {
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 152, 0, 0.5);
+            border-radius: 20px;
+            padding: 6px 18px;
+            color: #ff9800;
+            font-size: 15px;
+            font-family: monospace;
+            letter-spacing: 1px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        #gyro-hud-sep { opacity: 0.4; }
+
+        /* ── Mirino ────────────────────────────────────────────────── */
+        #gyro-crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            z-index: 999;
+            pointer-events: none;
+        }
+        #gyro-crosshair .ch-h {
+            position: absolute;
+            top: 50%; left: 0;
+            width: 100%; height: 1px;
+            background: rgba(255, 152, 0, 0.7);
+            transform: translateY(-50%);
+        }
+        #gyro-crosshair .ch-v {
+            position: absolute;
+            left: 50%; top: 0;
+            height: 100%; width: 1px;
+            background: rgba(255, 152, 0, 0.7);
+            transform: translateX(-50%);
+        }
+        #gyro-crosshair .ch-circle {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 30px; height: 30px;
+            border: 1px solid rgba(255, 152, 0, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* ── Pulsante Shutter ──────────────────────────────────────── */
+        #gyro-shutter-btn {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1001;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: rgba(255, 152, 0, 0.9);
+            border: 3px solid #fff;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            font-size: 28px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s, background 0.2s;
+        }
+        #gyro-shutter-btn:active {
+            transform: translateX(-50%) scale(0.92);
+            background: rgba(255, 100, 0, 0.95);
+        }
+        #gyro-shutter-btn.capturing {
+            background: rgba(76, 175, 80, 0.9);
+        }
+
+        /* ── Pulsante Esci ─────────────────────────────────────────── */
+        #gyro-exit-btn {
+            position: fixed;
+            bottom: 90px;
+            right: 16px;
+            z-index: 1001;
+            padding: 8px 14px;
+            background: rgba(244, 67, 54, 0.85);
+            border: none;
+            border-radius: 20px;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+        }
+        #gyro-exit-btn:hover { background: rgba(244, 67, 54, 1); }
+
+        /* ── Flash di cattura ──────────────────────────────────────── */
+        #gyro-capture-flash {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 152, 0, 0.25);
+            z-index: 2000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        /* ── Nascondi suggerimenti chatbot su smartphone ──────────────── */
+        @media (max-width: 768px) {
+            #chatbot-suggestions {
+                display: none !important;
+            }
+        }
+    </style>
     
-    <!-- OpenLayers for map -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.5.2/ol.css">
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.5.2/dist/ol.js"></script>
 </head>
 <body>
     <div id="canvas-container"></div>
-
-    <!-- Info Panel -->
+    
+	<div id="provider-container">
+        <label for="ai-provider">🤖 AI:</label>
+        <select id="ai-provider" title="Scegli l'intelligenza artificiale">
+            <option value="ionos" selected>Ionos (Veloce)</option>
+            <option value="anthropic">Anthropic (Avanzata)</option>
+            <option value="openai">OpenAI (GPT-4o-mini)</option>
+            <option value="gemini">Gemini (Google)</option>
+        </select>
+    </div>
+    
     <div id="info-panel">
         <div id="info-panel-header">
             <h2>📡 Dati Simulazione</h2>
@@ -38,7 +190,11 @@
             </div>
             <div class="info-row"><span class="label">Azimut:</span><span class="value" id="azimut">--</span></div>
             <div class="info-row"><span class="label">Altezza:</span><span class="value" id="height">--</span></div>
-            <div class="info-row"><span class="label">Oggetti visibili:</span><span class="value" id="object-count">0</span></div>
+            <div class="info-row" style="border-bottom:none;">
+                <button id="gyro-mode-btn" onclick="toggleGyroMode()" title="Attiva modalità punta il cielo con giroscopio">
+                    🔭 Punta il Cielo
+                </button>
+            </div>
             <div class="info-row" style="border-bottom:none;padding-top:15px;">
                 <label style="display:flex;align-items:center;cursor:pointer;user-select:none;">
                     <input type="checkbox" id="orbit-control-toggle" style="margin-right:8px;cursor:pointer;width:16px;height:16px;">
@@ -48,10 +204,34 @@
         </div>
     </div>
 
-    <!-- Connection status -->
     <div id="connection-status" class="disconnected">⚫ Disconnesso</div>
 
-    <!-- Controls -->
+    <!-- Gyro Mode HUD overlay -->
+    <div id="gyro-hud" style="display:none;">
+        <div id="gyro-hud-inner">
+            <span id="gyro-hud-az">Az: --°</span>
+            <span id="gyro-hud-sep">|</span>
+            <span id="gyro-hud-alt">Alt: --°</span>
+        </div>
+    </div>
+
+    <!-- Mirino centrale -->
+    <div id="gyro-crosshair" style="display:none;">
+        <div class="ch-h"></div>
+        <div class="ch-v"></div>
+        <div class="ch-circle"></div>
+    </div>
+
+    <!-- Pulsante shutter -->
+    <button id="gyro-shutter-btn" style="display:none;" onclick="gyroCapture()" title="Acquisisci orientamento e renderizza">
+        <span id="gyro-shutter-icon">📸</span>
+    </button>
+
+    <!-- Pulsante chiudi modalità gyro -->
+    <button id="gyro-exit-btn" style="display:none;" onclick="toggleGyroMode()" title="Esci dalla modalità giroscopio">
+        ✕ Esci
+    </button>
+
     <div id="controls">
         <button id="toggle-console">📋 Console</button>
         <button id="toggle-help">❓ Tastiera</button>
@@ -59,7 +239,6 @@
         <input type="range" id="zoom-slider" min="0.1" max="3" step="0.1" value="1.0">
     </div>
 
-    <!-- Keyboard help panel -->
     <div id="keyboard-help">
         <h3>⌨️ Comandi Tastiera</h3>
         <div class="kb-grid">
@@ -86,14 +265,12 @@
         </div>
     </div>
 
-    <!-- Dialog Popup -->
     <div id="dialog-popup">
         <button class="dialog-close" onclick="closeDialog()">×</button>
         <div class="dialog-arrow"></div>
         <div class="dialog-content"></div>
     </div>
 
-    <!-- Location Dialog with Map -->
     <div id="location-dialog" style="display:none;">
         <div class="location-dialog-content">
             <div class="location-dialog-header">
@@ -143,7 +320,6 @@
         </div>
     </div>
 
-    <!-- Console log -->
     <div id="console-log">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.2);padding-bottom:8px;">
             <h3 style="margin:0;font-size:14px;">📋 Console</h3>
@@ -160,9 +336,86 @@
         </div>
     </div>
 
-    <!-- Three.js -->
+    <div id="chatbot-widget">
+        <div id="chatbot-popup">
+            <div id="chatbot-popup-header">
+                <span>🤖 Assistente Planetarium</span>
+                <button id="chatbot-popup-close" onclick="chatbotClosePopup()">×</button>
+            </div>
+            <div id="chatbot-messages"></div>
+            <div id="chatbot-typing" class="chatbot-hidden">
+                <span class="chatbot-dot"></span><span class="chatbot-dot"></span><span class="chatbot-dot"></span>
+            </div>
+        </div>
+
+        <div id="chatbot-suggestions">
+            <button class="chatbot-suggestion-btn" onclick="chatbotSendText('Punta verso Orione')">Punta verso Orione</button>
+            <button class="chatbot-suggestion-btn" onclick="chatbotSendText('Dimmi lo spettro di Sirio')">Dimmi lo spettro di Sirio</button>
+            <button class="chatbot-suggestion-btn" onclick="chatbotSendText('Guarda la luna')">Guarda la luna</button>
+        </div>
+        
+        <div id="chatbot-bar">
+            <button id="chatbot-toggle-btn" onclick="chatbotTogglePopup()" title="Apri/chiudi chat">
+                <span id="chatbot-toggle-icon">💬</span>
+            </button>
+            <input  type="text" id="chatbot-input"
+                    placeholder="Chiedi qualcosa sulle stelle…"
+                    onkeydown="event.stopPropagation(); if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); chatbotSend(); }"
+                    autocomplete="off">
+            
+            <button id="chatbot-mic-btn" onclick="chatbotToggleVoice()" title="Parla">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+            </button>
+            
+            <button id="chatbot-send-btn" onclick="chatbotSend()">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+            </button>
+        </div>   
+    </div>
+
+    <button id="help-btn" onclick="toggleHelpModal()" title="Guida all'uso">?</button>
+
+    <div id="help-modal" style="display:none;">
+        <div class="help-content">
+            <div class="help-header">
+                <h3>🌌 Guida al Planetario 3D</h3>
+                <button class="dialog-close" onclick="toggleHelpModal()">×</button>
+            </div>
+            
+            <div class="help-body">
+                <h4>🖱️ Navigazione Base</h4>
+                <ul>
+                    <li><strong>Trascina</strong> il mouse (o il dito) per ruotare la visuale.</li>
+                    <li><strong>Scorri la rotellina</strong> (o usa il pinch) per fare Zoom.</li>
+                    <li><strong>Doppio click</strong> su un astro o una stella per centrare la telecamera.</li>
+                </ul>
+
+                <h4>🤖 L'Assistente AI</h4>
+                <p>Il cuore del planetario! Apri la chat in basso e chiedi ciò che vuoi in linguaggio naturale:</p>
+                <ul>
+                    <li><strong>Impara:</strong> <em>"Parlami della stella Sirio"</em> oppure <em>"Perché Marte è rosso?"</em>. L'IA leggerà l'enciclopedia astronomica per risponderti.</li>
+                    <li><strong>Comanda:</strong> <em>"Punta verso Orione"</em> oppure <em>"Guarda a Sud-Ovest"</em>. L'IA muoverà il telescopio per te!</li>
+                    <li><strong>Tempo Reale:</strong> Chiedi <em>"Dov'è la Luna adesso?"</em>: l'IA calcolerà la posizione esatta basandosi sul tuo orario e sulla tua posizione.</li>
+                    <li>🎤 Usa il <strong>Microfono</strong> per parlare a voce libera!</li>
+                </ul>
+
+                <h4>🌍 Tempo e Spazio</h4>
+                <ul>
+                    <li>Usa il <strong>Pannello in alto a sinistra</strong> per viaggiare nel tempo, cambiando data e ora.</li>
+                    <li>Clicca su <strong>Latitudine/Longitudine</strong> per aprire la mappa e spostare il tuo punto di osservazione in qualsiasi parte della Terra.</li>
+                </ul>
+
+                <h4>⚙️ Controlli Avanzati</h4>
+                <p>La barra in basso a sinistra nasconde strumenti utili (Zoom, comandi da tastiera) e la possibilità di attivare/disattivare l'inseguimento orbitale.</p>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Moduli applicazione -->
     <script src="planetarium-webgl.js"></script>
     <script src="planetarium-controls.js"></script>
 
@@ -187,19 +440,14 @@
                     console.log('📄 API Response:', data);
                     
                     if (data.session) {
-                        // ← FIX: Usa sessionStorage invece di cookie
-                        // Funziona sempre, anche cross-origin
                         sessionStorage.setItem('SESSIONID', data.session);
                         console.log('✅ SESSIONID salvato in sessionStorage:', data.session);
                         
-                        // Verifica
                         const saved = sessionStorage.getItem('SESSIONID');
                         console.log('🔍 Verifica lettura:', saved);
                         
                         logToPage('✅ Session ID salvato', 'success');
                         
-                        // settiamo anche il cookie
-                        // Imposta cookie con expire tra 24 ora
                         const expires = new Date();
                         expires.setHours(expires.getHours() + 24);
                                 
@@ -225,7 +473,6 @@
         function wsSend(obj) {
             if (!wsIsOpen()) { logToPage('❌ WebSocket non connesso', 'error'); return; }
             
-            // ← FIX: Aggiungi SESSIONID da sessionStorage a ogni messaggio
             const sessionId = sessionStorage.getItem('SESSIONID');
             if (sessionId) {
                 obj.session = sessionId;
@@ -244,14 +491,11 @@
         let _lastLogTime = 0;
         let _logRepeatCount = 0;
         
-        // Funzione per log interni (debug) - NON visibile nella console UI
         function logToPage(message, type = 'info') {
-            // Log solo in console browser per debug
             const ts = new Date().toLocaleTimeString('it-IT');
             console.log(`[${ts}] ${message}`);
         }
         
-        // Funzione per messaggi terminal dal server - visibile nella console UI
         function logTerminalMessage(message) {
             const container = document.getElementById('console-messages');
             const ts = new Date().toLocaleTimeString('it-IT');
@@ -263,7 +507,6 @@
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
             
-            // Limita a 50 messaggi
             if (container.children.length > 50) {
                 container.removeChild(container.firstChild);
             }
@@ -287,13 +530,11 @@
         }
 
         // ── Dialog Popup ──────────────────────────────────────────────────────
-        // IMPORTANTE: usa window.currentDialogEvent per compatibilità con planetarium-controls.js
-        window.currentDialogEvent = null;  // Salva evento click per positioning
-        let lastDialogContent = '';        // Per deduplica
-        let lastDialogTime = 0;            // Per deduplica
+        window.currentDialogEvent = null; 
+        let lastDialogContent = '';       
+        let lastDialogTime = 0;           
 
         function showDialog(htmlContent, clickX, clickY) {
-            // Deduplica: ignora se stesso contenuto entro 500ms
             const now = Date.now();
             if (htmlContent === lastDialogContent && now - lastDialogTime < 500) {
                 logToPage('💬 Dialog duplicato ignorato', 'warning');
@@ -306,10 +547,8 @@
             const content = dialog.querySelector('.dialog-content');
             const arrow = dialog.querySelector('.dialog-arrow');
             
-            // Imposta contenuto
             content.innerHTML = htmlContent;
             
-            // Mostra dialog temporaneamente per calcolare dimensioni
             dialog.style.visibility = 'hidden';
             dialog.classList.add('visible');
             
@@ -317,60 +556,42 @@
             const viewportW = window.innerWidth;
             const viewportH = window.innerHeight;
             
-            // Determina posizione migliore e direzione arrow
             let left, top, arrowClass;
-            
             const margin = 20;
-            const arrowBorder = 10;     // border size CSS
-            const arrowOffset = 20;     // distance from dialog edge (top/bottom/left/right in CSS)
-            const arrowTipOffset = 10;  // distanza dalla punta dell'arrow al bordo del dialog
+            const arrowBorder = 10;     
+            const arrowOffset = 20;     
+            const arrowTipOffset = 10;  
             
-            // Prova a posizionare sopra il punto di click
             if (clickY - dialogRect.height - arrowTipOffset - margin > 0) {
-                // Spazio sopra: dialog sopra, arrow giù
-                // La PUNTA dell'arrow deve essere a clickY
                 top = clickY - dialogRect.height - arrowTipOffset;
                 left = clickX - dialogRect.width / 2;
                 arrowClass = 'down';
             }
-            // Altrimenti sotto
             else if (clickY + dialogRect.height + arrowTipOffset + margin < viewportH) {
-                // Spazio sotto: dialog sotto, arrow su
-                // La PUNTA dell'arrow deve essere a clickY
                 top = clickY + arrowTipOffset;
                 left = clickX - dialogRect.width / 2;
                 arrowClass = 'up';
             }
-            // Altrimenti a destra
             else if (clickX + dialogRect.width + arrowTipOffset + margin < viewportW) {
-                // Spazio a destra: dialog a destra, arrow a sinistra
-                // La PUNTA dell'arrow deve essere a clickX
                 top = clickY - dialogRect.height / 2;
                 left = clickX + arrowTipOffset;
                 arrowClass = 'left';
             }
-            // Altrimenti a sinistra
             else {
-                // Dialog a sinistra, arrow a destra
-                // La PUNTA dell'arrow deve essere a clickX
                 top = clickY - dialogRect.height / 2;
                 left = clickX - dialogRect.width - arrowTipOffset;
                 arrowClass = 'right';
             }
             
-            // Clamp dialog ai bordi viewport
             const clampedLeft = Math.max(margin, Math.min(left, viewportW - dialogRect.width - margin));
             const clampedTop = Math.max(margin, Math.min(top, viewportH - dialogRect.height - margin));
             
-            // Applica posizione dialog
             dialog.style.left = clampedLeft + 'px';
             dialog.style.top = clampedTop + 'px';
             dialog.style.visibility = 'visible';
             
-            // Imposta direzione arrow
             arrow.className = 'dialog-arrow ' + arrowClass;
             
-            // Reset inline styles that might interfere
             arrow.style.left = '';
             arrow.style.top = '';
             arrow.style.right = '';
@@ -378,43 +599,20 @@
             arrow.style.marginLeft = '';
             arrow.style.marginTop = '';
             
-            // ← FIX: Posiziona arrow esattamente sul punto di click
-            // Calcola posizione arrow relativa al dialog
             if (arrowClass === 'down' || arrowClass === 'up') {
-                // Arrow orizzontale: allinea left per puntare al clickX
                 const arrowLeft = clickX - clampedLeft - arrowBorder;
                 arrow.style.left = arrowLeft + 'px';
                 arrow.style.marginLeft = '0';
             } else if (arrowClass === 'left' || arrowClass === 'right') {
-                // Arrow verticale: allinea top per puntare al clickY
                 const arrowTop = clickY - clampedTop - arrowBorder;
                 arrow.style.top = arrowTop + 'px';
                 arrow.style.marginTop = '0';
             }
             
-            // ← FIX: Proteggi dialog da chiusura immediata
-            // Imposta flag per prevenire chiusura durante questo click cycle
             dialog.dataset.justOpened = 'true';
             setTimeout(() => {
                 delete dialog.dataset.justOpened;
             }, 100);
-            
-            // DEBUG: Mostra crosshair temporaneo sul punto di click (opzionale)
-            if (false) {  // Cambia a true per debug visivo
-                const crosshair = document.createElement('div');
-                crosshair.style.position = 'fixed';
-                crosshair.style.left = clickX + 'px';
-                crosshair.style.top = clickY + 'px';
-                crosshair.style.width = '10px';
-                crosshair.style.height = '10px';
-                crosshair.style.background = 'red';
-                crosshair.style.borderRadius = '50%';
-                crosshair.style.transform = 'translate(-50%, -50%)';
-                crosshair.style.zIndex = '99999';
-                crosshair.style.pointerEvents = 'none';
-                document.body.appendChild(crosshair);
-                setTimeout(() => crosshair.remove(), 2000);
-            }
             
             logToPage('💬 Dialog mostrato', 'info');
         }
@@ -422,8 +620,7 @@
         function closeDialog() {
             const dialog = document.getElementById('dialog-popup');
             dialog.classList.remove('visible');
-            // NON resettiamo currentDialogEvent qui - serve per il prossimo dialog
-            lastDialogContent = '';  // Reset deduplica
+            lastDialogContent = ''; 
             logToPage('💬 Dialog chiuso', 'info');
         }
 
@@ -432,7 +629,6 @@
         let locationMarker = null;
         
         function azimutToDirection(azimut) {
-            // Converti azimut in direzione cardinale
             const az = parseFloat(azimut);
             if (isNaN(az)) return 'N';
             
@@ -448,7 +644,6 @@
         }
         
         function openLocationDialog() {
-            // Leggi valori correnti
             const latEl = document.getElementById('latitude');
             const lonEl = document.getElementById('longitude');
             const azEl = document.getElementById('azimut');
@@ -457,15 +652,12 @@
             const currentLon = parseFloat(lonEl.textContent) || 9.19;
             const currentAz = azEl.textContent || '0';
             
-            // Popola input
             document.getElementById('location-lat').value = currentLat.toFixed(4);
             document.getElementById('location-lon').value = currentLon.toFixed(4);
             document.getElementById('location-direction').value = azimutToDirection(currentAz);
             
-            // Mostra dialog
             document.getElementById('location-dialog').style.display = 'flex';
             
-            // Inizializza mappa dopo un attimo (per avere dimensioni corrette)
             setTimeout(() => initLocationMap(currentLon, currentLat), 100);
         }
         
@@ -478,11 +670,8 @@
         }
         
         function initLocationMap(lon, lat) {
-            if (locationMap) {
-                locationMap.setTarget(null);
-            }
+            if (locationMap) locationMap.setTarget(null);
             
-            // Crea marker
             const markerFeature = new ol.Feature({
                 geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat]))
             });
@@ -496,21 +685,13 @@
             });
             markerFeature.setStyle(markerStyle);
             
-            const vectorSource = new ol.source.Vector({
-                features: [markerFeature]
-            });
+            const vectorSource = new ol.source.Vector({ features: [markerFeature] });
+            const vectorLayer = new ol.layer.Vector({ source: vectorSource });
             
-            const vectorLayer = new ol.layer.Vector({
-                source: vectorSource
-            });
-            
-            // Crea mappa
             locationMap = new ol.Map({
                 target: 'location-map',
                 layers: [
-                    new ol.layer.Tile({
-                        source: new ol.source.OSM()
-                    }),
+                    new ol.layer.Tile({ source: new ol.source.OSM() }),
                     vectorLayer
                 ],
                 view: new ol.View({
@@ -521,21 +702,17 @@
             
             locationMarker = markerFeature;
             
-            // Click sulla mappa aggiorna marker e input
             locationMap.on('click', function(evt) {
                 const coords = ol.proj.toLonLat(evt.coordinate);
                 const newLon = coords[0];
                 const newLat = coords[1];
                 
-                // Aggiorna marker
                 locationMarker.setGeometry(new ol.geom.Point(ol.proj.fromLonLat([newLon, newLat])));
                 
-                // Aggiorna input
                 document.getElementById('location-lon').value = newLon.toFixed(4);
                 document.getElementById('location-lat').value = newLat.toFixed(4);
             });
             
-            // Input cambiano anche marker
             document.getElementById('location-lon').addEventListener('input', updateMarkerFromInputs);
             document.getElementById('location-lat').addEventListener('input', updateMarkerFromInputs);
         }
@@ -560,85 +737,49 @@
                 return;
             }
             
-            // Invia comando al server
             const command = `observe ${lon} ${lat} ${direction}`;
-            wsSend({
-                pagina: "PLANETARIUM",
-                doc: "command",
-                data: command
-            });
-            
+            wsSend({ pagina: "PLANETARIUM", doc: "command", data: command });
             console.log(`🌍 Location change: ${command}`);
-            
-            // Chiudi dialog
             closeLocationDialog();
         }
 
-        // Click fuori dal dialog per chiudere
-        document.addEventListener('click', (e) => {
+		document.addEventListener('pointerdown', (e) => {
             const dialog = document.getElementById('dialog-popup');
-            const canvas = webgl.renderer ? webgl.renderer.domElement : null;
             
-            // Non chiudere se appena aperto (previene chiusura durante stesso click cycle)
-            if (dialog.dataset.justOpened === 'true') {
-                return;
-            }
+            // Se la finestra è appena stata aperta dalla comunicazione col server, ignora il click
+            if (dialog.dataset.justOpened === 'true') return;
             
-            if (dialog.classList.contains('visible') && 
-                !dialog.contains(e.target) && 
-                e.target !== canvas) {
+            // Se il dialog è visibile e l'utente ha cliccato in qualsiasi punto FUORI dal dialog stesso
+            if (dialog.classList.contains('visible') && !dialog.contains(e.target)) {
                 closeDialog();
             }
         });
-
+        
+        
         // ── WebSocket ─────────────────────────────────────────────────────────
-        let _msgCount = 0; // debug: conta messaggi ricevuti
+        let _msgCount = 0;
 
         function connectWebSocket() {
             updateConnectionStatus('connecting', '⚪ Connessione...');
             
 			const sessionId = sessionStorage.getItem('SESSIONID');
-            // Diagnostica dettagliata
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('🔌 WebSocket Connection Attempt');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('URL:', `${WS_URL}?session_id=${sessionId}`);
-            console.log('Protocol:', window.location.protocol);
-            console.log('Host:', window.location.host);
-            console.log('User Agent:', navigator.userAgent);
-            console.log('Connection:', navigator.onLine ? 'ONLINE' : 'OFFLINE');
-            console.log('WebSocket support:', typeof WebSocket !== 'undefined' ? 'YES' : 'NO');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('🔌 WebSocket Connection Attempt', `${WS_URL}?session_id=${sessionId}`);
 
             if (typeof WebSocket === 'undefined') {
-                console.error('❌ WebSocket NOT supported in this browser');
                 logToPage('❌ WebSocket non supportato', 'error');
                 updateConnectionStatus('disconnected', '⚫ Non supportato');
                 return;
             }
 
-            if (!navigator.onLine) {
-                console.warn('⚠️ Device appears OFFLINE');
-                logToPage('⚠️ Dispositivo offline', 'warning');
-            }
-
             try {
-				const sessionId = sessionStorage.getItem('SESSIONID');
                 ws = new WebSocket(`${WS_URL}?session_id=${sessionId}`);
-                console.log('✅ WebSocket object created, readyState:', ws.readyState);
-                console.log('   CONNECTING=0, OPEN=1, CLOSING=2, CLOSED=3');
             } catch (e) {
-                console.error('❌ Exception creating WebSocket:', e);
-                console.error('Error name:', e.name);
-                console.error('Error message:', e.message);
                 logToPage(`❌ Errore: ${e.message}`, 'error');
                 updateConnectionStatus('disconnected', '⚫ Errore');
                 return;
             }
 
             ws.onopen = () => {
-                console.log('✅ WebSocket CONNECTED (onopen fired)');
-                console.log('   readyState:', ws.readyState);
                 updateConnectionStatus('connected', '🟢 Connesso');
                 logToPage('✅ Connesso', 'success');
                 sendInitializationCommands();
@@ -646,100 +787,58 @@
 
             ws.onmessage = (event) => {
                 try {
-                    let xmlString;
-                    // Determina se è JSON o XML puro
                     const data = event.data.trim();
+                    if (!data) return;
+
                     if (data.startsWith('{')) {
-                        // È JSON → estrai campo xml
-                        try {
-                            const jsonData = JSON.parse(data);
-                            xmlString = jsonData.xml || jsonData.XML || '';
-                            if (!xmlString) {
-                                console.warn('JSON ricevuto ma senza campo xml:', jsonData);
-                                return;
-                            }
-                        } catch (e) {
-                            console.error('Errore parsing JSON:', e.message);
-                            return;
+                        const jsonData = JSON.parse(data);
+                        if ( jsonData.action === "chat_result" ) {
+                            chatbotReceive(jsonData);
+                            return; 
+                        }
+
+                        const xmlString = jsonData.xml || jsonData.XML || '';
+                        if (xmlString) {
+                            processXmlMessage(xmlString);
                         }
                     } else if (data.startsWith('<')) {
-                        // È XML puro
-                        xmlString = data;
-                    } else {
-                        console.warn('Formato dati sconosciuto (né JSON né XML):', data.substring(0, 200));
-                        return;
+                        processXmlMessage(data);
                     }
-                    
-                    // Parsa XML
-                    const xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
-
-                    // ← SOLO messaggi terminal vanno nella console UI
-                    const terminal = xmlDoc.querySelector('terminal');
-                    if (terminal && terminal.textContent.trim()) {
-                        logTerminalMessage(terminal.textContent.trim());
-                    }
-
-                    // Dialog popup (se presente tag <dialog>)
-                    const dialogEl = xmlDoc.querySelector('dialog');
-                    if (dialogEl) {
-                        if (window.currentDialogEvent) {
-                            const dialogHTML = dialogEl.innerHTML || dialogEl.textContent;
-                            showDialog(dialogHTML, window.currentDialogEvent.clientX, window.currentDialogEvent.clientY);
-                        }
-                    }
-
-                    // Se orbita attiva ignora i dati di rendering
-                    if (controls.orbitEnabled) return;
-
-                    // Processa renderer
-                    const renderer = xmlDoc.querySelector('renderer[name="solar"]')
-                                  || xmlDoc.querySelector('renderer');
-                    if (renderer) {
-                        webgl.processRenderer(renderer);
-                    }
-
                 } catch (e) {
-                    console.error('Errore processing message:', e.message, e);
+                    console.error('Errore processing message:', e);
                 }
             };
 
-            ws.onerror = (error) => {
-                console.error('❌ WebSocket ERROR event fired');
-                console.error('Error object:', error);
-                console.error('readyState:', ws.readyState);
-                console.error('URL:', ws.url);
+            function processXmlMessage(xmlString) {
+                const xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
                 
-                // Su mobile, l'errore spesso non ha dettagli
-                if (error.message) {
-                    console.error('Error message:', error.message);
+                const terminal = xmlDoc.querySelector('terminal');
+                if (terminal && terminal.textContent.trim()) {
+                    logTerminalMessage(terminal.textContent.trim());
                 }
-                
+
+                const dialogEl = xmlDoc.querySelector('dialog');
+                if (dialogEl && window.currentDialogEvent) {
+                    showDialog(dialogEl.innerHTML || dialogEl.textContent, 
+                               window.currentDialogEvent.clientX, 
+                               window.currentDialogEvent.clientY);
+                }
+
+                if (!controls.orbitEnabled) {
+                    const renderer = xmlDoc.querySelector('renderer');
+                    if (renderer) webgl.processRenderer(renderer);
+                }
+            }
+
+            ws.onerror = (error) => {
                 updateConnectionStatus('disconnected', '⚫ Errore');
                 logToPage('❌ Errore WebSocket', 'error');
             };
 
             ws.onclose = (event) => {
-                console.warn('⚠️ WebSocket CLOSED event fired');
-                console.warn('Code:', event.code);
-                console.warn('Reason:', event.reason || '(no reason provided)');
-                console.warn('Was clean:', event.wasClean);
-                console.warn('readyState:', ws.readyState);
-                
-                // Codici comuni:
-                // 1000 = Normal closure
-                // 1001 = Going away (page refresh)
-                // 1006 = Abnormal closure (no close frame)
-                // 1008 = Policy violation
-                // 1015 = TLS handshake fail
-                
                 let statusText = '⚫ Disconnesso';
-                if (event.code === 1006) {
-                    statusText = '⚫ Connessione fallita';
-                    console.error('Code 1006: Likely server unreachable or network issue');
-                } else if (event.code === 1015) {
-                    statusText = '⚫ SSL/TLS Error';
-                    console.error('Code 1015: SSL/TLS handshake failed');
-                }
+                if (event.code === 1006) statusText = '⚫ Connessione fallita';
+                else if (event.code === 1015) statusText = '⚫ SSL/TLS Error';
                 
                 updateConnectionStatus('disconnected', statusText);
                 logToPage(`⚠️ Disconnesso (${event.code}), riconnessione...`, 'warning');
@@ -749,7 +848,6 @@
 
         function sendInitializationCommands() {
             logToPage('🔧 Inizializzazione comandi...', 'info');
-            // Sequenza: observe → fov → horizont → light → execute_loop
             const commands = [
                 { cmd: 'execute_loop off',                               delay:    0 },
                 { cmd: `observe ${deviceLongitude} ${deviceLatitude} N`, delay:  300 },
@@ -761,10 +859,6 @@
             commands.forEach(({ cmd, delay }) =>
                 setTimeout(() => sendCommand(cmd), delay)
             );
-            // Log finale dopo tutti i comandi
-            setTimeout(() => {
-                logToPage('✅ Inizializzazione completata', 'success');
-            }, 2000);
         }
 
         function updateConnectionStatus(status, text) {
@@ -774,7 +868,6 @@
         }
 
         // ── Geolocalizzazione ─────────────────────────────────────────────────
-        // Restituisce Promise — connectWebSocket() viene chiamato solo dopo resolve()
         function getDeviceLocation() {
             logToPage('📍 Rilevamento posizione...', 'info');
             return new Promise((resolve) => {
@@ -809,19 +902,16 @@
         }
 
         // ── UI events ─────────────────────────────────────────────────────────
-        document.getElementById('toggle-console').addEventListener('click', () => {
-            toggleConsole();
-        });
+        document.getElementById('toggle-console').addEventListener('click', () => toggleConsole());
 
         document.getElementById('toggle-help').addEventListener('click', () => {
             const el = document.getElementById('keyboard-help');
-            // Usa getComputedStyle perché display:none è nel CSS, non inline
             const isHidden = window.getComputedStyle(el).display === 'none';
             el.style.display = isHidden ? 'block' : 'none';
         });
 
-        // ← Date/Time inputs - invia comando 'date' al server
-        let dateTimeInputsLocked = false;  // Flag per bloccare aggiornamenti automatici
+        // Date/Time inputs
+        let dateTimeInputsLocked = false;
         
         function sendDateTimeToServer() {
             const dateInput = document.getElementById('sim-date');
@@ -829,48 +919,32 @@
             
             if (!dateInput.value || !timeInput.value) return;
             
-            // Converti da yyyy-mm-dd a dd-mm-yyyy
-            const dateParts = dateInput.value.split('-'); // [yyyy, mm, dd]
-            const dt = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // dd-mm-yyyy
+            const dateParts = dateInput.value.split('-'); 
+            const dt = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; 
+            const tm = timeInput.value; 
+            const command = `date ${dt} ${tm} UT`;
             
-            const tm = timeInput.value; // hh:mm o hh:mm:ss
-            const dtt = 'UT'; // Tipo sempre UT
-            
-            const command = `date ${dt} ${tm} ${dtt}`;
-            
-            wsSend({
-                pagina: "PLANETARIUM",
-                doc: "command",
-                data: command
-            });
-            
-            console.log(`📅 Date/Time inviato: ${command}`);
+            wsSend({ pagina: "PLANETARIUM", doc: "command", data: command });
         }
         
-        // Blocca aggiornamenti automatici quando l'utente inizia a modificare
         document.getElementById('sim-date').addEventListener('focus', () => {
             dateTimeInputsLocked = true;
             document.getElementById('sim-date').style.borderColor = '#ff9800';
             document.getElementById('sim-time').style.borderColor = '#ff9800';
-            console.log('🔒 Date/Time: editing mode (aggiornamenti bloccati)');
         });
         
         document.getElementById('sim-time').addEventListener('focus', () => {
             dateTimeInputsLocked = true;
             document.getElementById('sim-date').style.borderColor = '#ff9800';
             document.getElementById('sim-time').style.borderColor = '#ff9800';
-            console.log('🔒 Date/Time: editing mode (aggiornamenti bloccati)');
         });
         
-        // Invia al server quando l'utente finisce di modificare (blur = perde focus)
         document.getElementById('sim-date').addEventListener('blur', () => {
             sendDateTimeToServer();
-            // Aspetta 2 secondi prima di sbloccare aggiornamenti automatici
             setTimeout(() => {
                 dateTimeInputsLocked = false;
                 document.getElementById('sim-date').style.borderColor = '';
                 document.getElementById('sim-time').style.borderColor = '';
-                console.log('🔓 Date/Time: aggiornamenti automatici riattivati');
             }, 2000);
         });
         
@@ -880,102 +954,44 @@
                 dateTimeInputsLocked = false;
                 document.getElementById('sim-date').style.borderColor = '';
                 document.getElementById('sim-time').style.borderColor = '';
-                console.log('🔓 Date/Time: aggiornamenti automatici riattivati');
             }, 2000);
         });
         
-        // Invia anche su Enter
-        document.getElementById('sim-date').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.target.blur(); // Trigger blur che invia
-            }
-        });
+        document.getElementById('sim-date').addEventListener('keypress', (e) => { if (e.key === 'Enter') e.target.blur(); });
+        document.getElementById('sim-time').addEventListener('keypress', (e) => { if (e.key === 'Enter') e.target.blur(); });
         
-        document.getElementById('sim-time').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.target.blur();
-            }
-        });
-        
-        // Esponi flag globale per webgl
         window.dateTimeInputsLocked = () => dateTimeInputsLocked;
 
-        // ── Clickable keyboard commands ───────────────────────────────────────
+        // Comandi clickabili tastiera
         document.querySelectorAll('.kb-clickable').forEach(button => {
             button.addEventListener('click', (e) => {
                 e.preventDefault();
                 const action = button.dataset.action;
-                
-                // Esegui azione corrispondente
                 switch(action) {
-                    case 'move-up':
-                        sendCommand('move 1 0');
-                        logToPage('⬆️ alt +1°', 'info');
-                        break;
-                    case 'move-down':
-                        sendCommand('move -1 0');
-                        logToPage('⬇️ alt -1°', 'info');
-                        break;
-                    case 'move-left':
-                        sendCommand('move 0 -1');
-                        logToPage('⬅️ az -1°', 'info');
-                        break;
-                    case 'move-right':
-                        sendCommand('move 0 1');
-                        logToPage('➡️ az +1°', 'info');
-                        break;
-                    case 'zoom-in':
-                        sendCommand('zoom +');
-                        logToPage('🔍 zoom+', 'info');
-                        break;
-                    case 'zoom-out':
-                        sendCommand('zoom -');
-                        logToPage('🔎 zoom-', 'info');
-                        break;
-                    case 'view-N':
-                        sendCommand('view N');
-                        logToPage('🧭 Nord', 'info');
-                        break;
-                    case 'view-S':
-                        sendCommand('view S');
-                        logToPage('🧭 Sud', 'info');
-                        break;
-                    case 'view-E':
-                        sendCommand('view E');
-                        logToPage('🧭 Est', 'info');
-                        break;
-                    case 'view-W':
-                        sendCommand('view W');
-                        logToPage('🧭 Ovest', 'info');
-                        break;
-                    case 'view-Z':
-                        sendCommand('view Z');
-                        logToPage('🧭 Zenit', 'info');
-                        break;
+                    case 'move-up': sendCommand('move 1 0'); break;
+                    case 'move-down': sendCommand('move -1 0'); break;
+                    case 'move-left': sendCommand('move 0 -1'); break;
+                    case 'move-right': sendCommand('move 0 1'); break;
+                    case 'zoom-in': sendCommand('zoom +'); break;
+                    case 'zoom-out': sendCommand('zoom -'); break;
+                    case 'view-N': sendCommand('view N'); break;
+                    case 'view-S': sendCommand('view S'); break;
+                    case 'view-E': sendCommand('view E'); break;
+                    case 'view-W': sendCommand('view W'); break;
+                    case 'view-Z': sendCommand('view Z'); break;
                     case 'toggle-horizont':
                         controls._horizont = !controls._horizont;
                         sendCommand(controls._horizont ? 'horizont true' : 'horizont false');
-                        logToPage(`🌅 orizzonte: ${controls._horizont ? 'on' : 'off'}`, 'info');
                         break;
                     case 'toggle-light':
                         controls._ambientLight = !controls._ambientLight;
                         sendCommand(controls._ambientLight ? 'light on' : 'light off');
-                        logToPage(`💡 luce ambiente: ${controls._ambientLight ? 'on' : 'off'}`, 'info');
                         break;
-                    case 'toggle-console':
-                        toggleConsole();
-                        break;
-                    case 'reset':
-                        sendCommand('default');
-                        logToPage('🔄 reset', 'info');
-                        break;
+                    case 'toggle-console': toggleConsole(); break;
+                    case 'reset': sendCommand('default'); break;
                 }
-                
-                // Feedback visivo
                 button.style.background = 'rgba(74, 158, 255, 0.6)';
-                setTimeout(() => {
-                    button.style.background = '';
-                }, 200);
+                setTimeout(() => { button.style.background = ''; }, 200);
             });
         });
 
@@ -991,7 +1007,6 @@
             if (enabled) {
                 sendCommand('execute_loop off');
             } else {
-                // Ripristina vista: observe → horizont → execute_loop
                 sendCommand('execute_loop off');
                 setTimeout(() => sendCommand(`observe ${deviceLongitude} ${deviceLatitude} N`), 200);
                 setTimeout(() => sendCommand('horizont true'), 400);
@@ -1007,60 +1022,283 @@
             icon.textContent = content.classList.contains('collapsed') ? '▶' : '▼';
         });
         
-// Delega degli eventi sul document (equivalente a $.mobile.document.on)
-document.addEventListener('change', function(evt) {
-    const target = evt.target;
+        document.addEventListener('change', function(evt) {
+            const target = evt.target;
+            if (target.matches('.costellazione')) {
+                const cost = target.dataset.costellazione;
+                const data = target.checked ? `constellation ${cost}` : `constellation ${cost} hidden`;
+                ws.send(JSON.stringify({ pagina: "PLANETARIUM", doc: "command", data: data }));
+            } else if (target.matches('.asterismo')) {
+                const cost = target.dataset.costellazione;
+                const data = target.checked ? `asterism ${cost}` : `asterism ${cost} hidden`;
+                ws.send(JSON.stringify({ pagina: "PLANETARIUM", doc: "command", data: data }));
+            } else if (target.matches('.constellation_star')) {
+                const value = target.value;
+                ws.send(JSON.stringify({ pagina: "PLANETARIUM", doc: "command", data: `sky ${value}` }));
+            }
+        });        
 
-    // 1. Checkbox .costellazione
-    if (target.matches('.costellazione')) {
-        const cost = target.dataset.costellazione;
-        const data = target.checked 
-            ? `constellation ${cost}` 
-            : `constellation ${cost} hidden`;
+        // ── Chatbot ───────────────────────────────────────────────────────────
+        (function() {
+            let _popupOpen = false;
+            let _lastInputWasVoice = false;
+            let _pendingWasVoice = false;
 
-        const obj = {
-            pagina: "PLANETARIUM",
-            doc: "command",
-            data: data
-        };
+            function _addMessage(text, role) {
+                const container = document.getElementById('chatbot-messages');
+                const bubble = document.createElement('div');
+                bubble.className = 'chatbot-bubble chatbot-' + role;
+                const safe = text
+                    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+                    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+                    .replace(/\n/g,'<br>');
+                bubble.innerHTML = safe;
+                container.appendChild(bubble);
+                container.scrollTop = container.scrollHeight;
+            }
 
-        ws.send(JSON.stringify(obj));
+            function _setTyping(visible) {
+                document.getElementById('chatbot-typing').classList.toggle('chatbot-hidden', !visible);
+                document.getElementById('chatbot-messages').scrollTop = 99999;
+            }
 
-    }
+            window.chatbotTogglePopup = function() {
+                _popupOpen = !_popupOpen;
+                const popup = document.getElementById('chatbot-popup');
+                const icon  = document.getElementById('chatbot-toggle-icon');
+                const suggestions = document.getElementById('chatbot-suggestions');
 
-    // 2. Checkbox .asterismo
-    else if (target.matches('.asterismo')) {
-        const cost = target.dataset.costellazione;
-        const data = target.checked 
-            ? `asterism ${cost}` 
-            : `asterism ${cost} hidden`;
+                popup.classList.toggle('chatbot-popup-visible', _popupOpen);
+                icon.textContent = _popupOpen ? '✕' : '💬';
+                
+                if (suggestions) suggestions.style.display = _popupOpen ? 'none' : 'flex';
 
-        const obj = {
-            pagina: "PLANETARIUM",
-            doc: "command",
-            data: data
-        };
+                if (_popupOpen) {
+                    document.getElementById('chatbot-input').focus();
+                    document.getElementById('chatbot-messages').scrollTop = 99999;
+                }
+            };
 
-        ws.send(JSON.stringify(obj));
+            window.chatbotClosePopup = function() {
+                _popupOpen = false;
+                document.getElementById('chatbot-popup').classList.remove('chatbot-popup-visible');
+                document.getElementById('chatbot-toggle-icon').textContent = '💬';
+                
+                const suggestions = document.getElementById('chatbot-suggestions');
+                if (suggestions) suggestions.style.display = 'flex';
+            };
 
-    }
+            window.chatbotSend = function() {
+                const input = document.getElementById('chatbot-input');
+                const text  = input.value.trim();
+                if (!text) return;
 
-    // 3. Cambio su .constellation_star (probabilmente un <select>)
-    else if (target.matches('.constellation_star')) {
-        const value = target.value;
+                _pendingWasVoice = _lastInputWasVoice;
+                _lastInputWasVoice = false;
 
-        const obj = {
-            pagina: "PLANETARIUM",
-            doc: "command",
-            data: `sky ${value}`
-        };
+                if (!_popupOpen) {
+                    _popupOpen = true;
+                    document.getElementById('chatbot-popup').classList.add('chatbot-popup-visible');
+                    document.getElementById('chatbot-toggle-icon').textContent = '✕';
+                    
+                    const suggestions = document.getElementById('chatbot-suggestions');
+                    if (suggestions) suggestions.style.display = 'none';
+                }
 
-        ws.send(JSON.stringify(obj));
+                _addMessage(text, 'user');
+                input.value = '';
+                _setTyping(true);
 
-    }
-});        
+                const simDate = document.getElementById('sim-date')?.value || '';
+                const simTime = document.getElementById('sim-time')?.value || '';
+                const data    = simDate && simTime ? `${simDate}T${simTime}` : simDate || simTime || '';
 
-        // ── Bootstrap ─────────────────────────────────────────────────────────
+				if (!wsIsOpen()) {
+                    _setTyping(false);
+                    _addMessage('⚠️ WebSocket non connesso. Riprova tra un momento.', 'server');
+                    return;
+                }
+
+                const selectedProvider = document.getElementById('ai-provider')?.value || 'ionos';
+
+                wsSend({
+                    pagina:   "PLANETARIUM",
+                    text:     text,
+                    action:   'CHATBOT',
+                    provider: selectedProvider,
+                    data:     data,
+                    lat:      deviceLatitude,
+                    lon:      deviceLongitude
+                });
+            };
+			
+			window.chatbotSendText = function(text) {
+				const input = document.getElementById('chatbot-input');
+				input.value = text;
+				chatbotSend(); 
+			};                
+
+            window.chatbotReceive = function(serverMsg) {
+                _setTyping(false);
+
+                if (serverMsg.tipo === "final" ) {
+                    if ( serverMsg.extra?.ra && serverMsg.extra?.dec ) {
+                        sendCommand(`sky ${serverMsg.extra.ra / 15} ${serverMsg.extra.dec}`);
+                        sendCommand(`constellation ${serverMsg.extra.target} show`);
+                        sendCommand(`asterism ${serverMsg.extra.target} show`);
+                    }
+                    else if ( serverMsg.extra?.needs_realtime ) {
+                        sendCommand(`lookat ${serverMsg.extra.target.toLowerCase()}`);
+                    }
+                    
+                    const textToSpeak = serverMsg.text || serverMsg.response || "";
+                    if (textToSpeak && _pendingWasVoice) chatbotSpeak(textToSpeak);
+                }
+                
+                if (serverMsg.tipo === "cmd" || serverMsg.tipo === "rag_result" ) {
+                    sendCommand(`${serverMsg.cmd}`);
+					return;
+				}
+                
+                const msg = (typeof serverMsg === 'string')
+                    ? serverMsg
+                    : (serverMsg.text || serverMsg.response || JSON.stringify(serverMsg));
+                
+                _addMessage(msg, 'server');
+                
+                if (!_popupOpen) {
+                    const toggleBtn = document.getElementById('chatbot-toggle-btn');
+                    toggleBtn.classList.add('chatbot-has-new');
+                    setTimeout(() => toggleBtn.classList.remove('chatbot-has-new'), 3000);
+                }
+            };   
+            
+            let speechRecog = null;
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                speechRecog = new SpeechRecognition();
+                speechRecog.lang = 'it-IT';
+                speechRecog.continuous = false;
+                speechRecog.interimResults = false;
+
+                speechRecog.onresult = function(event) {
+                    const text = event.results[0][0].transcript;
+                    const input = document.getElementById('chatbot-input');
+                    input.value = text;
+                    _lastInputWasVoice = true;
+                    chatbotSend();
+                };
+
+                speechRecog.onstart = function() {
+                    console.log("🎤 Microfono in ascolto...");
+                };
+
+                speechRecog.onend = function() {
+                    document.getElementById('chatbot-mic-btn').classList.remove('listening');
+                };
+                
+                speechRecog.onerror = function(event) {
+                    document.getElementById('chatbot-mic-btn').classList.remove('listening');
+                    if (event.error === 'not-allowed') {
+                        alert("ERRORE: Accesso al microfono negato.");
+                    }
+                };
+            }
+
+            window.chatbotToggleVoice = function() {
+                if (!speechRecog) {
+                    alert("Il tuo browser non supporta il riconoscimento vocale.");
+                    return;
+                }
+                const btn = document.getElementById('chatbot-mic-btn');
+                if (btn.classList.contains('listening')) {
+                    speechRecog.stop();
+                } else {
+                    try {
+                        speechRecog.start();
+                        btn.classList.add('listening');
+                    } catch (e) {
+                        console.error("Errore avvio SpeechRecog:", e);
+                    }
+                }
+            };
+            
+			window.chatbotSpeak = function(text) {
+				if (!('speechSynthesis' in window)) return;
+
+				const speak = () => {
+					window.speechSynthesis.cancel();
+					const cleanText = text.replace(/[*_#]/g, '');
+					const utterance = new SpeechSynthesisUtterance(cleanText);
+					
+					const voices = window.speechSynthesis.getVoices();
+					const italianVoice = voices.find(v => v.lang.includes('it')) || voices[0];
+					
+					if (italianVoice) utterance.voice = italianVoice;
+
+					utterance.lang = 'it-IT';
+					utterance.rate = 1.0;
+					window.speechSynthesis.speak(utterance);
+				};
+
+				if (window.speechSynthesis.getVoices().length === 0) {
+					window.speechSynthesis.onvoiceschanged = speak;
+				} else {
+					speak();
+				}
+			};
+			
+            // --- Esposizione Globale Logica Modale ---
+            window.toggleHelpModal = function() {
+                const modal = document.getElementById('help-modal');
+                if (modal.style.display === 'none') {
+                    modal.style.display = 'flex';
+                } else {
+                    modal.style.display = 'none';
+                }
+            };
+
+            document.getElementById('help-modal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    window.toggleHelpModal();
+                }
+            });			
+            
+        })();
+        
+// ── Formattazione Dati UI (Decimali) ──────────────────────────────────
+        function initFormatters() {
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    // Ottieni l'elemento HTML che è stato modificato
+                    const el = mutation.target.nodeType === Node.TEXT_NODE ? mutation.target.parentElement : mutation.target;
+                    
+                    if (el && (el.id === 'azimut' || el.id === 'height')) {
+                        const val = parseFloat(el.textContent);
+                        
+                        // Se è un numero e non ha ancora il simbolo dei gradi (quindi non l'abbiamo ancora formattato)
+                        if (!isNaN(val) && !el.textContent.includes('°')) {
+                            observer.disconnect(); // Disconnetti un attimo per non creare un loop infinito
+                            el.textContent = val.toFixed(2) + '°'; // Formatta a 2 decimali e aggiungi il grado
+                            observe(); // Riattiva l'observer
+                        }
+                    }
+                });
+            });
+
+            function observe() {
+                const azimutEl = document.getElementById('azimut');
+                const heightEl = document.getElementById('height');
+                if (azimutEl) observer.observe(azimutEl, { childList: true, subtree: true, characterData: true });
+                if (heightEl) observer.observe(heightEl, { childList: true, subtree: true, characterData: true });
+            }
+
+            observe();
+        }
+                
+
+// ── Bootstrap ─────────────────────────────────────────────────────────
         (async function start() {
             const container = document.getElementById('canvas-container');
             const ok = webgl.init(container);
@@ -1070,14 +1308,223 @@ document.addEventListener('change', function(evt) {
             const commandInput = document.getElementById('command-input');
             controls.init(canvas, commandInput);
 
-            // Sequenza inizializzazione:
-            // 1. Chiama API per impostare cookies
-            // 2. Acquisisci geolocalizzazione
-            // 3. Apri WebSocket (che userà i cookies impostati al punto 1)
+            initFormatters(); // <-- AGGIUNGI QUESTA RIGA QUI
+
             await initAPI();
             await getDeviceLocation();
             connectWebSocket();
         })();
+        
+    </script>
+
+    <!-- Flash overlay per feedback visivo scatto -->
+    <div id="gyro-capture-flash"></div>
+
+    <script>
+    // ── Modalità Giroscopio ───────────────────────────────────────────────
+    (function() {
+        let _gyroActive   = false;
+        let _currentAz    = null;
+        let _currentAlt   = null;
+        let _gyroListener = null;
+        let _wakeLock     = null;
+
+        // Converte alpha/beta/gamma in azimut e altitudine
+        // Android Chrome: dispositivo tenuto verticale con schermo verso l'utente
+        // Quando il telefono è verticale: beta≈90, gamma≈0
+        // Inclinando verso l'alto (zenit): beta scende verso 0
+        // Inclinando verso il basso: beta sale verso 180
+        // Ruotando il telefono su se stesso (bussola): alpha cambia
+        function _orientationToAzAlt(alpha, beta, gamma) {
+            const toRad = Math.PI / 180;
+            const betaRad  = beta  * toRad;
+            const gammaRad = gamma * toRad;
+            const alphaRad = alpha * toRad;
+
+            // Altitudine (formula verificata sul dispositivo)
+            const sinAlt = Math.cos(betaRad) * Math.cos(gammaRad);
+            let alt = -(Math.asin(Math.max(-1, Math.min(1, sinAlt))) * 180 / Math.PI);
+
+            // Azimut: formula W3C per la direzione del retro del dispositivo
+            const Vx = -Math.cos(alphaRad) * Math.sin(gammaRad) -
+                        Math.sin(alphaRad) * Math.sin(betaRad) * Math.cos(gammaRad);
+            const Vy = -Math.sin(alphaRad) * Math.sin(gammaRad) +
+                        Math.cos(alphaRad) * Math.sin(betaRad) * Math.cos(gammaRad);
+            let az;
+            if (Math.abs(Vx) < 1e-8 && Math.abs(Vy) < 1e-8) {
+                // Punta esattamente zenit/nadir: azimut indefinito, usiamo alpha
+                az = alpha % 360;
+            } else {
+                az = Math.atan2(Vx, Vy) * (180 / Math.PI);
+                if (az < 0) az += 360;
+            }
+
+            return { az, alt };
+        }
+
+        function _updateHUD(az, alt, alpha, beta, gamma) {
+            document.getElementById('gyro-hud-az').textContent  = `Az: ${az.toFixed(1)}°`;
+            document.getElementById('gyro-hud-alt').textContent = `Alt: ${alt.toFixed(1)}°`;
+            let dbg = document.getElementById('gyro-hud-debug');
+            if (!dbg) {
+                dbg = document.createElement('div');
+                dbg.id = 'gyro-hud-debug';
+                dbg.style.cssText = 'font-size:11px;opacity:0.7;text-align:center;margin-top:4px;';
+                document.getElementById('gyro-hud-inner').insertAdjacentElement('afterend', dbg);
+            }
+            dbg.textContent = `α=${alpha.toFixed(1)} β=${beta.toFixed(1)} γ=${gamma.toFixed(1)}`;
+        }
+
+        function _onOrientation(evt) {
+            if (evt.alpha === null) return;
+            const { az, alt } = _orientationToAzAlt(evt.alpha, evt.beta, evt.gamma);
+            _currentAz  = az;
+            _currentAlt = alt;
+            _updateHUD(az, alt, evt.alpha, evt.beta, evt.gamma);
+        }
+
+        function _startGyroAfterPermission() {
+            if (!('DeviceOrientationEvent' in window)) {
+                alert('Il tuo dispositivo non supporta il giroscopio.');
+                return;
+            }
+            _gyroActive   = true;
+            _currentAz    = null;
+            _currentAlt   = null;
+            _gyroListener = _onOrientation;
+            if ('ondeviceorientationabsolute' in window) {
+                window.addEventListener('deviceorientationabsolute', _gyroListener, true);
+                logToPage('Usando orientamento assoluto (nord geografico)', 'info');
+            } else {
+                window.addEventListener('deviceorientation', _gyroListener, true);
+                logToPage('Usando orientamento relativo (no nord assoluto)', 'warning');
+            }
+            if ('wakeLock' in navigator) {
+                navigator.wakeLock.request('screen')
+                    .then(wl => { _wakeLock = wl; logToPage('Wake Lock attivo', 'info'); })
+                    .catch(e  => logToPage('Wake Lock non disponibile: ' + e.message, 'warning'));
+            }
+            _showGyroUI();
+            logToPage('Modalita giroscopio attivata', 'info');
+        }
+
+        function _showGyroUI() {
+            document.getElementById('gyro-hud').style.display         = 'block';
+            document.getElementById('gyro-crosshair').style.display   = 'block';
+            document.getElementById('gyro-shutter-btn').style.display = 'flex';
+            document.getElementById('gyro-exit-btn').style.display    = 'block';
+
+            // Nascondi chatbot, selettore AI, stato connessione e guida
+            document.getElementById('chatbot-widget').style.display    = 'none';
+            document.getElementById('provider-container').style.display = 'none';
+            document.getElementById('connection-status').style.display  = 'none';
+            document.getElementById('help-btn').style.display           = 'none';
+
+            // Collassa il panel info per non intralciare
+            const content = document.getElementById('info-panel-content');
+            const icon    = document.getElementById('toggle-info-icon');
+            if (!content.classList.contains('collapsed')) {
+                content.classList.add('collapsed');
+                icon.classList.add('collapsed');
+                icon.textContent = '▶';
+            }
+
+            // Disattiva orbit control se attivo
+            const orbitCb = document.getElementById('orbit-control-toggle');
+            if (orbitCb && orbitCb.checked) {
+                orbitCb.checked = false;
+                orbitCb.dispatchEvent(new Event('change'));
+            }
+
+            document.getElementById('gyro-mode-btn').classList.add('active');
+            document.getElementById('gyro-mode-btn').textContent = '🔭 Modalità Attiva';
+        }
+
+        function _hideGyroUI() {
+            document.getElementById('gyro-hud').style.display         = 'none';
+            document.getElementById('gyro-crosshair').style.display   = 'none';
+            document.getElementById('gyro-shutter-btn').style.display = 'none';
+            document.getElementById('gyro-exit-btn').style.display    = 'none';
+
+            // Ripristina chatbot, selettore AI, stato connessione e guida
+            document.getElementById('chatbot-widget').style.display    = '';
+            document.getElementById('provider-container').style.display = '';
+            document.getElementById('connection-status').style.display  = '';
+            document.getElementById('help-btn').style.display           = '';
+
+            document.getElementById('gyro-mode-btn').classList.remove('active');
+            document.getElementById('gyro-mode-btn').textContent = '🔭 Punta il Cielo';
+        }
+
+        window.toggleGyroMode = function() {
+            if (_gyroActive) {
+                _gyroActive = false;
+                if (_gyroListener) {
+                    window.removeEventListener('deviceorientationabsolute', _gyroListener);
+                    window.removeEventListener('deviceorientation', _gyroListener);
+                    _gyroListener = null;
+                }
+                if (_wakeLock) {
+                    _wakeLock.release().then(() => { _wakeLock = null; });
+                }
+                _hideGyroUI();
+                logToPage('Modalita giroscopio disattivata', 'info');
+            } else {
+                // iOS 13+: requestPermission va chiamato DIRETTAMENTE nel gestore tap
+                // senza await intermedi, altrimenti iOS nega il permesso automaticamente
+                if (typeof DeviceOrientationEvent !== 'undefined' &&
+                    typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    DeviceOrientationEvent.requestPermission()
+                        .then(permission => {
+                            if (permission === 'granted') {
+                                _startGyroAfterPermission();
+                            } else {
+                                alert('Permesso giroscopio negato.\nVai in Impostazioni > Safari > Movimento e orientamento > Consenti');
+                            }
+                        })
+                        .catch(e => alert('Errore permesso giroscopio: ' + e.message));
+                    return;
+                }
+                // Android / altri: avvio diretto senza permesso
+                _startGyroAfterPermission();
+            }
+        };
+
+        // Riacquisisce Wake Lock se la pagina torna visibile (es. dopo notifica)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && _gyroActive && !_wakeLock) {
+                navigator.wakeLock.request('screen')
+                    .then(wl => { _wakeLock = wl; })
+                    .catch(() => {});
+            }
+        });
+
+        window.gyroCapture = function() {
+            if (_currentAz === null || _currentAlt === null) {
+                logToPage('⚠️ Giroscopio non ancora pronto', 'warning');
+                return;
+            }
+
+            // Flash visivo
+            const flash = document.getElementById('gyro-capture-flash');
+            flash.style.opacity = '1';
+            setTimeout(() => { flash.style.opacity = '0'; }, 150);
+
+            // Feedback pulsante
+            const btn = document.getElementById('gyro-shutter-btn');
+            btn.classList.add('capturing');
+            setTimeout(() => btn.classList.remove('capturing'), 600);
+
+            const az  = _currentAz.toFixed(2);
+            const alt = _currentAlt.toFixed(2);
+            logToPage(`📸 Cattura: Az=${az}° Alt=${alt}°`, 'info');
+
+            // Invia al backend con il comando di orientamento
+            // Il motore riceve az/alt e renderizza la porzione di cielo corrispondente
+            sendCommand(`view ${az} ${alt}`);
+        };
+
+    })();
     </script>
 </body>
 </html>

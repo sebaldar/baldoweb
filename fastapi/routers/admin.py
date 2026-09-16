@@ -331,4 +331,9 @@ async def imposta_routing_modello(
         llm.routing.set_provider(fase, body.provider)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    return {"fase": fase, "provider": body.provider}
+    # Ritorniamo tutte le fasi (non solo quella appena scritta): con più
+    # worker uvicorn una scrittura può ancora, in rari casi, sovrapporsi a
+    # un'altra in corso su un processo diverso — restituire lo stato intero
+    # rilegge dal file appena salvato e rende visibile subito un eventuale
+    # disallineamento, invece di scoprirlo solo nel report di una storia.
+    return {"fase": fase, "provider": body.provider, "fasi": llm.routing.get_tutti()}

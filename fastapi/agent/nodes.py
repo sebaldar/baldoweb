@@ -200,20 +200,90 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
 # ---------------------------------------------------------------------------
 # NODE 3 — Decisione tool
 # ---------------------------------------------------------------------------
+
+# Riferimenti espliciti a un corpo/evento celeste nel prompt: quando ci sono,
+# la decisione non è ambigua e non ha senso delegarla a un classificatore
+# LLM — verificato sui report reali che un prompt come "seguire la luna" dà
+# usa_astronomia=true su Claude ma false in modo sistematico su DeepSeek
+# (fase 'decide_tools' instradata lì), cambiando il risultato della stessa
+# identica storia solo in base a quale provider serviva la richiesta. Un
+# controllo lessicale deterministico non dipende dal provider e copre il
+# caso più comune; l'LLM resta solo per i prompt ambigui che non nominano
+# nulla di celeste ma potrebbero comunque svolgersi sotto un cielo notturno
+# (es. "un'avventura nel bosco buio").
+_RIFERIMENTI_CELESTI_RE = re.compile(
+    r"\b("
+    r"luna|lunare|"
+    r"stella|stelle|stellato|stellata|"
+    r"pianeta|pianeti|"
+    r"costellazion\w*|"
+    r"cometa|comete|"
+    r"meteora|meteore|"
+    r"galassia|galassie|"
+    r"via\s+lattea|"
+    r"aurora\s+boreale|"
+    r"eclissi"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Urano e Nettuno sono troppo deboli per essere visti a occhio nudo (vedi
+# filtro lato server/js/api/PLANETARIUM/dati_astronomici.js): li rendiamo
+# visibili solo quando il prompt mette esplicitamente in mano al
+# protagonista uno strumento ottico.
+_RIFERIMENTO_TELESCOPIO_RE = re.compile(r"\btelescop\w*\b", re.IGNORECASE)
+
+
 async def decide_tools(state: BaldoState, llm: LLMRouter) -> dict:
     logger.info("[NODE] decide_tools")
 
     _emit(state, "tools:decisione",
           "🛠️  Scelgo quali strumenti magici usare per arricchire la storia…")
 
-    system = 'Decidi se usare l\'astronomia. Rispondi SOLO JSON: {"usa_astronomia": true/false}'
-    risultato = await llm.chiedi(system=system, user=state['prompt_originale'], fase="decide_tools")
+    prompt_originale = state["prompt_originale"]
 
-    try:
-        dati         = json.loads(risultato.testo.strip().strip("```json").strip("```"))
-        usa_astro    = dati.get("usa_astronomia", True)
-    except Exception:
+    if _RIFERIMENTI_CELESTI_RE.search(prompt_originale):
+        logger.info("[NODE] decide_tools: riferimento celeste esplicito nel prompt, salto la classificazione LLM")
         usa_astro = True
+        llm_usage = []
+    else:
+        system = (
+            "Decidi se la storia richiede i dati reali del cielo notturno "
+            "(posizione di luna, pianeti, stelle e costellazioni per la "
+            "notte e il luogo indicati).\n\n"
+            "Rispondi true se la scena è o può plausibilmente essere "
+            "ambientata di notte o al crepuscolo, all'aperto, con il cielo "
+            "visibile (es. si guarda in alto, si è fuori casa la sera, si "
+            "insegue qualcosa nel cielo, si guarda fuori dalla finestra "
+            "prima di dormire). Rispondi false solo se la scena è "
+            "chiaramente diurna o al chiuso senza vista del cielo.\n"
+            "Nel dubbio rispondi true: un cielo notturno realistico "
+            "arricchisce comunque la storia, ometterlo quando servirebbe "
+            "la impoverisce.\n\n"
+            'Rispondi SOLO JSON: {"usa_astronomia": true/false}'
+        )
+        contesto = f"Prompt: {prompt_originale}"
+        if state.get("luogo"):
+            contesto += f"\nLuogo: {state['luogo']}"
+        momento = f"{state.get('data_storia') or ''} {state.get('ora_storia') or ''}".strip()
+        if momento:
+            contesto += f"\nMomento della storia: {momento}"
+
+        risultato = await llm.chiedi(system=system, user=contesto, fase="decide_tools")
+
+        try:
+            dati      = json.loads(risultato.testo.strip().strip("```json").strip("```"))
+            usa_astro = dati.get("usa_astronomia", True)
+        except Exception:
+            usa_astro = True
+
+        llm_usage = [{
+            "nodo": "decide_tools",
+            "modello": risultato.modello,
+            "token_input": risultato.token_input,
+            "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2),
+        }]
 
     if usa_astro:
         _emit(state, "tools:astronomia_attiva",
@@ -225,13 +295,7 @@ async def decide_tools(state: BaldoState, llm: LLMRouter) -> dict:
 
     return {
         "usa_astronomia": usa_astro,
-        "llm_usage": [{
-            "nodo": "decide_tools",
-            "modello": risultato.modello,
-            "token_input": risultato.token_input,
-            "token_output": risultato.token_output,
-            "durata_secondi": round(risultato.durata_secondi, 2),
-        }],
+        "llm_usage": llm_usage,
     }
 
 
@@ -344,12 +408,14 @@ async def fetch_contesto_fisico(
             _emit(state, "fisico:astro_avvio",
                   "✨  Interrogo le stelle: calcolo la posizione di pianeti "
                   "e costellazioni per questa notte…")
+            con_telescopio = bool(_RIFERIMENTO_TELESCOPIO_RE.search(state.get("prompt_originale") or ""))
             tasks.append(astronomy.get_sky_data(
-                client_ip   = state.get("client_ip", "127.0.0.1"),
-                lat         = lat,
-                lon         = lon,
-                data_storia = state.get("data_storia"),
-                ora_storia  = state.get("ora_storia"),
+                client_ip      = state.get("client_ip", "127.0.0.1"),
+                lat            = lat,
+                lon            = lon,
+                data_storia    = state.get("data_storia"),
+                ora_storia     = state.get("ora_storia"),
+                con_telescopio = con_telescopio,
             ))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)

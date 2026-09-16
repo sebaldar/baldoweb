@@ -161,6 +161,15 @@ class ModelRoutingConfig:
                 f"Provider non valido per la fase '{fase}': '{provider}'. "
                 f"Validi: {', '.join(validi)}"
             )
+        # _salva() riscrive l'intero dizionario: partire da una copia in RAM
+        # non aggiornata (un altro worker ha scritto sul file nel frattempo,
+        # ma questo worker non l'ha ancora ricaricata) cancellerebbe in
+        # silenzio le fasi che quell'altra scrittura aveva appena impostato
+        # — osservato in produzione: una PUT su 'genera_draft' ha fatto
+        # tornare 'decide_tools' al valore di qualche minuto prima. Rileggere
+        # subito prima di mutare non elimina la finestra di corsa fra
+        # processi (nessun lock in-process la copre), ma la riduce al minimo.
+        self._ricarica_se_cambiato()
         with self._lock:
             self._config[fase] = provider  # type: ignore[assignment]
         self._salva()

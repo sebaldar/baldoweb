@@ -22,12 +22,13 @@ class AstronomyClient:
         self.base_url = settings.ASTRONOMY_API_URL
 
     async def get_sky_data(
-        self, 
-        client_ip: str, 
-        lat=None, 
-        lon=None, 
-        data_storia=None, 
-        ora_storia=None  # <--- Aggiunto parametro ora
+        self,
+        client_ip: str,
+        lat=None,
+        lon=None,
+        data_storia=None,
+        ora_storia=None,  # <--- Aggiunto parametro ora
+        con_telescopio=False,  # Urano/Nettuno: visibili solo se la storia prevede un telescopio
     ) -> dict:
         """
         Recupera i dati celesti chiamando il microservizio Node.js.
@@ -66,6 +67,9 @@ class AstronomyClient:
 
             if ora_storia:
                 params["ora"] = ora_storia # <--- Passiamo l'ora (UTC) al server Node
+
+            if con_telescopio:
+                params["telescopio"] = "true"
 
             logger.info(f"Chiamata Astronomy API: {params}")
 

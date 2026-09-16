@@ -79,6 +79,24 @@ export default {
         const illuminazionePercento = (elonDeg) =>
             Math.round((1 - Math.cos(elonDeg * Math.PI / 180)) / 2 * 100);
 
+        // Senza telescopio si vedono solo Sole, Luna e i cinque pianeti
+        // noti fin dall'antichità (Mercurio, Venere, Marte, Giove,
+        // Saturno): sono abbastanza luminosi da essere visibili a occhio
+        // nudo. Urano e Nettuno, anche quando geometricamente sopra
+        // l'orizzonte (il flag "visible" del motore C++ guarda solo
+        // l'altezza, non la magnitudine), restano troppo deboli per essere
+        // visti senza strumento — a meno che la storia non preveda
+        // esplicitamente un telescopio (query "telescopio", inoltrata dal
+        // fastapi quando il prompt lo nomina): in quel caso il protagonista
+        // ha lo strumento in mano, quindi li rendiamo visibili anche a lui.
+        const conTelescopio = ["1", "true"].includes(
+            String(jdata.query.telescopio || "").toLowerCase()
+        );
+        const VISIBILI_OCCHIO_NUDO = new Set([
+            "sole", "luna", "mercurio", "venere", "marte", "giove", "saturno",
+            ...(conTelescopio ? ["urano", "nettuno"] : []),
+        ]);
+
         const simplified_bodies = (raw_json.bodies || [])
             .map(b => {
                 let elonNorm = null;
@@ -103,7 +121,8 @@ export default {
             // Una luna nuova non si vede a occhio nudo (troppo vicina al
             // sole nel cielo) anche se geometricamente sopra l'orizzonte —
             // il flag "visible" del motore C++ guarda solo l'altezza.
-            .filter(({ body, eNuova }) => body.visible === true && !eNuova)
+            .filter(({ body, eNuova }) =>
+                body.visible === true && !eNuova && VISIBILI_OCCHIO_NUDO.has(body.name))
             .map(({ body: b, fase, illuminazione }) => {
                 const alt = b.altitude_deg;
                 let posizione = "all'orizzonte";

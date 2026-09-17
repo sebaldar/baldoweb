@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import settings
 from services.llm import LLMRouter
@@ -41,12 +41,11 @@ llm_router:   Optional[LLMRouter] = None
 astronomy_client: Optional[AstronomyClient] = None
 weather_client:   Optional[WeatherClient] = None # <--- NUOVO
 geo_service:      Optional[GeoService] = None    # <--- NUOVO
-baldo_graph = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global neo4j_client, http_client, llm_router, baldo_graph, \
+    global neo4j_client, http_client, llm_router, \
            astronomy_client, weather_client, geo_service
 
     logger.info("Avvio servizi Baldo...")
@@ -65,15 +64,6 @@ async def lifespan(app: FastAPI):
     astronomy_client = AstronomyClient(http_client=http_client)
     weather_client = WeatherClient(http_client=http_client) # <--- NUOVO
     geo_service = GeoService()                             # <--- NUOVO
-
-    # COSTRUZIONE GRAFO (Risolve il TypeError aggiungendo weather e geo)
-    baldo_graph = build_graph(
-        llm=llm_router,
-        neo4j=neo4j_client,
-        astronomy=astronomy_client,
-        weather=weather_client,
-        geo=geo_service
-    )
 
     logger.info("Agente Baldo pronto con supporto Geo/Meteo.")
     yield
@@ -101,13 +91,13 @@ app.include_router(admin_router)
 # Modelli Pydantic
 # ---------------------------------------------------------------------------
 class StoryStreamRequest(BaseModel):
-    prompt:      str
+    prompt:      str = Field(min_length=1, max_length=8000)
     lingua:      str = "it"
-    eta_bambino: int = 4
+    eta_bambino: int = Field(default=4, ge=0, le=18)
     lunghezza:   str = "media"
     session_id:  Optional[str] = None
-    lat:         Optional[float] = None
-    lon:         Optional[float] = None
+    lat:         Optional[float] = Field(default=None, ge=-90, le=90)
+    lon:         Optional[float] = Field(default=None, ge=-180, le=180)
     data_storia: Optional[str] = None
     ora_storia:  Optional[str] = None   # <--- Aggiunta ora
     source_geo:  Optional[str] = None   # "device" | "ip"
@@ -187,7 +177,13 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
 
     async def event_generator():
         try:
-            async for event in baldo_graph.astream_events(stato_iniziale, config=config, version="v2"):
+            # Each request owns its checkpoints, including during concurrent streams.
+            # Once this generator closes, no process-global graph retains the story.
+            request_graph = build_graph(
+                llm=llm_router, neo4j=neo4j_client, astronomy=astronomy_client,
+                weather=weather_client, geo=geo_service,
+            )
+            async for event in request_graph.astream_events(stato_iniziale, config=config, version="v2"):
                 event_type = event.get("event")
                 name = event.get("name", "")
 
@@ -213,7 +209,7 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
                         yield f"data: {json.dumps({'tipo': 'token', 'testo': token})}\n\n"
 
             # Snapshot Finale
-            snapshot = baldo_graph.get_state(config)
+            snapshot = request_graph.get_state(config)
             v = snapshot.values if hasattr(snapshot, "values") else {}
 
             # Report YAML amministrativo — solo se è stata prodotta una

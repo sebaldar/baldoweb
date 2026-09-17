@@ -14,6 +14,8 @@ from pathlib import Path
 
 import yaml
 
+from services.story_versions import version_report
+
 logger = logging.getLogger(__name__)
 
 # Montata come volume Docker (vedi docker-compose.yml), sullo stesso
@@ -71,7 +73,11 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "colore_preferito": state.get("colore_preferito"),
             "animale_preferito": state.get("animale_preferito"),
             "prompt": state.get("prompt_originale"),
+            "diagnosi_draft": state.get("diagnosi_draft") or [],
+            "valutazione_draft_finale": state.get("valutazione_draft"),
+            "revisione_finale": state.get("revisione_finale"),
             "storia_generata": state.get("racconto_finale"),
+            "versioni_racconto": version_report(state.get("versioni_racconto") or []),
             "tempo_elaborazione_secondi": round(tempo_elaborazione_secondi, 2),
             "modelli_utilizzati": uso["modelli_utilizzati"],
             "token_input": uso["token_input"],
@@ -103,6 +109,7 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "data_storia": state.get("data_storia"),
             "ora_storia": state.get("ora_storia"),
             "condizioni_meteo": state.get("dati_meteo"),
+            "fonte_meteo": state.get("fonte_meteo"),
             "usa_astronomia": state.get("usa_astronomia"),
             "dati_astronomici": state.get("dati_astronomici") if state.get("usa_astronomia") else None,
         }

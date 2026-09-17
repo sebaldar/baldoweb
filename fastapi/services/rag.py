@@ -43,6 +43,11 @@ IMPORTANTE:
   - Risolvi SEMPRE i momenti della giornata in orari HH:MM:SS.
   - Se data e ora sono davvero assenti, lascia null.
 
+Estrai meteo_prompt solo quando il prompt impone condizioni atmosferiche reali nella
+scena (anche future nella trama o negative, come senza pioggia). Non dedurre dalla
+sola stagione. Non estrarre ipotesi come se piove, domande sul tempo, metafore o
+richieste di usare il meteo reale. Conserva una citazione esatta con la condizione.
+
 Formato risposta JSON ESCLUSIVO:
 {{
   "personaggi": ["lista"],
@@ -50,7 +55,8 @@ Formato risposta JSON ESCLUSIVO:
   "ambientazione": "stringa",
   "luogo": "nome città o null",
   "data_storia": "DD-MM-YYYY o null",
-  "ora_storia": "HH:MM:SS o null"
+  "ora_storia": "HH:MM:SS o null",
+  "meteo_prompt": "citazione esatta delle condizioni meteo imposte o null"
 }}
 Rispondi solo con il JSON.
 """
@@ -114,6 +120,7 @@ class RAGExtractor:
                 "emozioni":     analisi.get("emozioni")      or ["meraviglia"],
                 "ambientazione":analisi.get("ambientazione") or "un posto magico",
                 "luogo":        luogo_estratto,
+                "meteo_prompt": analisi.get("meteo_prompt"),
                 "data_storia":  analisi.get("data_storia"),
                 "ora_storia":   analisi.get("ora_storia"),
                 "_uso_llm":     uso_llm,

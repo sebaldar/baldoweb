@@ -1,24 +1,7 @@
 """
-services/model_routing.py
-==========================
-Configurazione, persistita su file, di quale provider LLM usare per ciascuna
-fase della pipeline agentica.
-
-Perché esiste: le fasi della pipeline non sono tutte uguali. I controlli
-SI/NO (valuta_prompt, decide_tools, i due check di verifica_coerenza_domanda)
-sono classificazioni economiche a pochi token di risposta — buoni candidati
-per un provider più economico. genera_draft, rifinisci e il rewrite delle
-similitudini dipendono invece da un ampio lavoro di prompt-engineering
-verificato specificamente su Claude (decine di regole di stile italiane
-fini — apertura di Baldo, ritornello, reduplicazioni, morale prima della
-domanda finale...): spostarle su un altro modello senza una verifica di
-tenuta dedicata rischia di riaprire in silenzio problemi già chiusi. Questo
-modulo permette all'amministratore di scegliere provider per provider, fase
-per fase, senza toccare codice — ma non decide da solo quali spostare.
-
-Persistenza: un file JSON su un volume montato (stesso pattern già in uso
-per fastapi/stories), non un DB dedicato — la configurazione è un piccolo
-oggetto piatto, non giustifica una nuova dipendenza.
+Provider LLM configurabile per fase, persistito su file condiviso fra worker.
+Il bypass è disponibile solo per le fasi con un comportamento sostitutivo
+esplicito. Il conteggio delle similitudini è una metrica e non ha un provider.
 """
 
 import json
@@ -42,18 +25,10 @@ PROVIDER_VALIDI: tuple[Provider, ...] = ("anthropic", "openai", "deepseek")
 # vero LLM (services/llm.py) deve continuare a trattarlo come invalido.
 BYPASS: Provider = "nessuno"
 
-# Solo le fasi dove saltare la chiamata ha un sostituto sicuro e ovvio:
-# rifinisci (il draft resta com'è, la coerenza della domanda finale è
-# comunque presidiata da verifica_coerenza_domanda.check/.fix, un nodo
-# indipendente), il rewrite delle similitudini (si accetta il rischio di
-# qualche similitudine in più) e il retry di ricerca KB (si va avanti
-# senza frammenti invece di riprovare). Le altre fasi — in particolare
-# valuta_prompt, il controllo di sicurezza sul prompt — restano escluse
-# deliberatamente: un bypass lì va deciso con più attrito di un menu a
-# tendina, non aggiunto qui come le altre.
+# La rifinitura può lasciare il draft invariato; la ricerca KB può proseguire
+# senza riformulare la query. I controlli restano indipendenti dal bypass.
 FASI_CON_BYPASS: frozenset[str] = frozenset({
     "rifinisci",
-    "verifica_coerenza_domanda.similitudini",
     "valuta_frammenti._riformula_termini",
 })
 
@@ -66,11 +41,14 @@ FASI: tuple[str, ...] = (
     "decide_tools",
     "valuta_frammenti._riformula_termini",
     "genera_draft",
+    "verifica_testo_finale",
+    "verifica_testo_finale.conferma",
+    "valuta_draft",
+    "correggi_draft",
     "rifinisci",
     "verifica_coerenza_domanda.ritornello",
     "verifica_coerenza_domanda.check",
     "verifica_coerenza_domanda.fix",
-    "verifica_coerenza_domanda.similitudini",
 )
 
 _PATH_DEFAULT = Path("/app/config_data/model_routing.json")

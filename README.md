@@ -128,7 +128,16 @@ Il revisore finale verifica l'azione decisiva, la continuità narrativa e il
 rispetto della richiesta. Per ciascun requisito individuato riporta una
 citazione della richiesta, l'esito e, quando soddisfatto, un'evidenza testuale.
 Un requisito segnalato come mancante impedisce l'esito `ok`; un controllo
-obbligatorio assente o malformato produce `non_verificato`.
+obbligatorio assente o malformato produce `non_verificato` se non recuperabile.
+Per azione decisiva, continuità e requisiti è consentito un solo tentativo complessivo di riparazione
+delle evidenze per revisione, senza riscrivere il racconto. Differenze nei soli
+spazi e a-capo sono ricondotte al passaggio originale senza chiamate LLM;
+questa tolleranza non si applica alle sostituzioni. I controlli sono validati indipendentemente e quelli validi vengono conservati; `errori_evidenze` registra il problema
+e `dettaglio_chiamate_llm` rende visibile la chiamata `.ripara_evidenze`.
+
+Se il primo controllo rileva requisiti mancanti ma non produce modifiche,
+un singolo passaggio `.correggi_requisiti` propone sostituzioni locali da
+sottoporre alla conferma. I suggerimenti liberi non vengono applicati direttamente.
 
 Sono ammesse al massimo cinque sostituzioni locali, con citazioni originali
 univoche e senza sovrapposizioni. Una seconda chiamata verifica il candidato
@@ -138,8 +147,18 @@ problemi irrisolti. `ok` è una valutazione del modello, non una garanzia di
 correttezza; le citazioni sono validate dal codice, mentre completezza e
 pertinenza del controllo richiedono anche prove e revisione umana.
 
+### Meteo indicato nel prompt
+
+Se il prompt impone condizioni atmosferiche, la pipeline usa quelle e salta la
+chiamata al servizio meteo. L'analisi estrae una citazione della richiesta, con
+un riconoscimento locale di condizioni esplicite comuni come «inverno rigido»
+e «tormenta». Il report distingue `fonte_meteo: prompt`, `tool` e `non_disponibile`.
+Un'ipotesi come «se piove» non impone il tempo; l'astronomia resta indipendente.
+
 ### Dati astronomici
 
+Una semplice ambientazione invernale o notturna non attiva l’astronomia:
+servono riferimenti celesti o una richiesta pertinente di osservazione.
 Quando l'astronomia è attiva, generatore e revisore ricevono i dati del motore,
 compresi altezza, azimut e direzione cardinale quando disponibili. L'orario
 locale viene convertito per il motore; il report conserva `ora_utc_motore`.
@@ -175,9 +194,10 @@ python -m evals.run
 # Prove reali: richiedono credenziali e consumano token
 python -m evals.run --live --providers anthropic deepseek --repeats 2 --output /tmp/revisori.json
 python -m evals.check_request_live
+python -m evals.check_blizzard_live
 ```
 
-L'ultima prova confronta un racconto che omette il nome del pianeta con uno che
+La prova `check_request_live` confronta un racconto che omette il nome del pianeta con uno che
 lo nomina già, verificando correzione e conservazione del testo corretto.
 Le prove live non modificano il routing dell'app. Per metodo, limiti e confronto
 della rifinitura consultare [la guida alle valutazioni](fastapi/evals/README.md).

@@ -109,18 +109,6 @@ class AstronomyClient:
             return self._cielo_fallback()
 
     def _cielo_fallback(self):
-        """Restituisce un cielo generico se il servizio esterno è offline."""
-        return {
-            "corpi": [
-                {
-                    "nome": "Luna", 
-                    "posizione_testuale": "alta nel cielo", 
-                    "costellazione": "Sconosciuta",
-                    "stelle_vicine": []
-                }
-            ],
-            "fase_giorno": "notte",
-            "fase_luna": "crescente",
-            "ora_utc_motore": "ora non pervenuta",
-            "status": "fallback"
-        }
+        """A missing engine response must not masquerade as an observed sky."""
+        return {"corpi": [], "fase_giorno": None, "fase_luna": None,
+                "ora_utc_motore": None, "status": "fallback"}

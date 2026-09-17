@@ -104,11 +104,9 @@ class LLMRouter:
     async def genera_racconto(self, prompt: str) -> RisultatoLLM:
         """Genera il draft del racconto tramite cloud LLM."""
         system = (
-            "Sei Baldo, un anziano astrologo e cantastorie gentile che vive in una "
-            "torre antica — questa cornice (chi sei, da dove racconti) va sempre "
-            "mantenuta: il messaggio dell'utente contiene le istruzioni esatte su "
-            "cosa vedi in cielo in questo momento (giorno o notte, meteo reale) — "
-            "seguile alla lettera, non inventare un cielo stellato di default. "
+            "Sei Baldo, un cantastorie gentile. La tua voce non richiede una cornice "
+            "o un saluto: segui le istruzioni narrative del prompt e l'ambientazione "
+            "richiesta. Usa i dati reali sul cielo solo quando pertinenti. "
             "Usa un linguaggio semplice, immagini vivide, ritmo narrativo "
             "coinvolgente, adatto a bambini in età prescolare. "
             "Non iniziare mai con un titolo o un'intestazione, e non usare ALCUNA "
@@ -120,65 +118,24 @@ class LLMRouter:
 
     async def rifinisci(self, draft: str, eta: int, ritornello: str | None = None) -> RisultatoLLM:
         """Rifinitura editoriale finale del racconto."""
-        # Osservato: rifinisci riscrive l'intero testo (token in uscita quasi
-        # pari a quelli in ingresso) e in almeno un caso ha fatto sparire un
-        # ritornello già acquisito nel draft. Quando composer.py conosce in
-        # anticipo il ritornello del frammento, glielo passiamo come vincolo
-        # esplicito da proteggere; l'istruzione generale sotto copre anche il
-        # caso in cui il ritornello sia stato inventato dal modello stesso
-        # (testo non noto in anticipo).
-        if ritornello:
-            vincolo_ritornello = (
-                f"Il racconto usa questo ritornello, che DEVE restare "
-                f"IDENTICO, parola per parola, in ogni sua ripetizione: "
-                f"\"{ritornello}\". Non parafrasarlo, non correggerne lo "
-                f"stile, non rimuoverlo. "
-            )
-        else:
-            # Nessuna frase ripetuta rilevata nel draft: il ritornello è
-            # stato proposto (dal frammento o inventato) ma il draft, lasciato
-            # libero, spesso lo usa una volta sola invece di farlo tornare —
-            # osservato più volte, è la regressione più ricorrente su questo
-            # punto. Non lasciamo la scelta al caso una seconda volta: se c'è
-            # già un candidato concreto nel testo, va sfruttato e ripetuto qui.
-            vincolo_ritornello = (
-                "Il racconto NON ha ancora un ritornello riconoscibile "
-                "(nessuna frase ripetuta 2-3 volte identica). Cercane uno "
-                "già presente nel testo: un'onomatopea, un gesto o una "
-                "frase d'azione breve e concreta legata alla scena (es. "
-                "\"Toc toc toc\", \"Scese, scese, scese\", un'esclamazione "
-                "del narratore usata una sola volta) — se ne trovi uno "
-                "buono, ripetilo IDENTICO altre 1-2 volte nei momenti "
-                "chiave della storia, aggiungendolo dove manca. Non "
-                "inventare una frase nuova dal nulla se ce n'è già una "
-                "buona nel testo: usa quella. Se il racconto è già privo "
-                "di qualunque frase adatta, lascialo così com'è. "
-            )
+        vincolo_ritornello = (
+            f"Preserva il ritornello già usato: {ritornello!r}, senza aggiungere ripetizioni. "
+            if ritornello else "Non aggiungere un ritornello. "
+        )
         system = (
-            f"Sei un editor esperto di letteratura per l'infanzia. "
-            f"Il racconto è destinato a bambini di circa {eta} anni. "
-            f"Raffina il testo mantenendone lo spirito: migliora il ritmo, "
-            f"semplifica dove necessario, usa solo parole che un bambino di "
-            f"quell'età conosce già (evita aggettivi astratti o letterari come "
-            f"\"viscido\", \"ambiguo\"). "
-            f"NON toccare la cornice di apertura/chiusura di Baldo (dove vive, il "
-            f"cielo, il modo in cui si rivolge al bambino) se è già presente nel "
-            f"testo — lasciala intatta, non sostituirla con una formula fiabesca "
-            f"generica (mai \"vissero felici e contenti\" o simili, tanto più al "
-            f"plurale se il protagonista è uno solo). "
+            f"Sei un editor di racconti per bambini di {eta} anni. "
+            "Intervieni solo su problemi effettivi di chiarezza, lessico o ridondanza. "
+            "Conserva voce, dettagli personali, dialoghi e ritmo del draft. Se una frase "
+            "funziona, copiala invariata. Non rendere il testo più poetico o affettuoso "
+            "per abitudine. Non trasformare automaticamente emozioni nominate in reazioni "
+            "fisiche stereotipate. Elimina spiegazioni emotive che duplicano un gesto "
+            "e cornici affettive generiche. Non aggiungere saluti, appellativi, metafore, "
+            "morali o domande finali: la loro assenza è valida. "
             f"{vincolo_ritornello}"
-            f"NON far dichiarare a un personaggio o al narratore la morale della "
-            f"storia (frasi tipo \"capì una cosa importante\"): se c'è una domanda "
-            f"finale rivolta al bambino, deve restare lei a fare quel lavoro. "
-            f"Se trovi un'emozione dichiarata direttamente in una frase (es. "
-            f"\"aveva paura\", \"era triste\", \"si sentì felice\"), riscrivila come "
-            f"una reazione fisica immediata e concreta che un bambino di "
-            f"quell'età proverebbe davvero nel corpo (es. \"le tremavano le "
-            f"ginocchia\", \"strinse forte i pugni\", \"le si aprì un sorriso "
-            f"enorme\") invece che come introspezione psicologica adulta. "
-            f"Non usare ALCUNA formattazione Markdown (niente *, **, #, ---): il "
-            f"testo va incollato così com'è in una pagina web. "
-            f"NON aggiungere elementi nuovi alla trama, solo rifinisci."
+            "Correggi gli errori grammaticali effettivi. Preserva battute brevi, silenzi, "
+            "parole quotidiane e variazioni di ritmo; non trasformare i dialoghi in massime. "
+            "Preserva azioni, indizi e nessi causali; non aggiungere elementi alla trama. "
+            "Restituisci solo il racconto completo, senza Markdown o commenti."
         )
         return await self._cloud_chat(
             system=system,

@@ -51,6 +51,8 @@ class BaldoState(TypedDict):
     # Nuovi campi per coordinate e meteo
     lat: Optional[float]                   # Latitudine reale da GeoService
     lon: Optional[float]                   # Longitudine reale da GeoService
+    meteo_prompt: Optional[str]
+    fonte_meteo: Optional[str]
     dati_meteo: Optional[str]              # Es: "pioggia leggera, 12°C"
     dati_astronomici: Optional[Dict]       # Dati dal server Node/C++
 
@@ -61,6 +63,7 @@ class BaldoState(TypedDict):
     # significhi "capovolgimento" o "binomio fantastico").
     tecnica_narrativa_kb: Optional[str]
     archetipo_kb: Optional[str]
+    versioni_racconto: Annotated[List[Dict], operator.add]
     draft: str
     # Ritornello REALMENTE usato nel draft (rilevato per codice, non LLM,
     # cercando una frase che si ripete 2+ volte — non il testo grezzo del
@@ -69,7 +72,8 @@ class BaldoState(TypedDict):
     # con i personaggi della propria trama). Passato a rifinisci come
     # vincolo da preservare parola per parola. None se non rilevato.
     ritornello_atteso: Optional[str]
-    valutazione_draft: str                 # "ok" | "spaventoso" | "inadeguato" | "troppo_lungo"
+    valutazione_draft: str                 # "ok" oppure diagnosi del difetto causale
+    diagnosi_draft: Annotated[List[Dict], operator.add]
     tentativi_correzione: int
 
     # --- OUTPUT FINALE ---
@@ -87,6 +91,8 @@ class BaldoState(TypedDict):
     # osservabilità per il report, non usata per correggere il testo: il
     # tetto vero è la Regola 20 nel prompt di generazione.
     similitudini_stimate: Optional[int]
+
+    revisione_finale: Optional[Dict]
 
     # --- MEMORIA ---
     storia_id: Optional[str]              

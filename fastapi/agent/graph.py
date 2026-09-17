@@ -29,6 +29,7 @@ from agent.nodes import (
     nodo_errore,
 )
 from services.llm import LLMRouter
+from services.narrative_review import verifica_testo_finale
 from services.neo4j_client import Neo4jClient
 from services.astronomy import AstronomyClient
 from services.weather import WeatherClient
@@ -77,6 +78,7 @@ def build_graph(
     grafo.add_node("correggi_draft", _correggi_draft)
     grafo.add_node("rifinisci", _rifinisci)
     grafo.add_node("verifica_domanda", _verifica_domanda)
+    grafo.add_node("verifica_testo_finale", partial(verifica_testo_finale, llm=llm))
     grafo.add_node("salva_memoria", _salva_memoria)
     grafo.add_node("nodo_errore", nodo_errore)
 
@@ -123,7 +125,8 @@ def build_graph(
 
     grafo.add_edge("correggi_draft", "valuta_draft")
     grafo.add_edge("rifinisci", "verifica_domanda")
-    grafo.add_edge("verifica_domanda", "salva_memoria")
+    grafo.add_edge("verifica_domanda", "verifica_testo_finale")
+    grafo.add_edge("verifica_testo_finale", "salva_memoria")
     grafo.add_edge("salva_memoria", END)
     grafo.add_edge("nodo_errore", END)
 

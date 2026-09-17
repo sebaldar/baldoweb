@@ -9,6 +9,8 @@ Ogni nodo emette eventi di streaming descrittivi tramite la callback
 `stream_event(event_type, message, payload?)` presente nello state.
 """
 
+from services.weather_context import prompt_weather
+
 import json
 import logging
 import re
@@ -33,6 +35,9 @@ from services.astronomy import AstronomyClient
 from services.weather import WeatherClient
 from services.geo_service import GeoService
 from services.composer import StoryComposer
+from services.story_versions import snapshot
+from services.story_style import detect_refrain, count_similitudes
+from services.narrative_review import REVIEW_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +120,7 @@ async def analizza_prompt(state: BaldoState, llm: LLMRouter) -> dict:
         "personaggi":            personaggi,
         "emozioni":              emozioni,
         "ambientazione":         analisi.get("ambientazione", ""),
+        "meteo_prompt": prompt_weather(state["prompt_originale"], analisi.get("meteo_prompt")),
         "luogo":                 luogo_target,
         "data_storia":           data_target,
         "ora_storia":            ora_target,
@@ -201,19 +207,12 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
 # NODE 3 — Decisione tool
 # ---------------------------------------------------------------------------
 
-# Riferimenti espliciti a un corpo/evento celeste nel prompt: quando ci sono,
-# la decisione non è ambigua e non ha senso delegarla a un classificatore
-# LLM — verificato sui report reali che un prompt come "seguire la luna" dà
-# usa_astronomia=true su Claude ma false in modo sistematico su DeepSeek
-# (fase 'decide_tools' instradata lì), cambiando il risultato della stessa
-# identica storia solo in base a quale provider serviva la richiesta. Un
-# controllo lessicale deterministico non dipende dal provider e copre il
-# caso più comune; l'LLM resta solo per i prompt ambigui che non nominano
-# nulla di celeste ma potrebbero comunque svolgersi sotto un cielo notturno
-# (es. "un'avventura nel bosco buio").
+# I riferimenti celesti espliciti attivano il motore senza classificazione.
+# Senza riferimenti al cielo la storia non richiede effemeridi; il modello
+# valuta solo i casi ambigui (per esempio una richiesta di osservare il cielo).
 _RIFERIMENTI_CELESTI_RE = re.compile(
     r"\b("
-    r"luna|lunare|"
+    r"astronom\w*|saturno|giove|marte|venere|mercurio|urano|nettuno|luna|lunare|"
     r"stella|stelle|stellato|stellata|"
     r"pianeta|pianeti|"
     r"costellazion\w*|"
@@ -246,20 +245,16 @@ async def decide_tools(state: BaldoState, llm: LLMRouter) -> dict:
         logger.info("[NODE] decide_tools: riferimento celeste esplicito nel prompt, salto la classificazione LLM")
         usa_astro = True
         llm_usage = []
+    elif not re.search(r"\b(ciel\w*|astr\w*|osservator\w*|telescop\w*)\b", prompt_originale, re.IGNORECASE):
+        usa_astro = False
+        llm_usage = []
     else:
         system = (
-            "Decidi se la storia richiede i dati reali del cielo notturno "
-            "(posizione di luna, pianeti, stelle e costellazioni per la "
-            "notte e il luogo indicati).\n\n"
-            "Rispondi true se la scena è o può plausibilmente essere "
-            "ambientata di notte o al crepuscolo, all'aperto, con il cielo "
-            "visibile (es. si guarda in alto, si è fuori casa la sera, si "
-            "insegue qualcosa nel cielo, si guarda fuori dalla finestra "
-            "prima di dormire). Rispondi false solo se la scena è "
-            "chiaramente diurna o al chiuso senza vista del cielo.\n"
-            "Nel dubbio rispondi true: un cielo notturno realistico "
-            "arricchisce comunque la storia, ometterlo quando servirebbe "
-            "la impoverisce.\n\n"
+            "Decidi se la richiesta ha bisogno di dati astronomici reali. "
+            "Rispondi true solo per osservazione o identificazione del cielo, "
+            "orientamento mediante astri o fenomeni celesti. Una notte, una sera, "
+            "un bosco buio, inverno o tormenta non bastano. Non aggiungere astronomia "
+            "per arricchire una trama che non la richiede. Nel dubbio false. "
             'Rispondi SOLO JSON: {"usa_astronomia": true/false}'
         )
         contesto = f"Prompt: {prompt_originale}"
@@ -273,9 +268,9 @@ async def decide_tools(state: BaldoState, llm: LLMRouter) -> dict:
 
         try:
             dati      = json.loads(risultato.testo.strip().strip("```json").strip("```"))
-            usa_astro = dati.get("usa_astronomia", True)
+            usa_astro = dati.get("usa_astronomia") is True
         except Exception:
-            usa_astro = True
+            usa_astro = False
 
         llm_usage = [{
             "nodo": "decide_tools",
@@ -367,7 +362,11 @@ async def fetch_contesto_fisico(
           {"luogo": luogo_nome})
 
     lat, lon   = 41.8928, 12.4964  # Saranno sovrascritti da GeoService
-    meteo_res  = "cielo sereno"
+    # state["meteo_prompt"] è già il risultato risolto da prompt_weather() nel
+    # nodo di analisi (node 1): ri-applicare prompt_weather() qui userebbe come
+    # `extracted` un valore già derivato, non l'estrazione grezza dell'LLM.
+    prescribed_weather = state.get("meteo_prompt")
+    meteo_res = ("Condizioni imposte dal prompt: " + prescribed_weather) if prescribed_weather else "meteo non disponibile"
     astro_res  = {}
 
     try:
@@ -398,11 +397,15 @@ async def fetch_contesto_fisico(
                   "uso le coordinate del dispositivo come riferimento geografico.")
 
         # 2. Esecuzione parallela meteo + astronomia
-        _emit(state, "fisico:meteo_avvio",
-              "🌤️  Chiedo al cielo com'è il tempo in questo momento…")
+        if not prescribed_weather:
+            _emit(state, "fisico:meteo_avvio", "🌤️  Recupero le condizioni meteo…")
+        else:
+            _emit(state, "fisico:meteo_prompt", "Uso le condizioni meteo indicate nella storia.")
 
         usa_astro = state.get("usa_astronomia", True)
-        tasks     = [weather.get_weather(lat, lon)]
+        async def supplied_weather():
+            return meteo_res
+        tasks = [supplied_weather() if prescribed_weather else weather.get_weather(lat, lon)]
 
         if usa_astro:
             _emit(state, "fisico:astro_avvio",
@@ -428,9 +431,10 @@ async def fetch_contesto_fisico(
                   "procedo con un cielo generico.")
         else:
             meteo_res = results[0]
-            _emit(state, "fisico:meteo_ok",
-                  f"🌤️  Meteo ottenuto: {meteo_res}.",
-                  {"meteo": meteo_res})
+            if not prescribed_weather:
+                _emit(state, "fisico:meteo_ok",
+                      f"🌤️  Meteo ottenuto: {meteo_res}.",
+                      {"meteo": meteo_res})
 
         # Astronomia
         if usa_astro and len(results) > 1:
@@ -460,6 +464,7 @@ async def fetch_contesto_fisico(
         "lat":              lat,
         "lon":              lon,
         "dati_meteo":       meteo_res,
+        "fonte_meteo": "prompt" if prescribed_weather else ("non_disponibile" if meteo_res == "meteo non disponibile" else "tool"),
         "dati_astronomici": astro_res,
     }
 
@@ -564,128 +569,9 @@ async def componi_prompt(state: BaldoState) -> dict:
     }
 
 
-# Sotto questa soglia di parole consecutive uguali, il confronto rischia
-# falsi positivi (formule ricorrenti per caso, non un ritornello voluto).
-# Abbassata da 6 a 4: i ritornelli migliori per 3 anni sono proprio i più
-# corti ("Piccola piccola, dov'è finita?", "Naso per terra, mondo
-# gigante!" — 4 e 5 parole), e con il confronto per n-grammi (non più per
-# frasi intere) il rischio di falso positivo a questa lunghezza resta
-# basso: entrambi i casi osservati erano ritornelli veri, mai rilevati
-# perché sotto la vecchia soglia di 6.
-_RITORNELLO_MIN_PAROLE = 4
-
-_PUNTEGGIATURA_BORDO_RE = re.compile(r"^[«»\"'“”,.:;!?]+|[«»\"'“”,.:;!?]+$")
-
-# Confine di CHIUSURA DI UNA BATTUTA VIRGOLETTATA (non punteggiatura forte
-# in generale: un ritornello narrato, non in discorso diretto, può
-# legittimamente attraversare un "!" o un "?" interni — es. "Drin drin!
-# Pronto? Una storia piccola piccola" è un unico ritornello valido, non va
-# troncato al primo "!"). Solo la chiusura di un dialogo (» " ”) segna un
-# confine affidabile: dopo una battuta chiusa, il testo che segue è
-# narrazione libera, non più parte del ritornello — osservato su un caso
-# reale dove "«Anch'io ho un'idea piccola!» e propose..." (ripetuto per
-# ogni personaggio con finale diverso dopo "propose") veniva incluso per
-# intero nel ritornello rilevato, perché le occorrenze coincidevano anche
-# lì per puro caso di template narrativo.
-_TERMINALE_RE = re.compile(r"[»”\"]$")
-
-
-def _parola_normalizzata(parola: str) -> str:
-    return _PUNTEGGIATURA_BORDO_RE.sub("", parola).lower()
-
-
 def _rileva_ritornello(testo: str) -> Optional[str]:
-    """
-    Cerca la sequenza di parole che si ripete più volte nel testo (almeno
-    _RITORNELLO_MIN_PAROLE parole, almeno 2 occorrenze) — più affidabile
-    che fidarsi del campo "ritornello" del frammento KB: quel testo può
-    contenere un nome proprio specifico della fiaba d'origine (es.
-    "Mangiafuoco") che il draft, lasciato libero di scrivere, sostituisce
-    già con i personaggi della propria trama. Imporre il testo del
-    frammento parola per parola a rifinisci reintroduceva quel nome
-    estraneo — qui si protegge invece quello che il draft ha davvero usato.
-
-    Confronto per n-grammi di parole, non per frasi intere delimitate da
-    ".!?": un ritornello ripetuto quasi alla lettera è sfuggito una volta
-    alla rilevazione a frasi per due motivi — una congiunzione di raccordo
-    in testa solo alla prima occorrenza ("E Marco strinse..." vs "Marco
-    strinse...") e un punto di domanda dentro un dialogo poco prima
-    ("qui!\" E Marco...") che spezzava la frase nel punto sbagliato. I
-    confini di frase in una prosa piena di dialoghi sono troppo fragili
-    per un regex su ".!?"; i confini di parola no.
-
-    Valuta TUTTI gli n-grammi ripetuti nel testo, non solo il primo che
-    compare (versione precedente): su una storia reale, il nome di un
-    personaggio ripetuto per riferirsi a lui ("il cavallo a dondolo",
-    2 occorrenze) compariva prima nel testo del vero ritornello voluto
-    dal draft ("Anch'io ho un'idea piccola!", 3 occorrenze identiche nei
-    momenti chiave) — restituire il primo match trovato "rubava" la
-    rilevazione al ritornello vero. Ora si raccolgono tutti i candidati e
-    si preferisce quello con più occorrenze (a parità, il più lungo): un
-    nome di personaggio ricorre quasi sempre meno volte di un ritornello
-    deliberato, che per istruzione va ripetuto 2-3 volte apposta.
-    """
-    parole = re.findall(r"\S+", testo or "")
-    n = _RITORNELLO_MIN_PAROLE
-    if len(parole) < n * 2:
-        return None
-
-    normalizzate = [_parola_normalizzata(p) for p in parole]
-
-    posizioni: dict = {}
-    for i in range(len(parole) - n + 1):
-        chiave = tuple(normalizzate[i:i + n])
-        if not all(chiave):  # n-gramma con solo punteggiatura in qualche slot
-            continue
-        posizioni.setdefault(chiave, []).append(i)
-
-    candidati = []  # (occorrenze, lunghezza_parole, testo)
-    for chiave, idxs in posizioni.items():
-        if len(idxs) < 2:
-            continue
-        # Estende la ripetizione oltre le n parole minime, usando le prime
-        # due occorrenze, finché le due sequenze continuano a coincidere.
-        j, i = idxs[0], idxs[1]
-        k = n
-        while (
-            i + k < len(parole) and j + k < i
-            and normalizzate[i + k] == normalizzate[j + k]
-        ):
-            k += 1
-
-        # Tronca al primo confine di frase/battuta trovato DENTRO la
-        # sequenza — anche se cade a metà della finestra minima di n
-        # parole. Senza questo, una finestra sfalsata di una parola che
-        # parte proprio dopo l'inizio di una battuta (es. "ho un'idea
-        # piccola!» e propose" invece di "Anch'io ho un'idea piccola!")
-        # può risultare più lunga e vincere il confronto, pur scavalcando
-        # la punteggiatura che chiude la battuta vera — osservato su una
-        # storia reale. Un ritornello è un'unità autonoma (una frase, una
-        # battuta), non deve scavalcarla né iniziare a metà.
-        confine = None
-        for m in range(k):
-            if _TERMINALE_RE.search(parole[i + m]):
-                confine = m
-                break
-        if confine is not None:
-            k = confine + 1
-        if k < n:
-            continue  # troppo corto dopo il taglio: non è un candidato valido
-
-        chiave_estesa = tuple(normalizzate[i:i + k])
-        occorrenze = sum(
-            1 for start in range(len(parole) - k + 1)
-            if tuple(normalizzate[start:start + k]) == chiave_estesa
-        )
-        testo_candidato = " ".join(parole[i:i + k]).strip("«»\"'“”,.:;!? ")
-        if testo_candidato:
-            candidati.append((occorrenze, k, testo_candidato))
-
-    if not candidati:
-        return None
-
-    candidati.sort(key=lambda c: (c[0], c[1]), reverse=True)
-    return candidati[0][2]
+    """Protect autonomous repetitions, not incidental matching n-grams."""
+    return detect_refrain(testo)
 
 
 # Reduplicazione ritmica ("piano piano", "forte forte", "bene bene"): la
@@ -740,50 +626,9 @@ def _limita_reduplicazioni(testo: str, ritornello: "str | None" = None, max_occo
     return _REDUPLICAZIONE_RE.sub(sostituisci, testo or "")
 
 
-# Frasi con "come" quasi sempre non comparative, da escludere dal conteggio
-# (interrogative/idiomatiche, non similitudini).
-_COME_NON_COMPARATIVO = (
-    "come mai", "come stai", "come sta", "come va", "come si chiama",
-    "come ti chiami", "come faccio", "come fai", "come si fa",
-)
-
-
 def _conta_similitudini_approssimate(testo: str, ritornello: "str | None" = None) -> int:
-    """
-    Stima approssimativa (non un'analisi semantica) di quante comparazioni
-    con "come" contiene il testo — serve solo a tracciare nel report se la
-    Regola 20 (massimo 2-3 similitudini per racconto) sta reggendo sui casi
-    reali, MAI a correggere il testo: "come" è troppo ambiguo in italiano
-    (comparativo, interrogativo, causale — "come mai", "come se", "come
-    stai") per un'edit automatica sicura, a differenza della reduplicazione
-    ("parola parola") che è un pattern inequivocabile.
-
-    Esclude l'ultimo paragrafo (la domanda finale) dal conteggio: osservato
-    ripetutamente, tre casi reali diversi, che la domanda finale usa spesso
-    "come" in senso interrogativo ("come avresti aiutato...", "come lo
-    chiameresti...") — falso positivo sistematico, non un paragone. Stesso
-    confine di paragrafo già usato da _sostituisci_ultimo_paragrafo.
-
-    Esclude anche il testo del ritornello, se presente: un ritornello può
-    contenere "come" per costruzione (es. "Quella luna come la chiamo", un
-    gioco di nomi) e si ripete 2-3 volte di proposito — senza questa
-    esclusione ogni ripetizione veniva contata come una similitudine in
-    più, gonfiando il numero e potendo far scattare inutilmente il rewrite
-    di verifica_coerenza_domanda anche quando le similitudini vere erano
-    sotto soglia (osservato: un ritornello con "come" ripetuto 3 volte +
-    1 similitudine vera = 4, sopra soglia, con lo stesso identico problema
-    già risolto per _limita_reduplicazioni ma mai esteso qui).
-    """
-    testo = testo or ""
-    paragrafi = testo.split("\n\n")
-    corpo = "\n\n".join(paragrafi[:-1]) if len(paragrafi) > 1 else testo
-    if ritornello:
-        corpo = corpo.replace(ritornello, "")
-    testo_normalizzato = corpo.lower()
-    totale = len(re.findall(r"\bcome\b", testo_normalizzato))
-    for idioma in _COME_NON_COMPARATIVO:
-        totale -= testo_normalizzato.count(idioma)
-    return max(totale, 0)
+    """Descriptive metric only: never triggers a rewrite."""
+    return count_similitudes(testo, ritornello)
 
 
 # ---------------------------------------------------------------------------
@@ -808,6 +653,7 @@ async def genera_draft(state: BaldoState, llm: LLMRouter) -> dict:
 
     return {
         "draft": draft,
+        "versioni_racconto": [snapshot("genera_draft", draft, [_uso_revisione(risultato, "genera_draft")])],
         "ritornello_atteso": _rileva_ritornello(draft),
         "llm_usage": [{
             "nodo": "genera_draft",
@@ -829,26 +675,58 @@ async def valuta_draft(state: BaldoState, llm: LLMRouter) -> dict:
           "🧐  Rileggo la bozza con occhio critico: "
           "controllo ritmo, coerenza e adeguatezza per i bambini…")
 
-    # TODO: logica reale di valutazione
-    _emit(state, "draft:valutazione_ok",
-          "✅  La bozza supera l'esame. Si può procedere alla rifinitura.")
+    risultato = await llm.chiedi(
+        system=(
+            "Valuta la plausibilità e la causalità del racconto. "
+            + REVIEW_CRITERIA +
+            "Non richiedere errori, ritornelli, saluti o domande se assenti. "
+            "Rispondi solo OK se regge, altrimenti indica brevemente il passaggio difettoso "
+            "e la minima modifica causale necessaria, senza riscrivere il racconto."
+        ), user=state["draft"], fase="valuta_draft",
+    )
+    esito = (risultato.testo or "").strip()
+    if not esito:
+        raise ValueError("Valutazione draft vuota")
+    valido = esito.upper().rstrip(".! ") == "OK"
+    _emit(state, "draft:valutazione_ok" if valido else "draft:da_correggere",
+          "La sequenza degli eventi è coerente." if valido else "Un passaggio della storia richiede una correzione.")
+    return {"valutazione_draft": "ok" if valido else esito,
+            "diagnosi_draft": [{
+                "valutazione": state.get("tentativi_correzione", 0) + 1,
+                "correzioni_precedenti": state.get("tentativi_correzione", 0),
+                "esito": "ok" if valido else "da_correggere",
+                "diagnosi": esito,
+            }],
+            "llm_usage": [_uso_revisione(risultato, "valuta_draft")]}
 
-    return {"valutazione_draft": "ok"}
+
+def _uso_revisione(risultato, nodo):
+    return {"nodo": nodo, "modello": risultato.modello,
+            "token_input": risultato.token_input, "token_output": risultato.token_output,
+            "durata_secondi": round(risultato.durata_secondi, 2)}
 
 
-# ---------------------------------------------------------------------------
-# NODE 9 — Correzione draft
-# ---------------------------------------------------------------------------
 async def correggi_draft(state: BaldoState, llm: LLMRouter) -> dict:
-    logger.info("[NODE] correggi_draft")
-    tentativo = state["tentativi_correzione"] + 1
-
-    _emit(state, "draft:correzione",
-          f"🔧  Correzione {tentativo}: lima gli spigoli del racconto, "
-          "sistemo i passaggi che non scorrevano bene.",
-          {"tentativo": tentativo})
-
-    return {"tentativi_correzione": tentativo}
+    tentativo = state.get("tentativi_correzione", 0) + 1
+    risultato = await llm.chiedi(
+        system=(
+            "Correggi solo i difetti concreti segnalati. Conserva voce, personaggi, "
+            "ambientazione e tutti i passaggi non coinvolti. Non aggiungere cornici "
+            "affettuose, ritornelli, domande o spiegazioni morali. Rispetta la richiesta "
+            "originale. Restituisci soltanto il racconto completo corretto."
+        ),
+        user=(f"Richiesta: {state['prompt_originale']}\nEtà: {state['eta_bambino']}\n"
+              f"Difetto: {state['valutazione_draft']}\n\nRacconto:\n{state['draft']}"),
+        fase="correggi_draft",
+    )
+    draft = (risultato.testo or "").strip()
+    if not draft:
+        raise ValueError("Correzione draft vuota")
+    return {"tentativi_correzione": tentativo, "draft": draft,
+            "versioni_racconto": [snapshot("correggi_draft", draft,
+                [_uso_revisione(risultato, "correggi_draft")], tentativo=tentativo)],
+            "ritornello_atteso": _rileva_ritornello(draft),
+            "llm_usage": [_uso_revisione(risultato, "correggi_draft")]}
 
 
 # ---------------------------------------------------------------------------
@@ -860,18 +738,12 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
     eta = state["eta_bambino"]
     _emit(state, "rifinitura:inizio",
           f"💎  Lucido le parole per un bambino di {eta} anni: "
-          "scelgo il vocabolario giusto, aggiungo musicalità alle frasi…",
+          "controllo chiarezza e lessico preservando la voce del racconto…",
           {"eta": eta})
 
     ritornello_atteso = state.get("ritornello_atteso")
     if llm.routing.get_provider("rifinisci") == "nessuno":
-        # Bypass deliberato: il draft diventa il racconto finale così com'è,
-        # senza la chiamata LLM di rifinitura (semplificazione lessicale,
-        # conversione emozioni dichiarate in reazioni fisiche, protezione
-        # della cornice di Baldo). Il rischio principale che rifinisci
-        # copriva — una domanda finale malformata — resta comunque
-        # presidiato da verifica_coerenza_domanda.check/.fix, un nodo
-        # indipendente da questo.
+        # Il draft passa ai controlli successivi senza una riscrittura editoriale.
         testo_base = state["draft"]
         uso_llm = []
     else:
@@ -889,7 +761,10 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
             "durata_secondi": round(risultato.durata_secondi, 2),
         }]
 
+    versions = [snapshot("rifinisci", testo_base, uso_llm, bypass=not uso_llm)]
     racconto = _limita_reduplicazioni(testo_base, ritornello=ritornello_atteso)
+    if racconto != testo_base:
+        versions.append(snapshot("limita_reduplicazioni", racconto))
 
     _emit(state, "rifinitura:fine",
           "🎉  La storia è pronta! Ogni parola è al suo posto.",
@@ -897,6 +772,7 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
 
     return {
         "racconto_finale": racconto,
+        "versioni_racconto": versions,
         "similitudini_stimate": _conta_similitudini_approssimate(racconto, ritornello=ritornello_atteso),
         "llm_usage": uso_llm,
     }
@@ -992,18 +868,7 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
     tende comunque a "migliorarlo" — riscriveva domande già valide,
     vanificando lo scopo di un controllo mirato.
 
-    Alla fine, un quarto controllo indipendente: la Regola 20 in composer.py
-    (massimo 2-3 similitudini con "come" per racconto) è un vincolo di
-    CONTEGGIO — la stessa categoria di istruzione che i modelli seguono meno
-    bene di un divieto puntuale, e infatti su 4 storie reali consecutive non
-    ha retto (4-8 similitudini invece di 2-3). A differenza della
-    reduplicazione, qui non esiste un fix deterministico sicuro ("come" è
-    troppo ambiguo in italiano per un regex che tagli senza rischiare di
-    rovinare frasi che non sono affatto similitudini) — quindi, solo quando
-    il conteggio approssimativo supera la soglia, un editor dedicato
-    riscrive l'intero racconto per diradarle, con verifiche di sicurezza
-    (lunghezza comparabile, ritornello intatto) prima di accettare il
-    risultato.
+    Le similitudini vengono contate solo come metrica descrittiva.
     """
     logger.info("[NODE] verifica_coerenza_domanda")
 
@@ -1064,10 +929,11 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
         "frase, tra virgolette). La domanda NON deve avere per forza una "
         "risposta univoca nel testo: può essere aperta o di opinione (es. "
         "\"Chi è il più forte, il leone o il topolino?\", \"Tu cosa avresti fatto?\"). "
+        "Se non c’è una domanda rivolta al lettore, rispondi SI: è facoltativa. "
         "Conta solo questo: la domanda parla di personaggi, oggetti o eventi "
         "che compaiono DAVVERO nella favola appena letta? Rispondi "
         "ESCLUSIVAMENTE con la parola SI se sì, oppure ESCLUSIVAMENTE con la "
-        "parola NO se la domanda manca o cita qualcosa (un personaggio, un "
+        "parola NO se la domanda presente cita qualcosa (un personaggio, un "
         "oggetto, una scena) che nella favola non compare affatto. "
         "Nessun'altra parola nella risposta."
     )
@@ -1163,63 +1029,12 @@ async def verifica_coerenza_domanda(state: BaldoState, llm: LLMRouter) -> dict:
             except Exception as e:
                 logger.warning(f"[verifica_coerenza_domanda] Riscrittura fallita, mantengo il racconto originale: {e}")
 
-    # --- Controllo similitudini (Regola 20), indipendente dalla domanda ---
+    # Il conteggio resta nel report; non giustifica una riscrittura del racconto.
     ritornello_atteso = state.get("ritornello_atteso")
-    similitudini = _conta_similitudini_approssimate(racconto, ritornello=ritornello_atteso)
-    SOGLIA_SIMILITUDINI = 3
-    bypass_similitudini = llm.routing.get_provider("verifica_coerenza_domanda.similitudini") == "nessuno"
-    if similitudini > SOGLIA_SIMILITUDINI and not bypass_similitudini:
-        vincolo_ritornello_sim = (
-            f"Il racconto usa questo ritornello, che deve restare IDENTICO, "
-            f"parola per parola, in ogni sua ripetizione: \"{ritornello_atteso}\". "
-            f"Non parafrasarlo, non correggerne lo stile, non rimuoverlo. "
-        ) if ritornello_atteso else ""
-        system_similitudini = (
-            "Sei un editor di favole per bambini in età prescolare. Il "
-            "racconto qui sotto usa troppe similitudini con \"come\" "
-            "(paragoni tipo \"grande come un pugno\", \"come se...\"). "
-            "Riscrivi il racconto intero riducendo le similitudini a un "
-            "massimo di 2-3 in tutto il testo — sostituisci le altre con "
-            "descrizioni dirette e concrete (es. \"le assicelle tremavano "
-            "al vento\" invece di \"tremavano come i denti di un vecchio "
-            "pettine\"). Non aggiungere né togliere eventi della trama, non "
-            "cambiare i personaggi, non toccare la cornice di apertura/"
-            "chiusura di Baldo né la domanda finale. "
-            f"{vincolo_ritornello_sim}"
-            "Rispondi ESCLUSIVAMENTE con il racconto riscritto per intero, "
-            "senza commenti né spiegazioni."
-        )
-        try:
-            risultato_sim = await llm.chiedi(system=system_similitudini, user=racconto, fase="verifica_coerenza_domanda.similitudini")
-            testo_corretto = (risultato_sim.testo or "").strip()
-            uso_llm.append({
-                "nodo": "verifica_coerenza_domanda.similitudini",
-                "modello": risultato_sim.modello,
-                "token_input": risultato_sim.token_input,
-                "token_output": risultato_sim.token_output,
-                "durata_secondi": round(risultato_sim.durata_secondi, 2),
-            })
-            # Rete di sicurezza: una riscrittura integrale è più rischiosa
-            # della sostituzione dell'ultimo paragrafo sopra — un testo
-            # troppo corto/lungo rispetto all'originale, o che ha perso il
-            # ritornello, è il segnale che qualcosa è andato storto: meglio
-            # tenere l'originale con troppe similitudini che un testo
-            # danneggiato.
-            lunghezza_ok = bool(testo_corretto) and 0.5 * len(racconto) <= len(testo_corretto) <= 1.6 * len(racconto)
-            ritornello_ok = (not ritornello_atteso) or (ritornello_atteso.lower() in testo_corretto.lower())
-            if lunghezza_ok and ritornello_ok:
-                racconto = _limita_reduplicazioni(testo_corretto, ritornello=ritornello_atteso)
-            else:
-                logger.warning(
-                    f"[verifica_coerenza_domanda] Riscrittura similitudini scartata "
-                    f"(lunghezza_ok={lunghezza_ok}, ritornello_ok={ritornello_ok}), "
-                    f"mantengo il racconto originale."
-                )
-        except Exception as e:
-            logger.warning(f"[verifica_coerenza_domanda] Riduzione similitudini fallita, mantengo il racconto originale: {e}")
 
     return {
         "racconto_finale": racconto,
+        "versioni_racconto": [snapshot("verifica_coerenza_domanda", racconto, uso_llm)],
         "similitudini_stimate": _conta_similitudini_approssimate(racconto, ritornello=ritornello_atteso),
         "llm_usage": uso_llm,
         "nome_presente_in_output": nome_presente,

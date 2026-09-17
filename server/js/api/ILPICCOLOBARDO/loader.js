@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { bearerToken, isAdminToken } from '../../services/admin-auth.js';
 
 // Il servizio FastAPI non è esposto pubblicamente: è raggiungibile solo
 // dalla rete Docker interna con l'hostname del servizio in docker-compose.yml.
@@ -6,8 +7,8 @@ const FASTAPI_BASE = process.env.FASTAPI_URL || 'http://fastapi:8000';
 
 async function callFastApi(path, options = {}) {
     const res = await fetch(`${FASTAPI_BASE}${path}`, {
-        headers: { 'Content-Type': 'application/json' },
         ...options,
+        headers: { 'Content-Type': 'application/json', ...options.headers, Authorization: `Bearer ${process.env.ADMIN_TOKEN || ''}` },
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -19,6 +20,16 @@ async function callFastApi(path, options = {}) {
 export default {
     async exe(jdata) {
         const response = jdata.response;
+        if (!isAdminToken(bearerToken(jdata.request))) {
+            response.writeHead(403, { 'Content-Type': 'application/json' });
+            response.end(JSON.stringify({ status: 'error', message: 'Accesso amministratore richiesto' }));
+            return;
+        }
+        if (jdata.request.method !== 'POST') {
+            response.writeHead(405, { Allow: 'POST' });
+            response.end();
+            return;
+        }
         const query = jdata.query || {};
         const action = query.action;
 

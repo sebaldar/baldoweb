@@ -484,18 +484,28 @@
 
     </div>
 
-    <script>
+    <script src="../safe-html.js"></script>
+<script src="access.js"></script>
+<script>
         let ws = null;
         let reconnectInterval = null;
         let selectedFragment = null;
         let selectedCharacter = null;
 
         // WebSocket Connection
-        function connect() {
+        async function connect() {
           
             updateStatus('connecting');
             
-            ws = new WebSocket('wss://www.ilpiccolobardo.it/ws');
+            try {
+                const session = await fetch('/api/session', { credentials: 'same-origin' });
+                if (!session.ok) throw new Error('Sessione non disponibile');
+                ws = new WebSocket(`wss://${location.host}/ws`);
+            } catch (error) {
+                updateStatus('disconnected');
+                console.error(error.message);
+                return;
+            }
             
             ws.onopen = () => {
                 updateStatus('connected');
@@ -528,10 +538,13 @@
             };
         }
 
-        function sendMessage(action, data = {}) {
+        async function sendMessage(action, data = {}) {
+            const adminToken = await AdminAccess.getToken();
+            if (!adminToken) return;
             if (ws && ws.readyState === WebSocket.OPEN) {
                 const message = {
                     pagina: "IL_PICCOLO_BARDO",
+                    admin_token: adminToken,
                     action: action,
                     data: data
                 };
@@ -543,6 +556,7 @@
         }
 
         function handleResponse(response) {
+            if (response.code === 'ADMIN_REQUIRED') AdminAccess.reset();
             console.log('← Ricevuto:', response);
             
             if (response.action === 'list_fragments') {
@@ -619,14 +633,14 @@
                 item.className = 'list-item';
                 item.innerHTML = `
                     <div class="list-item-header">
-                        <div class="list-item-title">${fragment.id}</div>
+                        <div class="list-item-title">${escapeHTML(fragment.id)}</div>
                     </div>
                     <div class="list-item-meta">
-                        ${fragment.setting ? `<span class="badge badge-type">📍 ${fragment.setting}</span>` : ''}
-                        ${fragment.tema ? `<span class="badge badge-age">${fragment.tema}</span>` : ''}
-                        ${fragment.fascia_eta ? `<span class="badge badge-age">Età: ${fragment.fascia_eta}</span>` : ''}
+                        ${fragment.setting ? `<span class="badge badge-type">📍 ${escapeHTML(fragment.setting)}</span>` : ''}
+                        ${fragment.tema ? `<span class="badge badge-age">${escapeHTML(fragment.tema)}</span>` : ''}
+                        ${fragment.fascia_eta ? `<span class="badge badge-age">Età: ${escapeHTML(fragment.fascia_eta)}</span>` : ''}
                     </div>
-                    <p style="margin-top: 8px; font-size: 0.9em;">${(fragment.text || '').substring(0, 100)}...</p>
+                    <p style="margin-top: 8px; font-size: 0.9em;">${escapeHTML((fragment.text || '').substring(0, 100))}...</p>
                 `;
                 item.onclick = () => selectFragment(fragment);
                 container.appendChild(item);
@@ -647,9 +661,9 @@
                 item.className = 'list-item';
                 item.innerHTML = `
                     <div class="list-item-header">
-                        <div class="list-item-title">${character.name}</div>
+                        <div class="list-item-title">${escapeHTML(character.name)}</div>
                     </div>
-                    <p style="margin-top: 8px; font-size: 0.9em;">${character.description || ''}</p>
+                    <p style="margin-top: 8px; font-size: 0.9em;">${escapeHTML(character.description || '')}</p>
                 `;
                 item.onclick = () => selectCharacter(character);
                 container.appendChild(item);
@@ -680,7 +694,7 @@
             const nomeProvider = { anthropic: 'Claude', openai: 'OpenAI', deepseek: 'DeepSeek' };
             const legenda = Object.entries(providerInfo).map(([id, info]) => {
                 const bollino = info.disponibile ? '🟢' : '⚪';
-                return `<span class="badge badge-type" style="margin-right:8px;">${bollino} ${nomeProvider[id] || id} (${info.modello})</span>`;
+                return `<span class="badge badge-type" style="margin-right:8px;">${bollino} ${escapeHTML(nomeProvider[id] || id)} (${escapeHTML(info.modello)})</span>`;
             }).join('');
 
             const righe = Object.keys(fasi).map(fase => {
@@ -688,7 +702,7 @@
                 let opzioni = Object.keys(providerInfo).map(id => {
                     const sel = id === providerAttuale ? 'selected' : '';
                     const disp = providerInfo[id].disponibile ? '' : ' (manca API key)';
-                    return `<option value="${id}" ${sel}>${nomeProvider[id] || id}${disp}</option>`;
+                    return `<option value="${escapeHTML(id)}" ${sel}>${escapeHTML(nomeProvider[id] || id)}${disp}</option>`;
                 }).join('');
                 // "Nessuno" salta del tutto la chiamata LLM di questa fase — solo
                 // dove un salto ha un sostituto sicuro (vedi FASI_CON_BYPASS lato
@@ -700,17 +714,20 @@
                 return `
                     <div class="list-item" style="cursor:default;">
                         <div class="list-item-header">
-                            <div class="list-item-title">${fase}</div>
-                            <select onchange="setModelRouting('${fase}', this.value)" style="width:auto; min-width:160px;">
+                            <div class="list-item-title">${escapeHTML(fase)}</div>
+                            <select data-phase="${escapeHTML(fase)}" style="width:auto; min-width:160px;">
                                 ${opzioni}
                             </select>
                         </div>
-                        <p style="margin-top:6px; font-size:0.85em; color:#666;">${MODELLI_DESCRIZIONE_FASE[fase] || ''}</p>
+                        <p style="margin-top:6px; font-size:0.85em; color:#666;">${escapeHTML(MODELLI_DESCRIZIONE_FASE[fase] || '')}</p>
                     </div>
                 `;
             }).join('');
 
             container.innerHTML = `<div style="margin-bottom:15px;">${legenda}</div>${righe}`;
+            container.querySelectorAll('select[data-phase]').forEach(select => {
+                select.onchange = () => setModelRouting(select.dataset.phase, select.value);
+            });
         }
 
         // Selection Functions

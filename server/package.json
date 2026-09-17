@@ -1,11 +1,11 @@
 {
-  "name": "il piccolo bardo",
+  "name": "il-piccolo-bardo",
   "type": "module",
   "version": "1.0.0",
   "description": "Narratore di racconti per bambini",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/*.test.js"
   },
   "keywords": [],
   "author": "",

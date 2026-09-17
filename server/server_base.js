@@ -1,6 +1,7 @@
 // server_base.js (o server_base.mjs)
 
 import 'dotenv/config';
+import { bearerToken, isAdminToken } from './js/services/admin-auth.js';
 import { mkdir, readFile, unlink, access, writeFile, appendFile } from 'fs/promises';
 
 import https from 'https';
@@ -356,10 +357,13 @@ export default class Server { // Export della classe (default)
 		const parsedUrl = new URL(request.url, `${protocol}://${request.headers.host}`);		
 		// Forza il percorso assoluto corretto per Docker
 		// process.cwd() è /app/server, quindi cerchiamo /app/server/config.json
-		let FILE_CONFIG = parsedUrl.searchParams.get('config_file') || path.resolve(process.cwd(), 'config.json');
+		const FILE_CONFIG = process.env.SERVER_CONFIG_FILE || path.resolve(process.cwd(), 'config.json');
 
 		try {
-			const data_config = await tools.getContent(FILE_CONFIG);
+			const data_config = await tools.getContent(FILE_CONFIG).catch(error => {
+                if (error.code === 'ENOENT' && !process.env.SERVER_CONFIG_FILE) return '{}';
+                throw error;
+            });
 			const impostazioni = JSON.parse(data_config);
 			const queryParams = Object.fromEntries(parsedUrl.searchParams.entries());
 
@@ -393,7 +397,7 @@ export default class Server { // Export della classe (default)
 				response.setHeader('Access-Control-Allow-Origin', origin);
 				response.setHeader('Access-Control-Allow-Credentials', 'true');
 				response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-				response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cookie');
+				response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 				response.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
 			}
 			
@@ -465,15 +469,26 @@ export default class Server { // Export della classe (default)
 			// 4. GESTISCI RICHIESTA
 			switch (request.method) {
 case "OPTIONS": {
+    response.writeHead(204);
+    response.end();
+    return;
 }
 break;
 case "POST": {
+    if (jdata.doc === 'ILPICCOLOBARDO' && !isAdminToken(bearerToken(request))) {
+        response.writeHead(403, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: 'Accesso amministratore richiesto' }));
+        return;
+    }
     let tempFilePaths = []; // Usiamo un array per tenere traccia di tutti i file da pulire
     try {
         const form = new IncomingForm({
             uploadDir: '/app/data/uploads',
             keepExtensions: true,
-            multiples: true // IMPORTANTE: Abilitato per caricamenti multipli
+            multiples: true,
+            maxFileSize: 10 * 1024 * 1024,
+            maxTotalFileSize: 20 * 1024 * 1024,
+            maxFiles: 10
         });
 
         const [fields, files] = await form.parse(request);
@@ -528,7 +543,7 @@ case "POST": {
 
         if (!response.headersSent) {
             response.writeHead(200, { 'Content-Type': 'application/json' });
-            response.end(JSON.stringify({ status: "success", filesProcessed: jdata.files.length }));
+            response.end(JSON.stringify({ status: "success", filesProcessed: jdata.query.files.length }));
         }
 
     } catch (error) {
@@ -688,7 +703,7 @@ case "POST": {
 			await this.ensureUserFileExists(session_dir);
 			
 			// Registra il client nella mappa globale
-			this.CLIENTS[session_id] = ws;
+			this.CLIENTS[sec_websocket_key] = ws;
 			
 			tools.setLog(`🔌 WSS: Connesso da ${client_ip}. Sessione: ${session_id}. Totale clients: ${Object.keys(this.CLIENTS).length}`);
 			
@@ -760,16 +775,16 @@ case "POST": {
     async handleWsMessage(ws, data, isBinary, jdata) {
         try {
             const message = isBinary ? data : data.toString();
-            
+            let parsed;
             try {
-                const parsed = JSON.parse(message);
-                jdata.message = parsed;
-                await this.wss_command(this, ws, jdata);
+                parsed = JSON.parse(message);
             } catch {
                 // Non è JSON, gestisci come testo
-                jdata.message = { type: 'text', data: message };
-                await this.wss_command(this, ws, jdata);
+                parsed = { type: 'text', data: message };
             }
+            // Each in-flight command owns its context. Handler failures must not
+            // replay the same command through the text fallback.
+            await this.wss_command(this, ws, { ...jdata, message: parsed });
         } catch (error) {
           console.error('Errore handleWsMessage:\n', error.stack);
         }
@@ -783,7 +798,7 @@ case "POST": {
         
 
     if (session_id && this.CLIENTS[sec_websocket_key]) {
-        delete this.CLIENTS[session_id];
+        delete this.CLIENTS[sec_websocket_key];
         tools.setLog(`🔌 WSS: Disconnesso session ${session_id}. Clients rimanenti: ${Object.keys(this.CLIENTS).length}`);
     }
         

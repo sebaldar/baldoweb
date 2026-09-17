@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { canRunAction } from '../../services/admin-auth.js';
 import fs from 'fs';
 import neo4j from 'neo4j-driver';
 import PiccoloBardoManager from './PiccoloBardoManager.js';
@@ -9,8 +10,8 @@ const FASTAPI_BASE = process.env.FASTAPI_URL || 'http://fastapi:8000';
 
 async function callFastApi(path, options = {}) {
     const res = await fetch(`${FASTAPI_BASE}${path}`, {
-        headers: { 'Content-Type': 'application/json' },
         ...options,
+        headers: { 'Content-Type': 'application/json', ...options.headers, Authorization: `Bearer ${process.env.ADMIN_TOKEN || ''}` },
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -207,6 +208,11 @@ async function manage_node(server, ws, message, manager) {
 async function exe(server, ws, message) {
     try {
         const { action } = message;
+        if (!canRunAction(action, message.admin_token)) {
+            const denied = { action: 'error', code: 'ADMIN_REQUIRED', message: 'Accesso amministratore richiesto' };
+            if (ws?.readyState === ws.OPEN) ws.send(JSON.stringify(denied));
+            return denied;
+        }
         let response = null; // Inizializziamo response
 
         const NEO4J_USER = process.env.NEO4J_USER || 'neo4j';

@@ -790,7 +790,9 @@
         </div>
     </div>
 
-    <script>
+    <script src="../safe-html.js"></script>
+<script src="access.js"></script>
+<script>
         let ws = null;
         let reconnectInterval = null;
         let availableStories = [];
@@ -801,11 +803,19 @@
         let selectedCharacters = [];
         let selectedSettings = [];
 
-        function connect() {
+        async function connect() {
             updateStatus('connecting');
             addLog('Connessione a wss://www.ilpiccolobardo.it...', 'info');
             
-            ws = new WebSocket('wss://www.ilpiccolobardo.it/ws');
+            try {
+                const session = await fetch('/api/session', { credentials: 'same-origin' });
+                if (!session.ok) throw new Error('Sessione non disponibile');
+                ws = new WebSocket(`wss://${location.host}/ws`);
+            } catch (error) {
+                updateStatus('disconnected');
+                console.error(error.message);
+                return;
+            }
             
             ws.onopen = () => {
                 updateStatus('connected');
@@ -842,10 +852,13 @@
             };
         }
 
-        function sendMessage(action, data = {}) {
+        async function sendMessage(action, data = {}) {
+            const adminToken = await AdminAccess.getToken();
+            if (!adminToken) return;
             if (ws && ws.readyState === WebSocket.OPEN) {
                 const message = {
                     pagina: "IL_PICCOLO_BARDO",
+                    admin_token: adminToken,
                     action: action,
                     data: data
                 };
@@ -857,6 +870,7 @@
         }
 
 function handleResponse(response) {
+            if (response.code === 'ADMIN_REQUIRED') AdminAccess.reset();
     addLog(`← ${response.action || 'risposta'}`, 'success');
     
     if (response.action === 'stats') {
@@ -886,10 +900,10 @@ function handleResponse(response) {
         container.innerHTML = `
           <h3 style="color:#667eea; text-align:center; margin-bottom:20px;">📖 La tua favola personalizzata</h3>
           <div style="background:white; padding:30px; border-radius:15px; line-height:1.8; font-size:1.1em; box-shadow:0 5px 20px rgba(0,0,0,0.1);">
-            ${story.replace(/\n/g, '<br><br>')}
+            ${escapeHTML(story).replace(/\n/g, '<br><br>')}
           </div>
           <p style="margin-top:25px; text-align:center; color:#666; font-style:italic;">
-            ✨ Ispirata a ${inspirationCount} frammenti del repertorio del Piccolo Bardo
+            ✨ Ispirata a ${escapeHTML(inspirationCount)} frammenti del repertorio del Piccolo Bardo
           </p>
         `;
 
@@ -967,10 +981,10 @@ function switchMainTab(tabName, element) {
         function displayStats(stats) {
             const display = document.getElementById('statsDisplay');
             display.innerHTML = `
-                <p><strong>Storie:</strong> ${stats.stories || 0}</p>
-                <p><strong>Frammenti:</strong> ${stats.fragments || 0}</p>
-                <p><strong>Personaggi:</strong> ${stats.characters || 0}</p>
-                <p><strong>Ambientazioni:</strong> ${stats.settings || 0}</p>
+                <p><strong>Storie:</strong> ${escapeHTML(stats.stories || 0)}</p>
+                <p><strong>Frammenti:</strong> ${escapeHTML(stats.fragments || 0)}</p>
+                <p><strong>Personaggi:</strong> ${escapeHTML(stats.characters || 0)}</p>
+                <p><strong>Ambientazioni:</strong> ${escapeHTML(stats.settings || 0)}</p>
             `;
         }
 
@@ -1080,24 +1094,24 @@ function switchMainTab(tabName, element) {
                 item.className = 'multi-select-item';
                 item.innerHTML = `
                     <div class="fragment-item-header">
-                        <input type="checkbox" id="frag_${fragment.id}" onchange="toggleFragment('${fragment.id}')" style="margin-top: 5px;">
+                        <input type="checkbox" id="frag_${escapeHTML(fragment.id)}" data-toggle="toggleFragment" data-id="${escapeHTML(fragment.id)}" style="margin-top: 5px;">
                         <div class="fragment-item-content">
-                            <label for="frag_${fragment.id}" style="cursor: pointer; margin: 0;">
-                                <strong>${fragment.id}</strong>
-                                <span class="badge badge-complexity">${fragment.complexity}</span><br>
-                                <span style="font-size: 0.9em; color: #666;">${fragment.text.substring(0, 80)}...</span>
+                            <label for="frag_${escapeHTML(fragment.id)}" style="cursor: pointer; margin: 0;">
+                                <strong>${escapeHTML(fragment.id)}</strong>
+                                <span class="badge badge-complexity">${escapeHTML(fragment.complexity)}</span><br>
+                                <span style="font-size: 0.9em; color: #666;">${escapeHTML(fragment.text.substring(0, 80))}...</span>
                             </label>
                         </div>
                         <div class="fragment-controls">
                             <div>
                                 <small style="display: block; color: #666; margin-bottom: 3px;">Ordine:</small>
-                                <input type="number" class="order-input" id="order_${fragment.id}" placeholder="#" min="0" value="${index}" title="Ordine nel racconto">
+                                <input type="number" class="order-input" id="order_${escapeHTML(fragment.id)}" placeholder="#" min="0" value="${escapeHTML(index)}" title="Ordine nel racconto">
                             </div>
                         </div>
                     </div>
-                    <div class="fragment-settings-row" id="settings_row_${fragment.id}" style="display: none;">
+                    <div class="fragment-settings-row" id="settings_row_${escapeHTML(fragment.id)}" style="display: none;">
                         <label class="fragment-settings-label">📍 Dove avviene questa scena?</label>
-                        <select class="fragment-setting-select" id="setting_${fragment.id}" onchange="updateBuilderPreview()">
+                        <select class="fragment-setting-select" id="setting_${escapeHTML(fragment.id)}" onchange="updateBuilderPreview()">
                             <option value="">-- Nessuna ambientazione specifica --</option>
                         </select>
                     </div>
@@ -1121,12 +1135,12 @@ function switchMainTab(tabName, element) {
                 const item = document.createElement('div');
                 item.className = 'multi-select-item';
                 item.innerHTML = `
-                    <input type="checkbox" id="char_${char.id}" onchange="toggleCharacter('${char.id}')">
-                    <label for="char_${char.id}" style="flex: 1; cursor: pointer; margin: 0;">
-                        <strong>${char.name}</strong> (${char.id})<br>
-                        <span style="font-size: 0.9em;">${char.description || ''}</span>
+                    <input type="checkbox" id="char_${escapeHTML(char.id)}" data-toggle="toggleCharacter" data-id="${escapeHTML(char.id)}">
+                    <label for="char_${escapeHTML(char.id)}" style="flex: 1; cursor: pointer; margin: 0;">
+                        <strong>${escapeHTML(char.name)}</strong> (${escapeHTML(char.id)})<br>
+                        <span style="font-size: 0.9em;">${escapeHTML(char.description || '')}</span>
                     </label>
-                    <input type="text" style="width: 120px;" id="role_${char.id}" placeholder="Ruolo" value="protagonista">
+                    <input type="text" style="width: 120px;" id="role_${escapeHTML(char.id)}" placeholder="Ruolo" value="protagonista">
                 `;
                 container.appendChild(item);
             });
@@ -1144,12 +1158,12 @@ function switchMainTab(tabName, element) {
                 const item = document.createElement('div');
                 item.className = 'multi-select-item';
                 item.innerHTML = `
-                    <input type="checkbox" id="set_${setting.id}" onchange="toggleSetting('${setting.id}')">
-                    <label for="set_${setting.id}" style="flex: 1; cursor: pointer; margin: 0;">
-                        <strong>${setting.name}</strong> (${setting.type})<br>
-                        <span style="font-size: 0.9em;">${setting.description || ''}</span>
+                    <input type="checkbox" id="set_${escapeHTML(setting.id)}" data-toggle="toggleSetting" data-id="${escapeHTML(setting.id)}">
+                    <label for="set_${escapeHTML(setting.id)}" style="flex: 1; cursor: pointer; margin: 0;">
+                        <strong>${escapeHTML(setting.name)}</strong> (${escapeHTML(setting.type)})<br>
+                        <span style="font-size: 0.9em;">${escapeHTML(setting.description || '')}</span>
                     </label>
-                    <input type="number" class="order-input" id="order_set_${setting.id}" placeholder="Ordine" min="0" value="${index}">
+                    <input type="number" class="order-input" id="order_set_${escapeHTML(setting.id)}" placeholder="Ordine" min="0" value="${escapeHTML(index)}">
                 `;
                 container.appendChild(item);
             });
@@ -1257,8 +1271,8 @@ function switchMainTab(tabName, element) {
             if (story) {
                 html += `
                     <div class="preview-section">
-                        <strong>📖 Storia:</strong> ${story.title}
-                        <span class="badge badge-age">Età: ${story.ageMin}-${story.ageMax}</span>
+                        <strong>📖 Storia:</strong> ${escapeHTML(story.title)}
+                        <span class="badge badge-age">Età: ${escapeHTML(story.ageMin)}-${escapeHTML(story.ageMax)}</span>
                     </div>
                 `;
             }
@@ -1266,8 +1280,8 @@ function switchMainTab(tabName, element) {
             if (fragments.length > 0) {
                 html += '<div class="preview-section"><strong>📄 Sequenza Frammenti:</strong><ul>';
                 fragments.forEach(f => {
-                    const settingInfo = f.setting ? ` <em style="color: #667eea;">[📍 ${f.setting.name}]</em>` : '';
-                    html += `<li><strong>[${f.order}]</strong> ${f.text.substring(0, 50)}...${settingInfo}</li>`;
+                    const settingInfo = f.setting ? ` <em style="color: #667eea;">[📍 ${escapeHTML(f.setting.name)}]</em>` : '';
+                    html += `<li><strong>[${escapeHTML(f.order)}]</strong> ${escapeHTML(f.text.substring(0, 50))}...${settingInfo}</li>`;
                 });
                 html += '</ul></div>';
             }
@@ -1276,7 +1290,7 @@ function switchMainTab(tabName, element) {
                 html += '<div class="preview-section"><strong>👤 Personaggi:</strong><ul>';
                 characters.forEach(c => {
                     const role = document.getElementById(`role_${c.id}`)?.value || 'personaggio';
-                    html += `<li>${c.name} <span class="badge badge-role">${role}</span></li>`;
+                    html += `<li>${escapeHTML(c.name)} <span class="badge badge-role">${escapeHTML(role)}</span></li>`;
                 });
                 html += '</ul></div>';
             }
@@ -1285,7 +1299,7 @@ function switchMainTab(tabName, element) {
                 html += '<div class="preview-section"><strong>🏞️ Ambientazioni della Storia:</strong><ul>';
                 settings.forEach(s => {
                     const order = document.getElementById(`order_set_${s.id}`)?.value || 0;
-                    html += `<li>[${order}] ${s.name} <span style="color: #999;">(${s.type})</span></li>`;
+                    html += `<li>[${escapeHTML(order)}] ${escapeHTML(s.name)} <span style="color: #999;">(${escapeHTML(s.type)})</span></li>`;
                 });
                 html += '</ul></div>';
             }
@@ -1384,22 +1398,34 @@ function switchMainTab(tabName, element) {
                 const card = document.createElement('div');
                 card.className = 'story-card';
                 card.innerHTML = `
-                    <div class="story-card-header" onclick="toggleStoryDetails('${story.id}')">
+                    <div class="story-card-header" data-toggle="toggleStoryDetails" data-id="${escapeHTML(story.id)}">
                         <div>
-                            <div class="story-card-title">${story.title}</div>
-                            <span class="badge badge-age">Età: ${story.ageMin}-${story.ageMax}</span>
+                            <div class="story-card-title">${escapeHTML(story.title)}</div>
+                            <span class="badge badge-age">Età: ${escapeHTML(story.ageMin)}-${escapeHTML(story.ageMax)}</span>
                         </div>
                         <span style="font-size: 1.5em;">▼</span>
                     </div>
-                    <div class="story-card-details" id="details_${story.id}">
-                        <p style="color: #666; margin-bottom: 15px;">${story.description || 'Nessuna descrizione'}</p>
-                        <button class="btn-info btn-small" onclick="loadStoryDetails('${story.id}')">Carica Dettagli Completi</button>
-                        <div id="full_details_${story.id}"></div>
+                    <div class="story-card-details" id="details_${escapeHTML(story.id)}">
+                        <p style="color: #666; margin-bottom: 15px;">${escapeHTML(story.description || 'Nessuna descrizione')}</p>
+                        <button class="btn-info btn-small" data-toggle="loadStoryDetails" data-id="${escapeHTML(story.id)}">Carica Dettagli Completi</button>
+                        <div id="full_details_${escapeHTML(story.id)}"></div>
                     </div>
                 `;
                 container.appendChild(card);
             });
         }
+
+        document.addEventListener('click', event => {
+            const target = event.target.closest('[data-toggle]');
+            if (!target || target.tagName === 'INPUT') return;
+            const handlers = { toggleStoryDetails, loadStoryDetails };
+            handlers[target.dataset.toggle]?.(target.dataset.id);
+        });
+        document.addEventListener('change', event => {
+            const target = event.target;
+            const handlers = { toggleFragment, toggleCharacter, toggleSetting };
+            handlers[target.dataset.toggle]?.(target.dataset.id);
+        });
 
         function toggleStoryDetails(storyId) {
             const details = document.getElementById(`details_${storyId}`);
@@ -1431,8 +1457,8 @@ function displayStoryDetails(storyData) {
   let html = '';
 
   // Titolo e descrizione storia
-  html += `<h3 style="color:#667eea; margin-bottom:15px;">📖 ${storyData.story.title}</h3>`;
-  html += `<p style="margin-bottom:20px; color:#666;">${storyData.story.description || 'Nessuna descrizione disponibile'}</p>`;
+  html += `<h3 style="color:#667eea; margin-bottom:15px;">📖 ${escapeHTML(storyData.story.title)}</h3>`;
+  html += `<p style="margin-bottom:20px; color:#666;">${escapeHTML(storyData.story.description || 'Nessuna descrizione disponibile')}</p>`;
 
   // Frammenti
   if (storyData.fragments && storyData.fragments.length > 0) {
@@ -1440,22 +1466,22 @@ function displayStoryDetails(storyData) {
     storyData.fragments.forEach((f, index) => {
       html += `
         <div class="detail-item" style="margin-bottom:15px;">
-          <strong style="color:#667eea;">${index + 1}. ${f.id}</strong>
-          <span class="badge badge-age">Età: ${f.ageMin}-${f.ageMax}</span>
-          <span class="badge badge-complexity">${f.complexity || 'media'}</span>
-          <span class="badge" style="background:#e8f5e8; color:#2e7d32;">${f.tone || 'neutro'}</span>
+          <strong style="color:#667eea;">${escapeHTML(index + 1)}. ${escapeHTML(f.id)}</strong>
+          <span class="badge badge-age">Età: ${escapeHTML(f.ageMin)}-${escapeHTML(f.ageMax)}</span>
+          <span class="badge badge-complexity">${escapeHTML(f.complexity || 'media')}</span>
+          <span class="badge" style="background:#e8f5e8; color:#2e7d32;">${escapeHTML(f.tone || 'neutro')}</span>
           
           <p style="margin:15px 0; padding:15px; background:#f8f9fa; border-left:5px solid #667eea; border-radius:8px; font-style:italic; line-height:1.8; font-size:1.05em;">
-            "${f.text || '(testo mancante)'}"
+            "${escapeHTML(f.text || '(testo mancante)')}"
           </p>
           
           ${f.emotions && f.emotions.length > 0 ? 
-            `<div style="margin:8px 0;"><strong>💫 Emozioni:</strong> ${f.emotions.join(', ')}</div>` : ''}
+            `<div style="margin:8px 0;"><strong>💫 Emozioni:</strong> ${escapeHTML(f.emotions.join(', '))}</div>` : ''}
           
           ${f.themes && f.themes.length > 0 ? 
-            `<div style="margin:8px 0;"><strong>💡 Temi:</strong> ${f.themes.join(', ')}</div>` : ''}
+            `<div style="margin:8px 0;"><strong>💡 Temi:</strong> ${escapeHTML(f.themes.join(', '))}</div>` : ''}
           
-          <small style="color:#999;">Ordine nella storia: ${f.order}</small>
+          <small style="color:#999;">Ordine nella storia: ${escapeHTML(f.order)}</small>
         </div>
       `;
     });
@@ -1470,11 +1496,11 @@ function displayStoryDetails(storyData) {
     storyData.characters.forEach(c => {
       html += `
         <div class="detail-item" style="margin-bottom:12px;">
-          <strong style="color:#667eea;">${c.name || c.id}</strong>
-          <span class="badge badge-role">${c.role || 'secondario'}</span><br>
-          <em style="color:#555;">${c.description || 'Nessuna descrizione'}</em>
+          <strong style="color:#667eea;">${escapeHTML(c.name || c.id)}</strong>
+          <span class="badge badge-role">${escapeHTML(c.role || 'secondario')}</span><br>
+          <em style="color:#555;">${escapeHTML(c.description || 'Nessuna descrizione')}</em>
           ${c.traits && c.traits.length > 0 ? 
-            `<br><small><strong>Tratti:</strong> ${c.traits.join(', ')}</small>` : ''}
+            `<br><small><strong>Tratti:</strong> ${escapeHTML(c.traits.join(', '))}</small>` : ''}
         </div>
       `;
     });
@@ -1487,9 +1513,9 @@ function displayStoryDetails(storyData) {
     storyData.settings.forEach(s => {
       html += `
         <div class="detail-item" style="margin-bottom:12px;">
-          <strong style="color:#667eea;">${s.name}</strong> 
-          <em style="color:#777;">(${s.type || 'non specificato'})</em><br>
-          <span style="color:#555;">${s.description || 'Nessuna descrizione'}</span>
+          <strong style="color:#667eea;">${escapeHTML(s.name)}</strong>
+          <em style="color:#777;">(${escapeHTML(s.type || 'non specificato')})</em><br>
+          <span style="color:#555;">${escapeHTML(s.description || 'Nessuna descrizione')}</span>
         </div>
       `;
     });

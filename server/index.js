@@ -10,14 +10,12 @@ import os from 'os';
 import Server from './server_base.js'; 
 import wss_command from './js/wss_command.js'; 
 import http_command from './js/http_command.js'; 
-import { createRequire } from 'module';
+import { loadSolarModule } from './js/services/native-loader.js';
 
-const require = createRequire(import.meta.url);
-const SOLAR_PATH = '/app/server/native/build/Release/solar.node';
 
 let solar;
 try {
-    solar = require(SOLAR_PATH);
+    solar = loadSolarModule();
     console.log("✅ Modulo C++ Solar caricato correttamente");
 } catch (err) {
     console.error("❌ Errore critico nel caricamento del modulo Solar:", err.message);
@@ -34,8 +32,8 @@ class the_server extends Server {
         super.http_command( jdata);
     }
      
-    wss_command(server, ws, jdata) {
-        wss_command.exe(server, ws, jdata);
+    async wss_command(server, ws, jdata) {
+        await wss_command.exe(server, ws, jdata);
         super.wss_command(server, ws, jdata);
     }
      
@@ -75,7 +73,7 @@ class the_server extends Server {
 		}
         
         const sec_websocket_key = request.headers['sec-websocket-key'];
-        server.CLIENTS[sec_websocket_key] = ws.clientData;
+        // The base class tracks each socket by its unique handshake key.
           
         const refresh = 500;
         ws.clientData.intervalId = setInterval(() => {

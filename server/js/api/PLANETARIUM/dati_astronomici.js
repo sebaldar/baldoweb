@@ -1,14 +1,13 @@
 import 'dotenv/config';
-import { createRequire } from 'module';
+import { skyDirection } from '../../services/sky-directions.js';
+import { loadSolarModule } from '../../services/native-loader.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const require = createRequire(import.meta.url);
-const SOLAR_PATH = '/app/server/native/build/Release/solar.node';
 
 let solar;
 try {
-    solar = require(SOLAR_PATH);
+    solar = loadSolarModule();
     console.log("✅ Modulo C++ Solar caricato correttamente");
 } catch (err) {
     console.error("❌ Errore critico modulo Solar:", err.message);
@@ -133,6 +132,7 @@ export default {
                     nome: b.name.charAt(0).toUpperCase() + b.name.slice(1),
                     posizione_testuale: posizione,
                     altezza_deg: Math.round(alt),
+                    ...skyDirection(b.azimuth_deg),
                     costellazione: b.constellation,
                     ...(fase ? { fase } : {}),
                     ...(illuminazione !== null ? { illuminazione_percento: illuminazione } : {}),

@@ -1,15 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 
-import { createRequire } from 'module';
+import { loadSolarModule } from './services/native-loader.js';
 
-const require = createRequire(import.meta.url);
-const SOLAR_PATH = '/app/server/native/build/Release/solar.node';
 
 
 let solar;
 try {
-    solar = require(SOLAR_PATH);
+    solar = loadSolarModule();
     console.log("✅ Modulo C++ Solar caricato correttamente");
 } catch (err) {
     console.error("❌ Errore critico modulo Solar:", err.message);

@@ -1,5 +1,5 @@
 # --- STAGE 1: BUILDER ---
-FROM node:18-bookworm AS builder
+FROM node:24-bookworm AS builder
 
 # Installazione dipendenze di sistema
 RUN apt-get update && apt-get install -y \
@@ -43,8 +43,8 @@ COPY server/package*.json ./server/
 COPY server/native ./server/native
 
 # B. Esegui le compilazioni pesanti
-RUN cd server/native && npm install -g node-gyp && node-gyp rebuild --verbose
-RUN cd server && npm install --omit=dev
+RUN cd server/native && npm install -g node-gyp@13.0.2 && node-gyp rebuild
+RUN cd server && npm ci --omit=dev
 
 # C. ORA copia il resto del codice Node.js (i file .js, le rotte, ecc.)
 # Modificare un file .js invaliderà solo questo layer, saltando la compilazione sopra!
@@ -52,7 +52,7 @@ COPY server ./server
 
 # --- STAGE 2: RUNTIME ---
 
-FROM node:18-bookworm-slim
+FROM node:24-bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     libmariadb3 libcurl4 \

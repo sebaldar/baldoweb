@@ -1,0 +1,17 @@
+services:
+  fastapi-planetarium:
+    build: .
+    container_name: baldo-fastapi-planetarium
+    restart: unless-stopped
+    # nessun ports: — raggiungibile solo internamente via nome container
+    environment:
+      - IONOS_API_KEY=${IONOS_API_KEY}
+      - IONOS_BASE_URL=${IONOS_BASE_URL}
+      - IONOS_MODEL=${IONOS_MODEL}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
+      - DEFAULT_PROVIDER=${DEFAULT_PROVIDER}
+      - QDRANT_HOST=baldo-qdrant
+      - QDRANT_PORT=6333
+      - OPENMETEO_URL=${OPENWEATHER_API_KEY}
+    env_file: .env

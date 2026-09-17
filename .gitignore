@@ -19,3 +19,13 @@ node_modules/
 www/public/
 
 data/
+
+# Generated files and local Python environments
+**/venv/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+fastapi-planetarium/logs/
+ilpiccolobardo/public/audio/
+ilpiccolobardo/public/images/
+server/native/build/

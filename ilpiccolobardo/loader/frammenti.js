@@ -54,7 +54,7 @@ async function callApi(action, payload = {}, fileElement = null) {
             formData.append('file_grimorio', fileElement.files[0]);
         }
 
-        const response = await fetch(CONFIG.API_URL, {
+        const response = await AdminAccess.fetch(CONFIG.API_URL, {
             method: 'POST',
             // NOTA: Non impostare 'Content-Type'. 
             // Il browser lo farà da solo includendo il "boundary" corretto.
@@ -105,7 +105,7 @@ async function uploadData() {
     formData.append('file_grimorio', rawFileObject);
 
     try {
-        const response = await fetch(CONFIG.API_URL, {
+        const response = await AdminAccess.fetch(CONFIG.API_URL, {
             method: 'POST',
             // NOTA: Non impostare 'Content-Type': 'application/json' qui!
             // Il browser imposterà automaticamente 'multipart/form-data' con il boundary corretto.
@@ -173,14 +173,14 @@ function renderGrid(fragments) {
     container.innerHTML = fragments.map(f => `
         <article class="fcard">
             <header class="fid">
-                <strong>${f.id || 'N/A'}</strong>
-                <small>${f.archetipo || ''}</small>
+                <strong>${escapeHTML(f.id || 'N/A')}</strong>
+                <small>${escapeHTML(f.archetipo || '')}</small>
             </header>
-            <p class="ftxt">${f.text || ''}</p>
+            <p class="ftxt">${escapeHTML(f.text || '')}</p>
             <footer class="ftags">
-                ${f.setting ? `<span class="tag ts">📍 ${f.setting}</span>` : ''}
-                ${(f.characters || []).map(c => `<span class="tag tc">${c}</span>`).join('')}
-                ${(f.emotions || []).map(e => `<span class="tag te">${e}</span>`).join('')}
+                ${f.setting ? `<span class="tag ts">📍 ${escapeHTML(f.setting)}</span>` : ''}
+                ${(f.characters || []).map(c => `<span class="tag tc">${escapeHTML(c)}</span>`).join('')}
+                ${(f.emotions || []).map(e => `<span class="tag te">${escapeHTML(e)}</span>`).join('')}
             </footer>
         </article>
     `).join('');

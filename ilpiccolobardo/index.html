@@ -827,7 +827,8 @@
     </div>
 
     <!-- Per il pulsante "Stampa PDF": genera il PDF nel browser, niente da installare lato server -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
+    <script src="safe-html.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
 
     <script>
         let ws = null;
@@ -1029,10 +1030,10 @@ if (response.ok) {
             } 
             else if (response.action === 'company_info') {
                 document.getElementById('companyInfo').innerHTML = `
-                    <strong>${response.data.name}</strong><br>
-                    P.IVA: ${response.data.vat}<br>
-                    ${response.data.address}<br>
-                    Email: <a href="mailto:${response.data.email}" style="color:#667eea;">${response.data.email}</a><br>
+                    <strong>${escapeHTML(response.data.name)}</strong><br>
+                    P.IVA: ${escapeHTML(response.data.vat)}<br>
+                    ${escapeHTML(response.data.address)}<br>
+                    Email: <a href="mailto:${escapeHTML(response.data.email)}" style="color:#667eea;">${escapeHTML(response.data.email)}</a><br>
                     © ${new Date().getFullYear()} Tutti i diritti riservati.
                 `;
 			// ── Nuovi eventi SSE ritrasmessi da Node ────────────────────────
@@ -1082,7 +1083,7 @@ if (response.ok) {
 				if (response.errore) {
 					document.getElementById('storyDisplay').innerHTML = `
 						<p style="color: #b33; text-align: center; padding: 20px;">
-							😔 Non posso scrivere questa storia così com'è: ${response.motivo_rifiuto || response.errore}<br>
+							😔 Non posso scrivere questa storia così com'è: ${escapeHTML(response.motivo_rifiuto || response.errore)}<br>
 							<small>Prova a cambiare un po' la tua richiesta!</small>
 						</p>
 					`;
@@ -1106,7 +1107,7 @@ if (response.ok) {
 			} else if (response.tipo === 'errore') {
 				document.getElementById('storyDisplay').innerHTML = `
 					<p style="color: red; text-align: center; padding: 20px;">
-						⚠️ ${response.messaggio || 'Qualcosa è andato storto, riprova!'}
+						⚠️ ${escapeHTML(response.messaggio || 'Qualcosa è andato storto, riprova!')}
 					</p>
 				`;
 			}
@@ -1212,7 +1213,7 @@ if (response.ok) {
             const display = document.getElementById('storyDisplay');
             display.innerHTML = `
                 <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
-                ${story}
+                ${escapeHTML(story).replace(/\n/g, '<br>')}
             `;
 
             document.getElementById('readBtn').disabled = false;
@@ -1491,12 +1492,12 @@ if (response.ok) {
                 card.className = 'favorite-card';
                 card.innerHTML = `
                     <button class="delete-btn" onclick="deleteFavorite(${index}); event.stopPropagation();">×</button>
-                    <h3>${fav.childName ? `Favola di ${fav.childName}` : 'Favola Magica'}</h3>
+                    <h3>${fav.childName ? `Favola di ${escapeHTML(fav.childName)}` : 'Favola Magica'}</h3>
                     <p style="font-size: 0.85em; color: #999; margin-bottom: 10px;">
                         📅 ${new Date(fav.timestamp).toLocaleDateString('it-IT')} | 
-                        🎂 ${fav.age} anni
+                        🎂 ${escapeHTML(fav.age)} anni
                     </p>
-                    <p>${fav.text.substring(0, 150)}...</p>
+                    <p>${escapeHTML(fav.text.substring(0, 150))}...</p>
                 `;
                 card.onclick = () => loadFavorite(index);
                 container.appendChild(card);
@@ -1510,7 +1511,7 @@ if (response.ok) {
             document.getElementById('storyCard').style.display = 'block';
             document.getElementById('storyDisplay').innerHTML = `
                 <button class="favorite-btn active" onclick="toggleFavorite()" id="favoriteBtn">❤️</button>
-                ${currentStory.text}
+                ${escapeHTML(currentStory.text).replace(/\n/g, '<br>')}
             `;
 
             if (currentStory.illustration) {
@@ -1597,10 +1598,10 @@ if (response.ok) {
             if (currentUser) {
                 title.textContent = "Impostazioni Account";
                 body.innerHTML = `
-                    <p>Ciao <strong>${currentUser.name || currentUser.email}</strong>! 👋</p>
+                    <p>Ciao <strong>${escapeHTML(currentUser.name || currentUser.email)}</strong>! 👋</p>
                     <hr style="margin: 20px 0; border-color: #ddd;">
-                    <p><strong>Email:</strong> ${currentUser.email}</p>
-                    ${currentUser.childName ? `<p><strong>Bambino:</strong> ${currentUser.childName}</p>` : ''}
+                    <p><strong>Email:</strong> ${escapeHTML(currentUser.email)}</p>
+                    ${currentUser.childName ? `<p><strong>Bambino:</strong> ${escapeHTML(currentUser.childName)}</p>` : ''}
                     <br>
                     <button class="btn-danger" onclick="logout()" style="width:100%; padding:15px;">Esci</button>
                 `;
@@ -1639,7 +1640,7 @@ if (response.ok) {
             const nameSpan = document.getElementById('accountName');
 
             if (currentUser) {
-                btn.innerHTML = `👤 <span class="account-name">${(currentUser.name || currentUser.email).charAt(0).toUpperCase()}</span>`;
+                btn.innerHTML = `👤 <span class="account-name">${escapeHTML((currentUser.name || currentUser.email).charAt(0).toUpperCase())}</span>`;
                 nameSpan.style.display = 'inline';
                 nameSpan.textContent = (currentUser.name || currentUser.email).charAt(0).toUpperCase();
             } else {

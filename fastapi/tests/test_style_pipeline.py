@@ -6,6 +6,7 @@ from agent.nodes import verifica_coerenza_domanda, decide_tools, fetch_contesto_
 from agent.graph import build_graph
 from services.astronomy import AstronomyClient
 from services.llm import RisultatoLLM
+from services.weather_context import prompt_weather
 
 
 class StylePipelineTests(unittest.IsolatedAsyncioTestCase):
@@ -41,12 +42,18 @@ class StylePipelineTests(unittest.IsolatedAsyncioTestCase):
                 return {'status': 'reale', 'corpi': []}
         weather, astronomy = Weather(), Astronomy()
         for prompt in ['In un inverno rigido una tormenta sorprende Lupetto.', 'Il cielo sereno permette di osservare Saturno.']:
-            result = await fetch_contesto_fisico({'prompt_originale': prompt, 'usa_astronomia': True}, astronomy, weather, Geo())
+            # meteo_prompt è normalmente calcolato da analizza_prompt (nodo 1) prima
+            # di arrivare qui: il test lo popola a mano con lo stesso helper, per non
+            # dipendere da quel nodo mentre isola fetch_contesto_fisico.
+            state = {'prompt_originale': prompt, 'usa_astronomia': True, 'meteo_prompt': prompt_weather(prompt)}
+            result = await fetch_contesto_fisico(state, astronomy, weather, Geo())
             self.assertEqual(result['fonte_meteo'], 'prompt')
             self.assertIn(prompt.rstrip('.'), result['dati_meteo'])
         self.assertEqual(weather.calls, 0)
         self.assertEqual(astronomy.calls, 2)
-        result = await fetch_contesto_fisico({'prompt_originale': 'Osserva il cielo: se piove cambia programma.', 'usa_astronomia': False}, astronomy, weather, Geo())
+        prompt = 'Osserva il cielo: se piove cambia programma.'
+        state = {'prompt_originale': prompt, 'usa_astronomia': False, 'meteo_prompt': prompt_weather(prompt)}
+        result = await fetch_contesto_fisico(state, astronomy, weather, Geo())
         self.assertEqual(result['fonte_meteo'], 'tool')
         self.assertEqual(weather.calls, 1)
         self.assertEqual(astronomy.calls, 2)

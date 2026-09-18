@@ -1,6 +1,9 @@
-#include <fstream>
+#include <map>
+#include <vector>
+#include <string>
 #include <sstream>
-#include <math.h>       /* floor */
+#include <iostream>
+#include <cmath>
 
 #include "WSsrv.hpp"
 #include "angolo.hpp"
@@ -486,14 +489,12 @@ std::string  SkyGrid::find ( double AR, double DECL )
 
 }
 
-
 std::string SkyGrid::createSkyStars ( float magnitudine ) const
 {
-
 	Sky sky;
 	double R = sky.radius * 0.5;
 	
-	TQuery my (  connection  );
+	TQuery my ( connection );
 
 	std::stringstream query ;
 	query << 
@@ -511,26 +512,23 @@ std::string SkyGrid::createSkyStars ( float magnitudine ) const
 
 		
 	try {
-			
-		my.Open( query.str()  );
-		
+		my.Open( query.str() );
 	}
 	catch ( const std::string & ss ) {
-
 		srv.print_log( ss ) ;
-
 	}
 	catch ( const char * ss ) {
-
 		srv.print_log( ss ) ;
-
 	}
       catch (...) {
           // intercetta tutto ciò che non è std::exception
 		std::cerr << "Errore sconosciuto!\n: " <<  " [file: " << __FILE__ << ", line: " << __LINE__ << "]\n"; 
       }
 
-	std::stringstream t ;
+    // ── STRUTTURA DI OTTIMIZZAZIONE WEBGL ──
+    // Mappa per raggruppare i vertici per "colore_dimensione"
+    std::map<std::string, std::vector<std::string>> starGroups;
+
 	while ( !my.Eof() ) {
 	
 		float Vmag = atof( my.FieldByName("Vmag").c_str() )  ;
@@ -554,10 +552,9 @@ std::string SkyGrid::createSkyStars ( float magnitudine ) const
 		int size = 2;
 
 		HSV hsv = rgb;
-//		int i_mag = int( ( fabs(Vmag) + 0.5 )  * Vmag / abs( Vmag ) );
 		int i_mag = floor( Vmag + 0.5 ) ;
+		
 		switch ( i_mag ) {
-			
 			case 8 : case 7 :  {
 				hsv.V = 0.08;
 				size = 1;
@@ -593,7 +590,6 @@ std::string SkyGrid::createSkyStars ( float magnitudine ) const
 				size = 3;
 				hsv.V = 1 ;
 				break;
-		
 		}
 
 		if ( hsv.V > 1 ) hsv.V = 1.0;
@@ -602,17 +598,45 @@ std::string SkyGrid::createSkyStars ( float magnitudine ) const
 		rgb = hsv;
 		std::string color = rgb;
 		
-		t << "<primitive type=\"point\">"  ;
-		t << "	<vertice>" << x << " " << y << " " << z << "</vertice>" ;
-		t << "	<material type=\"point\" color=\"" << color << "\" size=\"" << size << "\" />"  ;
-		t << "</primitive>" << std::endl ;
+        // ── RAGGRUPPAMENTO VERTICI ──
+        // Creiamo la chiave di gruppo (es: "0xffffff_2")
+        std::string groupKey = color + "_" + std::to_string(size);
+        
+        // Creiamo la stringa delle coordinate XYZ
+        std::stringstream vertStr;
+        vertStr << x << " " << y << " " << z;
+        
+        // Salviamo il vertice nel suo gruppo di appartenenza
+        starGroups[groupKey].push_back(vertStr.str());
 
 		my.Next();
-
 	}
 
-	return t.str() ;
+    // ── GENERAZIONE XML FINALE ──
+	std::stringstream t ;
+	int layer_index = 0;
+	
+    // Iteriamo sui gruppi creati
+    for (auto const& group : starGroups) {
+        
+        // Separiamo il colore e la dimensione dalla chiave
+        std::string key = group.first;
+        size_t underscorePos = key.find('_');
+        std::string color = key.substr(0, underscorePos);
+        std::string size = key.substr(underscorePos + 1);
+        
+        t << "<primitive type=\"point\" name=\"stars_layer_" << layer_index++ << "\">" << std::endl ;
+        
+        // Stampiamo TUTTI i vertici che hanno questo stesso colore e dimensione
+        for (auto const& vertice : group.second) {
+            t << "	<vertice>" << vertice << "</vertice>" << std::endl ;
+        }
+        
+        t << "	<material type=\"point\" color=\"" << color << "\" size=\"" << size << "\" />" << std::endl ;
+        t << "</primitive>" << std::endl ;
+    }
 
+	return t.str() ;
 }
 
 std::string  SkyGrid::asterism ( const std::string & constellation, bool hidden ) const
@@ -655,130 +679,99 @@ std::string  SkyGrid::asterism ( const std::string & constellation, bool hidden 
           return "";
       }
 	
-	std::string is_hidden = hidden ? "<hidden />" : "<show />" ;
-	
+std::string is_hidden = hidden ? "<hidden />\n" : "<show />\n" ;
 	std::stringstream t ;
 	bool begin_asterism = true;
 	short no = 0;
+    
 	while ( !my.Eof() ) {
 	
-		std::string stella = utils::trim(my.FieldByName("stella"))  ;
+		std::string stella = utils::trim(my.FieldByName("stella"));
+        
+        // 1. Gestione "Alza la penna" (Rottura linea)
 		if ( stella == "-1" ) {
-			
-			t << is_hidden <<
-				"<material type=\"line_basic\" size=\"1\" " <<
-				"color=\"0x00ff00\" />" <<
-				"</primitive>" <<
-				std::endl;
-				
+			// Chiudiamo la linea solo se ne avevamo effettivamente aperta una
+            if (!begin_asterism) {
+			    t << is_hidden 
+                  << "<material type=\"line_basic\" size=\"1\" color=\"0x00ff00\" />\n" 
+                  << "</primitive>\n";
+            }
 			begin_asterism = true;
 			no++;
 			my.Next();
 			continue;
-		
 		}
-		else if ( stella.substr(0,1) == "[" ) {
-// il punto appartiene ad una altra costellazione/
-// formato esempio [ AND:81 ]			
+        
+        float AR = 0.0f, DECL = 0.0f;
+        bool star_found = false;
+
+        // 2. Acquisizione Coordinate (Stella Esterna o Interna)
+		if ( stella.substr(0,1) == "[" ) {
+            // Stella esterna
 			size_t pos = stella.find(":");
-			
-			std::string star, costellazione;
 			if ( pos != std::string::npos ) {
 				size_t pos_end = stella.find("]");
-				costellazione = utils::trim(stella.substr( 1, pos-1 ));
-				star = utils::trim(stella.substr( pos+1, pos_end-pos-1));
-			}
-			else {
-				my.Next();
-				continue;
-			}
+				std::string costellazione = utils::trim(stella.substr( 1, pos-1 ));
+				std::string star = utils::trim(stella.substr( pos+1, pos_end-pos-1));
 			
-			TQuery q (  connection  );
-
-			std::stringstream query;
-			query << 
-				"select AR, DECL "  <<
-				"from bsc5 " << 
-				"where costellazione=\"" << costellazione << "\" "  <<
-				"and (Flamsteed=\"" << star << "\" or " <<
-				"Bayer=\"" << star << "\" )"
-			;
+			    TQuery q( connection );
+			    std::stringstream query2;
+			    query2 << "select AR, DECL from bsc5 " 
+                       << "where costellazione=\"" << costellazione << "\" " 
+                       << "and (Flamsteed=\"" << star << "\" or Bayer=\"" << star << "\" )";
 			
-			try {
-			
-				q.Open( query.str()  );
-		
-			}
-      catch (const std::runtime_error& e) {
-        std::cerr << "Errore runtime: " << e.what() << " [file: " << __FILE__ << ", line: " << __LINE__ << "]"; 
-          return "";
-      }
-      catch (const std::exception& e) {
-          // intercetta anche altri errori standard
-          std::cerr << "Eccezione generica: " << e.what() << "\n";
-          return "";
-      }
-      catch (...) {
-          // intercetta tutto ciò che non è std::exception
-      std::cerr << "Errore sconosciuto!\n: " << " [file: " << __FILE__ << ", line: " << __LINE__ << "]\n"; 
-          return "";
-      }
-	
+			    try {
+				    q.Open( query2.str() );
+                    if ( !q.isEmpty() ) {
+                        AR = atof( q.FieldByName("AR").c_str() );
+                        DECL = atof( q.FieldByName("DECL").c_str() );
+                        star_found = true;
+                    }
+			    } catch (...) {
+                    // Errore silenzioso: se non trova la stella esterna, salta il vertice 
+                    // ma non fa crashare l'asterismo intero
+			    }
+            }
+		} else {
+            // Stella normale (già ottenuta dalla JOIN iniziale)
+            AR = atof( my.FieldByName("AR").c_str() );
+		    DECL = atof( my.FieldByName("DECL").c_str() );
+            star_found = true;
+        }
 
-			if ( !q.isEmpty() ) {
-			
-				float AR = atof( q.FieldByName("AR").c_str() ) * 360 / 24 ;
-				float DECL = atof( q.FieldByName("DECL").c_str() );
+        // 3. Matematica XYZ e Generazione XML
+        if (star_found) {
+            AR = AR * 360 / 24;
+            Radiant a = Grade( AR );
+            Radiant d = Grade( DECL );
+            
+            double z = R * sin( d );
+            double r = R * cos( d );
+            double x = r * cos( a );
+            double y = r * sin( a );
 
-				Radiant a = Grade( AR  );
-				Radiant d = Grade( DECL  );
-		
-				double z = R * sin( d );
-				double r = R * cos( d );
+            // Controlliamo l'apertura UNA SOLA VOLTA, valida per tutte le stelle
+            if ( begin_asterism ) {
+                t << "<primitive type=\"line\" name=\"ast_" << no << "_" << constellation << "\">\n";
+                begin_asterism = false;
+            }
 
-				double x = r * cos( a );
-				double y = r * sin( a );
-
-				t << "<vertice>" << x << " " << y << " " << z << "</vertice>"  <<
-					std::endl;
-			
-			}
-		
-			my.Next();
-			continue;
-		
-		}
-		
-
-		float AR = atof( my.FieldByName("AR").c_str() ) * 360 / 24 ;
-		float DECL = atof( my.FieldByName("DECL").c_str() );
-
-		Radiant a = Grade( AR  );
-		Radiant d = Grade( DECL  );
-		
-		double z = R * sin( d );
-		double r = R * cos( d );
-
-		double x = r * cos( a );
-		double y = r * sin( a );
-
-		if ( begin_asterism ) {
-
-			t << "<primitive type=\"line\" name=\"ast_" << no << "_" << constellation << "\">"  <<
-				std::endl;
-				
-			begin_asterism = false;
-
-		}
-
-		t << "<vertice>" << x << " " << y << " " << z << "</vertice>"  <<
-			std::endl;
+            t << "<vertice>" << x << " " << y << " " << z << "</vertice>\n";
+        }
 		
 		my.Next();
-
 	}
 	
+    // 4. CHIUSURA DI SICUREZZA (Il Fix per il Bug Critico)
+    // Se il ciclo finisce ma non c'era un "-1" alla fine, chiudiamo il tag rimasto aperto!
+    if (!begin_asterism) {
+        t << is_hidden 
+          << "<material type=\"line_basic\" size=\"1\" color=\"0x00ff00\" />\n" 
+          << "</primitive>\n";
+    }
+
 	return t.str() ;
+
 
 }
 
@@ -1033,102 +1026,86 @@ std::string SkyGrid::whichConstellation_old(double AR, double Dec) const
 }
 
 
-std::string SkyGrid::whichConstellation ( double AR, double Dec ) const
+std::string SkyGrid::whichConstellation(double AR, double Dec) const
 {
-	
-	TQuery my ( connection );
-	TQuery bounds( connection );
+	TQuery my(connection);
+	TQuery bounds(connection);
 
 	std::stringstream query;
-	query << "select codice, nome " <<
-			"from costellazioni" ;
+	query << "select codice, nome from costellazioni";
 			
     try {
-      my.Open( query.str()  );
-    }
-    catch (const std::runtime_error& e) {
-        std::cerr << "Errore runtime: " << e.what() << "\n";
-        return "";
-    }
-    catch (const std::exception& e) {
-        // intercetta anche altri errori standard
+        my.Open(query.str());
+    } catch (const std::exception& e) {
         std::cerr << "Eccezione generica: " << e.what() << "\n";
         return "";
-    }
-      catch (...) {
-          // intercetta tutto ciò che non è std::exception
-      std::cerr << "Errore sconosciuto!\n: " << " [file: " << __FILE__ << ", line: " << __LINE__ << "]\n"; 
-          return "";
-      }
+    } catch (...) { return ""; }
 	
 	// per ogni costellazione
-	while ( !my.Eof() ) {
+	while (!my.Eof()) {
 		
 		std::string codice = my.FieldByName("codice"); 
 		std::string nome = my.FieldByName("nome"); 
 
-		std::stringstream query;
-		query << "select RAJ, DE from const_bounds " <<
-			"where costellazione=\"" <<
-			codice << "\" " <<
-			"and tipo<>\"I\" " <<
-			"order by id " ;
+		std::stringstream b_query;
+		b_query << "select RAJ, DE from const_bounds "
+                << "where costellazione=\"" << codice << "\" "
+                << "and tipo<>\"I\" "
+                << "order by id";
 			
-		std::vector< Point > c_polig;
-	
-			
-		bounds.Open( query.str()  );
+		std::vector<Point> c_polig;
+        
+        try {
+		    bounds.Open(b_query.str());
+        } catch (...) {
+            my.Next();
+            continue; // Se fallisce una costellazione, passiamo alla prossima
+        }
 		
-		bool ar_correction=false;
-		double ar_prev=0;
-		bool first_time=true;
-		while ( !bounds.Eof() ) {
-		
-			// ascensione retta e declinazione
-			double ar = atof( bounds.FieldByName("RAJ").c_str() ); 
-			double dec = atof( bounds.FieldByName("DE").c_str() );
+		bool ar_correction = false;
+		double ar_prev = 0;
+		bool first_time = true;
+        
+		while (!bounds.Eof()) {
+			double ar = atof(bounds.FieldByName("RAJ").c_str()); 
+			double dec = atof(bounds.FieldByName("DE").c_str());
 			
-			if ( !first_time ) {
-				if ( fabs(ar - ar_prev) > 180 ) {
+			if (!first_time) {
+				if (fabs(ar - ar_prev) > 180) {
 					ar_correction = true;
 				}
-			}
-			else
-				first_time=false;
+			} else {
+				first_time = false;
+            }
 			
 			ar_prev = ar;
-
-			// costruisce i poligoni
-			c_polig.push_back( Point(ar, dec) ); 
-
+			c_polig.push_back(Point(ar, dec)); 
 			bounds.Next();
-	
 		}
 
-		if ( ar_correction ) {
-		
+        // Usiamo una copia locale di AR per questa singola verifica
+        double test_AR = AR;
+
+		if (ar_correction) {
 			// corregge il poligono
-//			size_t size = c_polig.size();
-			for ( auto it = c_polig.begin(); it != c_polig.end(); it++ ) {
-		
-				Point &p = *it;
-				if ( p.x > 180 ) p.x = p.x - 360;
-				
+			for (auto& p : c_polig) {
+				if (p.x > 180) p.x -= 360;
 			}
-			
+            
+            // CORREZIONE CRITICA: correggiamo anche il punto di test!
+            if (test_AR > 180) test_AR -= 360;
 		}
 		
-		auto intersections = YisInBounds ( AR, Dec, c_polig );
+        // Passiamo test_AR invece di AR
+		auto intersections = YisInBounds(test_AR, Dec, c_polig);
 
-		if ( intersections % 2)  /* is odd */
+		if (intersections % 2 != 0) /* is odd */
 			return nome;
 
 		my.Next();
-	
 	}
 
 	return "";
-
 }
 
 short int SkyGrid::YisInBounds ( double x, double y, const std::vector< Point > & c_polig ) const

@@ -1,6 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 
+import { loadSolarModule } from './services/native-loader.js';
+
+
+
+let solar;
+try {
+    solar = loadSolarModule();
+    console.log("✅ Modulo C++ Solar caricato correttamente");
+} catch (err) {
+    console.error("❌ Errore critico modulo Solar:", err.message);
+}
+
 // Import dinamici: li faremo al bisogno nel metodo executeRequest.
 // Ogni modulo lo importeremo con import().
 
@@ -41,12 +53,46 @@ class HTTP {
                 await module.exe( jdata);
             }
             break;
-			default:
-				this.response.statusCode = 200;
-				this.response.setHeader("Content-Type", `text/html`);	
-				this.response.end("Nessuna richiesta gestita!")
-			break;
-			
+            case "ILPICCOLOBARDO": {
+                const module = await load("ILPICCOLOBARDO/loader");
+                await module.exe( jdata);
+            }
+            break;
+            case "DATI_ASTRONOMICI": {
+				
+				const id = 100;
+
+				// Dati per il calcolo
+				const config = {
+					lookfrom: "earth",
+					latitude: jdata.query.lat,
+					longitude: jdata.query.lon,
+					height: 0,
+					azimut: 0,
+					date: `${jdata.query.data} ${jdata.query.ora}`
+				};
+				
+				solar.registerClient(id, "{}");
+				const res_raw = solar.computeCelestialPositions(id, JSON.stringify(config)); 
+				solar.unregisterClient(id);
+
+				// 1. Pulizia NaN e Parsing
+				const res_cleaned = res_raw.replace(/-?nan/g, "null");
+				let raw_json;
+				try {
+					raw_json = JSON.parse(res_cleaned);
+				} catch (e) {
+					raw_json = { bodies: [] };
+				}
+				
+				
+				const response = jdata.response;
+				response.statusCode = 200;
+				response.setHeader("Content-Type", "application/json");
+						
+				response.end( res_cleaned) ;
+			}
+			break; 
 
         }
     }

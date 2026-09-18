@@ -7,6 +7,7 @@ Entrypoint FastAPI con supporto a Geocoding, Meteo e Astronomia.
 import logging
 import json
 import httpx
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -14,7 +15,7 @@ from typing import Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import settings
 from services.llm import LLMRouter
@@ -22,6 +23,10 @@ from services.neo4j_client import Neo4jClient
 from services.astronomy import AstronomyClient
 from services.weather import WeatherClient    # <--- NUOVO
 from services.geo_service import GeoService  # <--- NUOVO
+from services.report import salva_report_storia
+
+from routers.admin import router as admin_router
+
 from agent.graph import build_graph
 
 logging.basicConfig(level=logging.INFO)
@@ -36,12 +41,11 @@ llm_router:   Optional[LLMRouter] = None
 astronomy_client: Optional[AstronomyClient] = None
 weather_client:   Optional[WeatherClient] = None # <--- NUOVO
 geo_service:      Optional[GeoService] = None    # <--- NUOVO
-baldo_graph = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global neo4j_client, http_client, llm_router, baldo_graph, \
+    global neo4j_client, http_client, llm_router, \
            astronomy_client, weather_client, geo_service
 
     logger.info("Avvio servizi Baldo...")
@@ -60,15 +64,6 @@ async def lifespan(app: FastAPI):
     astronomy_client = AstronomyClient(http_client=http_client)
     weather_client = WeatherClient(http_client=http_client) # <--- NUOVO
     geo_service = GeoService()                             # <--- NUOVO
-
-    # COSTRUZIONE GRAFO (Risolve il TypeError aggiungendo weather e geo)
-    baldo_graph = build_graph(
-        llm=llm_router,
-        neo4j=neo4j_client,
-        astronomy=astronomy_client,
-        weather=weather_client,
-        geo=geo_service
-    )
 
     logger.info("Agente Baldo pronto con supporto Geo/Meteo.")
     yield
@@ -90,20 +85,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin_router)
+
 # ---------------------------------------------------------------------------
 # Modelli Pydantic
 # ---------------------------------------------------------------------------
 class StoryStreamRequest(BaseModel):
-    prompt:      str
+    prompt:      str = Field(min_length=1, max_length=8000)
     lingua:      str = "it"
-    eta_bambino: int = 4
+    eta_bambino: int = Field(default=4, ge=0, le=18)
     lunghezza:   str = "media"
     session_id:  Optional[str] = None
-    lat:         Optional[float] = None
-    lon:         Optional[float] = None
-    data_storia: Optional[str] = None   
+    lat:         Optional[float] = Field(default=None, ge=-90, le=90)
+    lon:         Optional[float] = Field(default=None, ge=-180, le=180)
+    data_storia: Optional[str] = None
     ora_storia:  Optional[str] = None   # <--- Aggiunta ora
     source_geo:  Optional[str] = None   # "device" | "ip"
+    # Dati di personalizzazione dal form: oggi il frontend li intreccia già
+    # nel testo del prompt, ma servono anche come campi distinti per il
+    # report YAML amministrativo di ogni storia.
+    nome:              Optional[str] = None
+    colore_preferito:  Optional[str] = None
+    animale_preferito: Optional[str] = None
 
 class StoryResponse(BaseModel):
     racconto:        str
@@ -124,6 +127,8 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
     client_ip = request.headers.get("x-forwarded-for", request.client.host)
     logger.info(f"Stream racconto | IP={client_ip} | prompt='{body.prompt[:50]}...'")
 
+    t0 = time.monotonic()
+
     # Stato iniziale coerente con agent/state.py aggiornato
     stato_iniziale = {
         "prompt_originale": body.prompt,
@@ -135,6 +140,9 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
         "lon": body.lon,
         "data_storia": body.data_storia,
         "ora_storia": body.ora_storia,
+        "nome": body.nome,
+        "colore_preferito": body.colore_preferito,
+        "animale_preferito": body.animale_preferito,
         "luogo": "Roma", # Default che verrà sovrascritto dal Nodo 1
         "iterazioni_totali": 0,
         "frammenti": [],
@@ -145,17 +153,37 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
         "usa_astronomia": True,
         "prompt_chiaro": True,
         "dati_meteo": None,
-        "dati_astronomici": None
+        "dati_astronomici": None,
+        "llm_usage": [],
     }
     
-    config = {"configurable": {"thread_id": body.session_id or f"sess_{uuid.uuid4().hex[:8]}"}}
+    # Sempre un thread_id nuovo, mai body.session_id: quel valore resta lo
+    # stesso per l'intera sessione del browser (sessionStorage), quindi
+    # riusarlo come thread_id di LangGraph fa sì che MemorySaver applichi il
+    # nuovo input come AGGIORNAMENTO del checkpoint precedente invece che
+    # come stato pulito. Per i canali con reducer additivo (llm_usage,
+    # iterazioni_totali) questo significa non "sovrascrivere con []/1", ma
+    # "sommare [] /1 al valore già salvato" — il vecchio valore resta la base
+    # e ogni nodo continua ad accumularci sopra. Osservato: la seconda
+    # generazione nella stessa sessione portava con sé, intatte, tutte le
+    # voci di llm_usage della prima (stessi token al bit, raddoppiando il
+    # totale riportato) — nessun'altra parte del codice legge lo stato di
+    # un thread_id al di fuori della stessa richiesta che l'ha creato,
+    # quindi non c'è continuità da preservare tra una storia e l'altra.
+    config = {"configurable": {"thread_id": f"racconto_{uuid.uuid4().hex}"}}
 
     NODI_INTERNI = {"LangGraph", "", "_route_valuta_prompt", "_route_dopo_neo4j", 
                     "_route_valuta_frammenti", "_route_valuta_draft"}
 
     async def event_generator():
         try:
-            async for event in baldo_graph.astream_events(stato_iniziale, config=config, version="v2"):
+            # Each request owns its checkpoints, including during concurrent streams.
+            # Once this generator closes, no process-global graph retains the story.
+            request_graph = build_graph(
+                llm=llm_router, neo4j=neo4j_client, astronomy=astronomy_client,
+                weather=weather_client, geo=geo_service,
+            )
+            async for event in request_graph.astream_events(stato_iniziale, config=config, version="v2"):
                 event_type = event.get("event")
                 name = event.get("name", "")
 
@@ -181,8 +209,22 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
                         yield f"data: {json.dumps({'tipo': 'token', 'testo': token})}\n\n"
 
             # Snapshot Finale
-            snapshot = baldo_graph.get_state(config)
+            snapshot = request_graph.get_state(config)
             v = snapshot.values if hasattr(snapshot, "values") else {}
+
+            # Report YAML amministrativo — solo se è stata prodotta una
+            # storia vera (non su un prompt rifiutato o un errore a metà,
+            # dove i dati sarebbero incompleti o fuorvianti).
+            if v.get("racconto_finale") and not v.get("errore"):
+                salva_report_storia(v, time.monotonic() - t0)
+
+            # 'errore'/'motivo_rifiuto' non arrivavano mai al frontend: né
+            # qui (il payload 'fine' non li includeva, il browser vedeva solo
+            # un racconto vuoto senza spiegazione) né via un evento SSE
+            # dedicato (nodo_errore produce un 'nodo_end' con stato.errore,
+            # ma il frontend non ha mai gestito 'nodo_end', solo 'nodo_start'
+            # /'token'/'fine'/'errore' — quell'evento veniva ricevuto e
+            # silenziosamente ignorato).
             yield f"data: {json.dumps({
                 'tipo': 'fine',
                 'racconto': v.get('racconto_finale', ''),
@@ -191,7 +233,9 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
                 'ambientazione': v.get('ambientazione', ''),
                 'usa_astronomia': v.get('usa_astronomia', False),
                 'storia_id': v.get('storia_id'),
-                'meteo': v.get('dati_meteo') # Inviato al frontend
+                'meteo': v.get('dati_meteo'), # Inviato al frontend
+                'errore': v.get('errore'),
+                'motivo_rifiuto': v.get('motivo_rifiuto'),
             })}\n\n"
 
         except Exception as e:

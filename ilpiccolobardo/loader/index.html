@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Il Piccolo Bardo — Archivio dei Frammenti</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;1,300&family=JetBrains+Mono:wght@400;600&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="frammenti.css">
+</head>
+<body>
+
+<header class="main-header">
+    <div class="brand">
+        <div class="sigil">✦ Il Piccolo Bardo — Pannello di Amministrazione</div>
+        <h1>Archivio dei <em>Frammenti</em></h1>
+    </div>
+    
+    <div class="stats-container">
+        <div class="stat-box">
+            <span class="stat-value" id="stat-fragments">—</span>
+            <span class="stat-label">Frammenti</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-value" id="stat-stories">—</span>
+            <span class="stat-label">Storie</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-value" id="stat-characters">—</span>
+            <span class="stat-label">Personaggi</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-value" id="stat-emotions">—</span>
+            <span class="stat-label">Emozioni</span>
+        </div>
+    </div>
+</header>
+
+<div class="workspace">
+    <aside class="sidebar">
+        
+        <section class="control-group">
+            <h3 class="group-title">① Carica Frammenti</h3>
+            <div class="upload-zone" id="drop-zone">
+                <input type="file" id="file-input" accept=".json">
+                <span class="upload-icon">📜</span>
+                <p>Trascina il file JSON o clicca qui</p>
+                <div class="file-name" id="selected-filename"></div>
+            </div>
+            <label class="checkbox-container">
+                <input type="checkbox" id="overwrite-check"> 
+                <span>Sovrascrivi esistenti</span>
+            </label>
+            <button class="btn btn-primary" id="btn-upload" disabled>
+                ✦ Carica nel Grimorio
+            </button>
+        </section>
+
+        <section class="control-group">
+            <h3 class="group-title">② Consulta</h3>
+            <div class="button-stack">
+                <button class="btn btn-secondary" id="btn-refresh">📚 Mostra tutti</button>
+                <button class="btn btn-secondary" id="btn-stats">📊 Aggiorna Statistiche</button>
+            </div>
+        </section>
+
+        <section class="control-group">
+            <h3 class="group-title">③ Elimina</h3>
+            <textarea id="delete-ids" placeholder="ID Frammenti (es: frag_001)"></textarea>
+            <button class="btn btn-danger" id="btn-delete">🗑️ Elimina selezionati</button>
+        </section>
+
+        <section class="log-section">
+            <h3 class="group-title">Log Operazioni</h3>
+            <div class="log-output" id="log-display">In attesa di operazioni...</div>
+        </section>
+        
+    </aside>
+
+    <main class="content-area">
+        <header class="content-header">
+            <h2>Frammenti nel Grimorio</h2>
+            <span class="badge" id="fragment-count">0 frammenti</span>
+        </header>
+
+        <div id="fragment-list" class="fragment-grid">
+            <div class="empty-state">
+                Il grimorio è vuoto. Carica i tuoi frammenti per iniziare.
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="../safe-html.js"></script>
+<script src="../admin/access.js"></script>
+<script src="frammenti.js">
+
+</script>
+</body>
+</html>

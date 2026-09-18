@@ -7,6 +7,9 @@ session/
 server/logs/*.log
 server/logs/out*
 server/logs/err*
+fastapi/logs/
+fastapi/stories/
+fastapi/config_data/
 server/*.tar.gz
 server/config.json
 
@@ -16,3 +19,13 @@ node_modules/
 www/public/
 
 data/
+
+# Generated files and local Python environments
+**/venv/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+fastapi-planetarium/logs/
+ilpiccolobardo/public/audio/
+ilpiccolobardo/public/images/
+server/native/build/

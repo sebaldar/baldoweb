@@ -1,7 +1,9 @@
 // server_base.js (o server_base.mjs)
 
 import 'dotenv/config';
-import { promises as fs } from 'fs';
+import { bearerToken, isAdminToken } from './js/services/admin-auth.js';
+import { mkdir, readFile, unlink, access, writeFile, appendFile } from 'fs/promises';
+
 import https from 'https';
 import http from 'http'   
 
@@ -10,6 +12,8 @@ import path from 'path';
 import { WebSocketServer } from 'ws';
 import crypto from 'crypto';
 import os from 'os';
+import querystring from 'querystring';
+import { IncomingForm } from 'formidable';
 
 //import MongoService from './js/services/service.mongo.js';
 const MongoService = undefined;
@@ -41,7 +45,7 @@ const INIZ = {
 };
 
 const tools = {
-    getContent: async (file) => { /* LOGICA ASINCRONA */ return fs.readFile(file, 'utf8') },
+    getContent: async (file) => { /* LOGICA ASINCRONA */ return readFile(file, 'utf8') },
     parseCookies: (cookieHeader) => { 
         // Logica semplificata per la demo
         if (!cookieHeader) return {};
@@ -55,12 +59,6 @@ const tools = {
     setLog: (msg) => { console.log(`[LOG] ${msg}`) }
 };
 
-const manage_post = {
-    exe: (request, binary) => {
-        console.log('ATTENZIONE: parsing multipart/form-data delegato, implementare con libreria!');
-        return {}; 
-    }
-};
 // -------------------------------------------------------------------
 // Crea le istanze multiple
 const dbUser = new MySQL2Service({
@@ -278,9 +276,9 @@ export default class Server { // Export della classe (default)
             
             
             const options = {
-                cert: await fs.readFile(path.join(ssl_dir, INIZ.SSL.cert)),
-                key: await fs.readFile(path.join(ssl_dir, INIZ.SSL.key)),
-                ca: await fs.readFile(path.join(ssl_dir, INIZ.SSL.ca)),  // ← AGGIUNGI QUESTA RIGA
+                cert: await readFile(path.join(ssl_dir, INIZ.SSL.cert)),
+                key: await readFile(path.join(ssl_dir, INIZ.SSL.key)),
+                ca: await readFile(path.join(ssl_dir, INIZ.SSL.ca)),  // ← AGGIUNGI QUESTA RIGA
                 passphrase: INIZ.SSL.passphrase
             };
                 
@@ -359,10 +357,13 @@ export default class Server { // Export della classe (default)
 		const parsedUrl = new URL(request.url, `${protocol}://${request.headers.host}`);		
 		// Forza il percorso assoluto corretto per Docker
 		// process.cwd() è /app/server, quindi cerchiamo /app/server/config.json
-		let FILE_CONFIG = parsedUrl.searchParams.get('config_file') || path.resolve(process.cwd(), 'config.json');
+		const FILE_CONFIG = process.env.SERVER_CONFIG_FILE || path.resolve(process.cwd(), 'config.json');
 
 		try {
-			const data_config = await tools.getContent(FILE_CONFIG);
+			const data_config = await tools.getContent(FILE_CONFIG).catch(error => {
+                if (error.code === 'ENOENT' && !process.env.SERVER_CONFIG_FILE) return '{}';
+                throw error;
+            });
 			const impostazioni = JSON.parse(data_config);
 			const queryParams = Object.fromEntries(parsedUrl.searchParams.entries());
 
@@ -396,17 +397,11 @@ export default class Server { // Export della classe (default)
 				response.setHeader('Access-Control-Allow-Origin', origin);
 				response.setHeader('Access-Control-Allow-Credentials', 'true');
 				response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-				response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cookie');
+				response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 				response.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
 			}
 			
-			// Preflight - rispondere SUBITO
-			if (request.method === 'OPTIONS') {
-				response.writeHead(204);
-				response.end();
-				return;
-			}
-			
+		
 			// *** RECUPERA SESSION_ID da MULTIPLI SORGENTI (fallback chain) ***
 			let session_id = null;
 			let session_source = 'unknown';
@@ -444,7 +439,7 @@ export default class Server { // Export della classe (default)
 
 			// 3. Se è nuova, crea la cartella e i file base
 			if (isNewSession) {
-				await fs.mkdir(session_dir, { recursive: true });
+				await mkdir(session_dir, { recursive: true });
 				await this.ensureUserFileExists(session_dir);
 			}
 
@@ -473,15 +468,106 @@ export default class Server { // Export della classe (default)
 		
 			// 4. GESTISCI RICHIESTA
 			switch (request.method) {
-				case "POST": {
-					// Gestisci POST
-					break;
-				}
-				case "GET": {
-					// Gestisci GET
-					break;
-				}
-			}
+case "OPTIONS": {
+    response.writeHead(204);
+    response.end();
+    return;
+}
+break;
+case "POST": {
+    if (jdata.doc === 'ILPICCOLOBARDO' && !isAdminToken(bearerToken(request))) {
+        response.writeHead(403, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: 'Accesso amministratore richiesto' }));
+        return;
+    }
+    let tempFilePaths = []; // Usiamo un array per tenere traccia di tutti i file da pulire
+    try {
+        const form = new IncomingForm({
+            uploadDir: '/app/data/uploads',
+            keepExtensions: true,
+            multiples: true,
+            maxFileSize: 10 * 1024 * 1024,
+            maxTotalFileSize: 20 * 1024 * 1024,
+            maxFiles: 10
+        });
+
+        const [fields, files] = await form.parse(request);
+
+        // 1. Estrazione campi di testo (come prima)
+        const cleanQuery = {};
+        for (const key in fields) {
+            let value = fields[key][0];
+            try {
+                if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
+                    value = JSON.parse(value);
+                }
+            } catch (e) {}
+            cleanQuery[key] = value;
+        }
+        jdata.query = cleanQuery;
+
+        // 2. Gestione MULTIFILE
+        jdata.query.files = []; // Creiamo una lista di file processati in jdata
+
+        // Iteriamo su tutte le chiavi dell'oggetto 'files'
+        for (const key in files) {
+            const fileArray = files[key]; // Formidable restituisce sempre un array
+
+            for (const fileInfo of fileArray) {
+                const tempPath = fileInfo.filepath;
+                tempFilePaths.push(tempPath); // Aggiungiamo alla lista per la pulizia finale
+
+                const buffer = await readFile(tempPath);
+                let content;
+
+                try {
+                    content = JSON.parse(buffer.toString('utf-8'));
+                } catch (e) {
+                    content = buffer.toString('utf-8');
+                }
+
+                // Salviamo i dettagli di ogni file
+                jdata.query.files.push({
+                    field: key,
+                    fileName: fileInfo.originalFilename,
+                    content: content,
+                    mimeType: fileInfo.mimetype
+                });
+
+                console.log(`File ricevuto: ${fileInfo.originalFilename} (campo: ${key})`);
+            }
+        }
+
+        // 3. Esecuzione comando
+        await this.http_command(jdata);
+
+        if (!response.headersSent) {
+            response.writeHead(200, { 'Content-Type': 'application/json' });
+            response.end(JSON.stringify({ status: "success", filesProcessed: jdata.query.files.length }));
+        }
+
+    } catch (error) {
+        console.error(`Errore POST: ${error.message}`);
+        if (!response.headersSent) {
+            response.statusCode = 500;
+            response.end(JSON.stringify({ error: "Errore nel processamento multifile" }));
+        }
+    } finally {
+        // 4. PULIZIA TOTALE: Elimina tutti i file temporanei raccolti
+        for (const path of tempFilePaths) {
+            await unlink(path).catch(err => 
+                console.error(`Errore pulizia file ${path}:`, err)
+            );
+        }
+    }
+    return;
+}
+
+        case "GET": {
+            // Logica per GET con ES6
+            break;
+        }
+    }			
 			
 			await this.http_command( jdata);
 			
@@ -496,6 +582,8 @@ export default class Server { // Export della classe (default)
 					message: process.env.NODE_ENV === 'development' ? error.message : undefined
 				}));
 			}
+			
+			return;
 		}
 	}
 
@@ -569,14 +657,14 @@ export default class Server { // Export della classe (default)
 			const session_dir = path.join(process.env.SESSION_DIR, session_id);
 			
 			try {
-				await fs.access(session_dir);
+				await access(session_dir);
 				tools.setLog(`✓ WSS: Directory sessione trovata: ${session_dir}`);
 			} catch {
 				tools.setLog(`⚠️ WSS: Sessione ${session_id} non trovata. Tentativo di ripristino automatico.`);
 				
 				try {
 					// 1. Crea la directory
-					await fs.mkdir(session_dir, { recursive: true });
+					await mkdir(session_dir, { recursive: true });
 					
 					// 2. Crea i file minimi necessari
 					await this.ensureUserFileExists(session_dir);
@@ -615,7 +703,7 @@ export default class Server { // Export della classe (default)
 			await this.ensureUserFileExists(session_dir);
 			
 			// Registra il client nella mappa globale
-			this.CLIENTS[session_id] = ws;
+			this.CLIENTS[sec_websocket_key] = ws;
 			
 			tools.setLog(`🔌 WSS: Connesso da ${client_ip}. Sessione: ${session_id}. Totale clients: ${Object.keys(this.CLIENTS).length}`);
 			
@@ -643,7 +731,7 @@ export default class Server { // Export della classe (default)
             let ips = [];
             
             try {
-                const data = await fs.readFile(ip_file, 'utf8');
+                const data = await readFile(ip_file, 'utf8');
                 ips = JSON.parse(data);
             } catch (err) {
                 // File non esiste, crea array vuoto
@@ -651,7 +739,7 @@ export default class Server { // Export della classe (default)
             
             if (!ips.includes(client_ip)) {
                 ips.push(client_ip);
-                await fs.writeFile(ip_file, JSON.stringify(ips, null, 2));
+                await writeFile(ip_file, JSON.stringify(ips, null, 2));
             }
         } catch (error) {
             console.error('Errore updateClientIps:', error.message);
@@ -666,7 +754,7 @@ export default class Server { // Export della classe (default)
             const user_file = path.join(session_dir, 'user.json');
             
             try {
-                await fs.access(user_file);
+                await access(user_file);
             } catch {
                 // File non esiste, crealo
                 const defaultUser = {
@@ -674,7 +762,7 @@ export default class Server { // Export della classe (default)
                     created: new Date().toISOString(),
                     data: {}
                 };
-                await fs.writeFile(user_file, JSON.stringify(defaultUser, null, 2));
+                await writeFile(user_file, JSON.stringify(defaultUser, null, 2));
             }
         } catch (error) {
             console.error('Errore ensureUserFileExists:', error.message);
@@ -687,16 +775,16 @@ export default class Server { // Export della classe (default)
     async handleWsMessage(ws, data, isBinary, jdata) {
         try {
             const message = isBinary ? data : data.toString();
-            
+            let parsed;
             try {
-                const parsed = JSON.parse(message);
-                jdata.message = parsed;
-                await this.wss_command(this, ws, jdata);
+                parsed = JSON.parse(message);
             } catch {
                 // Non è JSON, gestisci come testo
-                jdata.message = { type: 'text', data: message };
-                await this.wss_command(this, ws, jdata);
+                parsed = { type: 'text', data: message };
             }
+            // Each in-flight command owns its context. Handler failures must not
+            // replay the same command through the text fallback.
+            await this.wss_command(this, ws, { ...jdata, message: parsed });
         } catch (error) {
           console.error('Errore handleWsMessage:\n', error.stack);
         }
@@ -710,7 +798,7 @@ export default class Server { // Export della classe (default)
         
 
     if (session_id && this.CLIENTS[sec_websocket_key]) {
-        delete this.CLIENTS[session_id];
+        delete this.CLIENTS[sec_websocket_key];
         tools.setLog(`🔌 WSS: Disconnesso session ${session_id}. Clients rimanenti: ${Object.keys(this.CLIENTS).length}`);
     }
         
@@ -725,7 +813,7 @@ export default class Server { // Export della classe (default)
             const log_file = path.join(jdata.session_dir, 'ws_errors.log');
             const timestamp = new Date().toISOString();
             const log_entry = `${timestamp}: ${message}\n`;
-            await fs.appendFile(log_file, log_entry);
+            await appendFile(log_file, log_entry);
         } catch (error) {
             console.error('Errore setLocalLog:', error.message);
         }

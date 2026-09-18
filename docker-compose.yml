@@ -31,7 +31,22 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
       - ./data/mongo:/data/db
-
+      
+  qdrant:
+    image: qdrant/qdrant:v1.13.0   # compatibile con client 1.17.x
+    container_name: baldo-qdrant
+    restart: always
+    ports:
+      - "127.0.0.1:6333:6333" # Accessibile solo localmente sulla VM
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1s bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+            
   fastapi:
     build:
       context: ./fastapi
@@ -45,7 +60,27 @@ services:
     env_file: .env
     volumes:
       - ./fastapi/logs:/app/logs
+      - ./fastapi/stories:/app/stories
+      - ./fastapi/config_data:/app/config_data
     mem_limit: 512m
+    
+
+  fastapi-planetarium:
+    build:
+      context: ./fastapi-planetarium
+      dockerfile: Dockerfile
+    container_name: baldo-fastapi-planetarium
+    restart: always
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    env_file: ./fastapi-planetarium/.env
+    volumes:
+      - ./fastapi-planetarium/logs:/app/logs
+    mem_limit: 2g        # sentence-transformers è più pesante del fastapi normale
+    ports:
+      - "127.0.0.1:8001:8000"    
+    
 
   app:
     build:
@@ -67,3 +102,4 @@ services:
       - ./ssl:/app/ssl
       - ./data/planetarium_assets:/app/data/planetarium
       - ./ilpiccolobardo/public:/app/ilpiccolobardo/public
+      

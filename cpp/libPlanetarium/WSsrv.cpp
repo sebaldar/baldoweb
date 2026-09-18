@@ -1372,16 +1372,14 @@ if ( button == 2 ) {
 		}
 		else if ( action == "move" ) {
 			double height, azimut;
-			cc >> height;
-			if ( !cc.eof() ) {
+			
+			// Se riesce a leggere height, applica l'altezza
+			if ( cc >> height ) {
 				data->lookat.altezza += height ;
-//				if ( data->lookat.altezza > 89 ) data->lookat.altezza = 89;
-//				if ( data->lookat.altezza < -89 ) data->lookat.altezza = -89;
-				cc >> azimut;
-				if ( !cc.eof() ) {
+				
+				// Se riesce a leggere ANCHE l'azimut, applica l'azimut
+				if ( cc >> azimut ) {
 					data->lookat.azimut += azimut ;
-//					if ( data->lookat.azimut > 360 ) data->lookat.azimut -= 360;
-//					if ( data->lookat.azimut < 0 ) data->lookat.azimut += 360;
 					data->lookat.view = clientData::lookAt::VIEW::AZIMUT;
 				}
 			}
@@ -1391,15 +1389,12 @@ if ( button == 2 ) {
 			xml << "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>" <<
 				"<results>" <<
 					"<terminal>" <<
-						"shift lat " << data->lookfrom.move_lat <<
-						" shift lng " << data->lookfrom.move_lng <<
+						"Spostamento: altezza " << height <<
+						" azimut " << azimut <<
 					"</terminal>" <<
 				"</results>" ;
 
-
-
 			return ( xml.str() );
-
 		}
 		else if ( action == "observe" ) {
 
@@ -1694,7 +1689,7 @@ if ( button == 2 ) {
 					declinazione += data->lookfrom.move_lat;
 					ascensione_retta += data->lookfrom.move_lng;
 
-					Radiant a = Grade( ascensione_retta *  360 / 24  );
+					Radiant a = Grade( ascensione_retta * 360 / 24  );
 					Radiant d = Grade( declinazione  );
 
 					double z = R * sin( d );
@@ -1702,29 +1697,39 @@ if ( button == 2 ) {
 
 					double x = r * cos( a );
 					double y = r * sin( a );
+					
+					// Calcola Altezza e Azimut se l'osservatore è sulla Terra
+					if ( data->lookfrom.where == "earth" ) {
+						double lat = data->lookfrom.latitude;
+						double lon = data->lookfrom.longitude;
+						double rot = data->rotation;
 
+						// Inizializza l'orizzonte locale
+						Horizont horizont(lat, lon + rot);
+
+						// Usa i metodi nativi della classe Horizont passando il punto 3D
+						data->lookat.altezza = horizont.height(Point(x, y, z));
+						data->lookat.azimut  = horizont.azimut(Point(x, y, z));
+						
+						// Opzionale: se la logica della tua applicazione richiede 
+						// di impostare la VIEW specifica per far aggiornare il render
+						data->lookat.view = clientData::lookAt::VIEW::AZIMUT;
+					}
+					// -----------------------------
 
 					clientData::Camera &camera = data->camera;
 					camera.lookat_x = x ;
 					camera.lookat_y = y ;
 					camera.lookat_z = z ;
-/*
-					camera.pos_x = p.x;
-					camera.pos_y = p.y;
-					camera.pos_z = p.z;
-*/
+
 					data->lookat.where = "sky";
 
 					std::string AR = AscensioneRetta( a );
 					std::string Dec = Declinazione( d );
 
-
 					if ( data->lookfrom.where == "earth" ) {
-
 						data->lookat.view = clientData::lookAt::VIEW::NONE;
-
 					}
-
 
 					ss <<
 						"RA=" << AR << " Dec=" << Dec << " x=" << x <<
@@ -1735,18 +1740,19 @@ if ( button == 2 ) {
 					xml << "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>" <<
 						"<results>" <<
 						"	<renderer>" <<
-"	<camera>" <<
-"		<lookat x=\"" << x << "\" y=\"" << y << "\" z=\"" << z<< "\" />" <<
-"	</camera>" <<
+                        "	    <camera>" <<
+                        "		    <lookat x=\"" << x << "\" y=\"" << y << "\" z=\"" << z<< "\" />" <<
+                        "	    </camera>" <<
 
-				"<primitive type=\"point\" name=\"center\">" <<
-					"<recreate />" <<
-					"<vertice>" << x << " " << y << " " << z << "</vertice>" <<
-					"<material size=\"5\" color=\"0x0000ff\" type=\"point\" />" <<
-				"</primitive>" <<
+                        // MODIFICA QUI: Abbiamo cambiato il tipo e il colore
+                        "       <primitive type=\"target\" name=\"center\">" <<
+                        "           <recreate />" <<
+                        "           <vertice>" << x << " " << y << " " << z << "</vertice>" <<
+                        // Usiamo un Ciano acceso (0x00ffff), size più grande e type "crosshair"
+                        "           <material size=\"20\" color=\"0x00ffff\" type=\"crosshair\" />" <<
+                        "       </primitive>" <<
 
-				"</renderer>" <<
-
+				        "   </renderer>" <<
 						"</results>" ;
 
 					// manda i dati al client
@@ -1754,11 +1760,7 @@ if ( button == 2 ) {
 					return ( xml.str() );
 
 				}
-
 			}
-
-
-
 		}
 		else if ( action == "constellation" ) {
 
@@ -2880,111 +2882,117 @@ track <<
 			return ( xml.str() );
 
 		}
-		else if ( action == "view" ) {
+		else if (action == "view") {
+			std::string token;
+			double azimut = 0.0;
+			double altezza = 0.0;
+			bool has_direction = false;
+			bool has_angles = false;
 
-			std::string direction;
-			if ( !cc.eof() ) {
-			
-				cc >> direction;
+			// Leggiamo il primo token dopo "view"
+			if (cc >> token) {
+				// Tentiamo prima di interpretarlo come direzione cardinale
+				if (token == "N" || token == "NE" || token == "NW" ||
+					token == "S" || token == "SE" || token == "SW" ||
+					token == "E" || token == "W" || token == "O" || token == "Z") {
 
-				if ( data->lookfrom.where == "earth" ) {
+					has_direction = true;
 
-					if ( direction == "N" ) {
-
+					if (data->lookfrom.where == "earth") {
 						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::NORTH;
 
+						if (token == "N") {
+							data->lookat.view = clientData::lookAt::VIEW::NORTH;
+						}
+						else if (token == "NE") {
+							data->lookat.view = clientData::lookAt::VIEW::NORTH_EAST;
+						}
+						else if (token == "NW") {
+							data->lookat.view = clientData::lookAt::VIEW::NORTH_WEST;
+						}
+						else if (token == "SE") {
+							data->lookat.view = clientData::lookAt::VIEW::SOUTH_EAST;
+						}
+						else if (token == "SW") {
+							data->lookat.view = clientData::lookAt::VIEW::SOUTH_WEST;
+						}
+						else if (token == "S") {
+							data->lookat.view = clientData::lookAt::VIEW::SOUTH;
+						}
+						else if (token == "E") {
+							data->lookat.view = clientData::lookAt::VIEW::EAST;
+						}
+						else if (token == "W" || token == "O") {
+							data->lookat.view = clientData::lookAt::VIEW::WEST;
+						}
+						else if (token == "Z") {
+							data->lookat.view = clientData::lookAt::VIEW::ZENIT;
+						}
+						else {
+							data->lookat.view = clientData::lookAt::VIEW::NORTH; // default
+						}
 					}
-					else if ( direction == "NE" ) {
-
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::NORTH_EAST;
-
-					}
-					else if ( direction == "NW" ) {
-
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::NORTH_WEST;
-
-					}
-					else if ( direction == "SE" ) {
-
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::SOUTH_EAST;
-
-					}
-					else if ( direction == "SW" ) {
-
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::SOUTH_WEST;
-
-					}
-					else if ( direction == "S" ) {
-
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::SOUTH;
-
-					}
-					else if ( direction == "E" ) {
-
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::EAST;
-
-					}
-					else if ( direction == "W" ||  direction == "O") {
-
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::WEST;
-
-					}
-					else if ( direction == "Z" ) {
-
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::ZENIT;
-
-					}
-					else {
-						data->lookat.where = "sky";
-						data->lookat.view = clientData::lookAt::VIEW::NORTH;
-					}
-
-
-					std::stringstream ss ;
-					ss << "view " << data->lookat.view << std::endl <<
-						data->camera.lookat_x << " " <<
-						data->camera.lookat_y << " " <<
-						data->camera.lookat_z << std::endl;
-
-
-					std::stringstream xml;
-					xml <<
-						"<?xml version=\"1.0\" encoding=\"UTF-8\" ?>" <<
-						"<results>" <<
-							"<terminal>" << ss.str() << "</terminal>" <<
-						"</results>"
-					;
-
-					return ( xml.str() );
-
 				}
+				// Se non è una direzione, proviamo a leggerlo come numero (azimut)
+				else {
+					std::istringstream iss(token);
+					if (iss >> azimut) {
+						// Proviamo a leggere anche l'altezza (secondo float)
+						if (cc >> altezza) {
+							has_angles = true;
 
+							if (data->lookfrom.where == "earth") {
+								data->lookat.where = "sky";
+								data->lookat.azimut = azimut;
+								data->lookat.altezza = altezza;
+								// Opzionale: resettiamo la view enum se usi anche gli angoli
+								// data->lookat.view = clientData::lookAt::VIEW::CUSTOM; // se hai questo valore
+								data->lookat.view = clientData::lookAt::VIEW::NONE;
+//								set_horizont( data );
+							}
+						}
+						else {
+							// C'è solo un numero → probabilmente errore o uso parziale
+							// Decidi tu cosa fare (per ora ignoriamo o usiamo come azimut con altezza 0)
+							if (data->lookfrom.where == "earth") {
+								data->lookat.where = "sky";
+								data->lookat.azimut = azimut;
+								data->lookat.altezza = 0.0;
+							}
+						}
+					}
+					// Se non è né direzione né numero, ignora o usa default
+				}
+			}
+
+			// === Costruzione della risposta XML ===
+			std::stringstream ss;
+			ss << "view ";
+
+			if (has_angles) {
+				ss << "azimut=" << azimut << " altezza=" << altezza;
+			}
+			else if (has_direction) {
+				ss << token;                    // rimandiamo la direzione letta
 			}
 			else {
-
-				std::stringstream xml;
-				xml <<
-					"<?xml version=\"1.0\" encoding=\"UTF-8\" ?>" <<
-					"<results>" <<
-						"<terminal>" << "nothing to do for view" << "</terminal>" <<
-					"</results>"
-				;
-
-				return ( xml.str() );
-
-
+				ss << "N";                      // default
 			}
 
+			ss << std::endl
+			   << data->camera.lookat_x << " "
+			   << data->camera.lookat_y << " "
+			   << data->camera.lookat_z << std::endl;
+
+			std::stringstream xml;
+			xml << "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>"
+				<< "<results>"
+				<< "<terminal>" << ss.str() << "</terminal>"
+				<< "</results>";
+
+			return xml.str();
 		}
+
 		else if ( action == "hit" ) {
 
 			Sky sky;
@@ -4034,6 +4042,7 @@ void WSsrv::set_horizont ( clientData * data )
 			return ;
 
 		case clientData::lookAt::VIEW::AZIMUT :
+		case clientData::lookAt::VIEW::NONE :
 
 			break;
 

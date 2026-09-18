@@ -743,7 +743,8 @@
                       <small>Attendi qualche secondo ✨</small>
                     </div>
                     <button class="btn-success" onclick="listenStory()" id="readBtn" disabled>🔊 Leggi ad Alta Voce</button>
-                    <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled>🎨 Crea Illustrazione</button>
+                    <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled title="Disponibile per gli utenti registrati">🎨 Crea Illustrazione 🔒</button>
+                    <button class="btn-primary" onclick="printStory()" id="printBtn" disabled>🖨️ Stampa PDF</button>
                    <button class="btn-danger" onclick="stopReading()" id="stopBtn" disabled style="display: none;">⏹️ Ferma Lettura</button>
                 </div>
             </div>
@@ -825,6 +826,9 @@
         </div>
     </div>
 
+    <!-- Per il pulsante "Stampa PDF": genera il PDF nel browser, niente da installare lato server -->
+    <script src="safe-html.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
 
     <script>
         let ws = null;
@@ -836,6 +840,19 @@
         let favorites = [];
         let isNightMode = false;
 		let geoCache = null
+        // Generazione immagini disattivata in demo: costo per chiamata troppo
+        // alto per un pulsante libero senza autenticazione. Riattivare quando
+        // sarà disponibile il login (vedi generateIllustration più sotto).
+        const ILLUSTRAZIONE_DISPONIBILE = false;
+
+        // Stato per la stampa PDF: il titolo arriva in modo asincrono dal
+        // server via WebSocket (azione 'title_generated'), risolto qui.
+        let titoloResolver = null;
+        // Font Comic Neue in base64, scaricati una sola volta al primo
+        // utilizzo e tenuti in cache — non servono al caricamento della
+        // pagina, solo quando l'utente stampa davvero una storia.
+        let comicNeueRegularB64 = null;
+        let comicNeueBoldB64 = null;
 
 
 		async function initGeo() {
@@ -993,7 +1010,19 @@ if (response.ok) {
                 audio.play();
             } else if (response.action === 'image_generated') {
                 displayIllustration(response.img);
-            } 
+            } else if (response.action === 'title_generated') {
+                if (titoloResolver) {
+                    titoloResolver(response.title);
+                    titoloResolver = null;
+                }
+            } else if (response.action === 'error') {
+                // Sblocca eventuali bottoni rimasti in stato "in corso" e avvisa l'utente
+                document.getElementById('audioLoading').style.display = 'none';
+                const illustrateBtn = document.getElementById('illustrateBtn');
+                illustrateBtn.disabled = false;
+                illustrateBtn.textContent = '🎨 Crea Illustrazione';
+                alert('Si è verificato un errore: ' + (response.message || 'errore sconosciuto'));
+            }
             // Nuovi messaggi dal server
             else if (response.action === 'user_status') {
                 currentUser = response.data.user || null;
@@ -1001,25 +1030,36 @@ if (response.ok) {
             } 
             else if (response.action === 'company_info') {
                 document.getElementById('companyInfo').innerHTML = `
-                    <strong>${response.data.name}</strong><br>
-                    P.IVA: ${response.data.vat}<br>
-                    ${response.data.address}<br>
-                    Email: <a href="mailto:${response.data.email}" style="color:#667eea;">${response.data.email}</a><br>
+                    <strong>${escapeHTML(response.data.name)}</strong><br>
+                    P.IVA: ${escapeHTML(response.data.vat)}<br>
+                    ${escapeHTML(response.data.address)}<br>
+                    Email: <a href="mailto:${escapeHTML(response.data.email)}" style="color:#667eea;">${escapeHTML(response.data.email)}</a><br>
                     © ${new Date().getFullYear()} Tutti i diritti riservati.
                 `;
 			// ── Nuovi eventi SSE ritrasmessi da Node ────────────────────────
 			} else if (response.tipo === 'nodo_start') {
-				// Aggiorna il messaggio di stato mentre LangGraph avanza
 				const statusEl = document.getElementById('loadingStatus');
 				if (statusEl) {
 					const messaggi = {
-						'analizza_prompt':      '🔍 Analizzo la tua richiesta...',
-						'recupera_astronomia':  '🌌 Guardo il cielo di stanotte...',
-						'recupera_frammenti':   '📚 Sfoglio il libro delle storie...',
-						'genera_racconto':      '✍️ Il Bardo sta scrivendo...',
-						'valida_racconto':      '✨ Rifinitura magica in corso...',
+						'avvio':                 '🪄 Il Piccolo Bardo si sveglia...',
+						'analizza_prompt':       '🔍 Leggo la tua idea e cerco i protagonisti...',
+						'valuta_prompt':         '🛡️ Verifico che la storia sia adatta ai bambini...',
+						'decide_tools':          '🛠️ Scelgo quali magie usare per la favola...',
+						'fetch_contesto_fisico': '🌍 Meteo e cielo stellato in arrivo...',
+						'query_neo4j':           '📚 Sfoglio il libro dei ricordi del Bardo...',
+						'valuta_frammenti':      '🔎 Valuto i ricordi trovati...',
+						'componi_prompt':        '🖊️ Intrecciо personaggi, stelle e ricordi...',
+						'genera_draft':          '✍️ Il Bardo prende la penna... la storia sta nascendo!',
+						'valuta_draft':          '🧐 Rileggo la bozza con occhio critico...',
+						'correggi_draft':        '🔧 Limo gli spigoli del racconto...',
+						'rifinisci':             '💎 Scelgo ogni parola per le orecchie dei bambini...',
+						'salva_memoria':         '💾 Affido la storia alla memoria del Bardo...',
+						'nodo_errore':           '😔 Qualcosa non va... riprovo!',
 					};
-					statusEl.textContent = messaggi[response.nodo] ?? `⚙️ ${response.nodo}...`;
+					const testo = messaggi[response.nodo] ?? `✨ ${response.nodo.replace(/_/g, ' ')}...`;
+					statusEl.style.transition = 'opacity 0.2s';
+					statusEl.style.opacity = '0';
+					setTimeout(() => { statusEl.textContent = testo; statusEl.style.opacity = '1'; }, 200);
 				}
 
 			} else if (response.tipo === 'token') {
@@ -1035,6 +1075,23 @@ if (response.ok) {
 				}
 
 			} else if (response.tipo === 'fine') {
+				// Un prompt rifiutato da valuta_prompt arriva qui con
+				// tipo 'fine' e racconto vuoto, non come evento 'errore' —
+				// prima di questo controllo restava silenzioso: il
+				// bambino/genitore vedeva solo una card vuota, senza
+				// nessuna spiegazione del perché.
+				if (response.errore) {
+					document.getElementById('storyDisplay').innerHTML = `
+						<p style="color: #b33; text-align: center; padding: 20px;">
+							😔 Non posso scrivere questa storia così com'è: ${escapeHTML(response.motivo_rifiuto || response.errore)}<br>
+							<small>Prova a cambiare un po' la tua richiesta!</small>
+						</p>
+					`;
+					document.getElementById('readBtn').disabled = true;
+					document.getElementById('illustrateBtn').disabled = true;
+					return;
+				}
+
 				// Racconto completo ricevuto
 				currentStory.text = response.racconto;
 				currentStory.storia_id = response.storia_id;
@@ -1050,7 +1107,7 @@ if (response.ok) {
 			} else if (response.tipo === 'errore') {
 				document.getElementById('storyDisplay').innerHTML = `
 					<p style="color: red; text-align: center; padding: 20px;">
-						⚠️ ${response.messaggio || 'Qualcosa è andato storto, riprova!'}
+						⚠️ ${escapeHTML(response.messaggio || 'Qualcosa è andato storto, riprova!')}
 					</p>
 				`;
 			}
@@ -1119,6 +1176,22 @@ if (response.ok) {
 			document.getElementById('storyIllustration').style.display = 'none';
 			document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
 
+			// Prepara il DOM PRIMA di inviare, così loadingStatus esiste
+			// quando arrivano i primi eventi nodo_start dal server
+			document.getElementById('storyCard').style.display = 'block';
+			document.getElementById('storyDisplay').innerHTML = `
+				<button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
+				<div class="loading" id="loadingIndicator">
+					<div class="loading-spinner"></div>
+					<p id="loadingStatus">🪄 Il Piccolo Bardo si sveglia...</p>
+				</div>
+				<div id="streamingText" style="display:none; white-space: pre-wrap; line-height: 1.8;"></div>
+			`;
+			document.getElementById('readBtn').disabled = true;
+			document.getElementById('illustrateBtn').disabled = true;
+			document.getElementById('storyIllustration').style.display = 'none';
+			document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
+
 			// Invia a Node via WebSocket con geo
 			sendMessage('generate_story', {
 				endpoint : "fastapi",
@@ -1126,6 +1199,11 @@ if (response.ok) {
 				age: selectedAge,
 				geo: geoCache,           // lat/lon del dispositivo, o null
 				session_id: sessionStorage.getItem('SESSIONID'),
+				// Campi distinti oltre al testo intrecciato sopra: servono al
+				// report YAML amministrativo di ogni storia generata.
+				nome: childName || null,
+				coloreP: favoriteColor || null,
+				animaleP: favoriteAnimal || null,
 			});
 		}        
 
@@ -1135,12 +1213,13 @@ if (response.ok) {
             const display = document.getElementById('storyDisplay');
             display.innerHTML = `
                 <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
-                ${story}
+                ${escapeHTML(story).replace(/\n/g, '<br>')}
             `;
 
             document.getElementById('readBtn').disabled = false;
             document.getElementById('illustrateBtn').disabled = false;
-            
+            document.getElementById('printBtn').disabled = false;
+
             // Verifica se è già nei preferiti
             updateFavoriteButton();
         }
@@ -1157,11 +1236,16 @@ if (response.ok) {
 
         // Illustration Generation
         function generateIllustration() {
+            if (!ILLUSTRAZIONE_DISPONIBILE) {
+                alert('La creazione di illustrazioni sarà disponibile per gli utenti registrati. Per ora è disattivata in questa versione demo.');
+                return;
+            }
+
             if (!currentStory || !currentStory.text) return;
 
-            sendMessage('generate_illustration', { 
+            sendMessage('generate_illustration', {
                 text: currentStory.text,
-                storyId: currentStory.timestamp 
+                storyId: currentStory.timestamp
             });
 
             document.getElementById('illustrateBtn').disabled = true;
@@ -1181,6 +1265,182 @@ if (response.ok) {
             
             if (currentStory) {
                 currentStory.illustration = imageUrl;
+            }
+        }
+
+        // ------------------------------------------------------------
+        // Stampa PDF
+        // ------------------------------------------------------------
+
+        // Il titolo lo chiede al server (una favola non ne ha uno proprio)
+        // e lo tiene in cache su currentStory, così non lo richiede due
+        // volte per la stessa storia. Se il server non risponde in tempo,
+        // dopo 12s usa un titolo di riserva: meglio un titolo generico che
+        // un pulsante bloccato per sempre.
+        function richiediTitolo(testo) {
+            return new Promise((resolve) => {
+                let risolto = false;
+                const finisci = (titolo) => {
+                    if (risolto) return;
+                    risolto = true;
+                    titoloResolver = null;
+                    resolve(titolo);
+                };
+                titoloResolver = finisci;
+                sendMessage('generate_title', { text: testo });
+                setTimeout(() => finisci('La mia favola'), 12000);
+            });
+        }
+
+        function arrayBufferABase64(buffer) {
+            let binario = '';
+            const byte = new Uint8Array(buffer);
+            const dimensioneBlocco = 0x8000;
+            for (let i = 0; i < byte.length; i += dimensioneBlocco) {
+                binario += String.fromCharCode.apply(null, byte.subarray(i, i + dimensioneBlocco));
+            }
+            return btoa(binario);
+        }
+
+        // Font "Comic Neue" (alternativa libera e più curata di Comic Sans,
+        // coerente con lo stile del sito) — jsPDF include solo Helvetica/
+        // Times/Courier di base, serve incorporarne uno adatto a una storia
+        // per bambini. Scaricato una sola volta, poi tenuto in cache.
+        async function caricaFontComicNeue() {
+            if (comicNeueRegularB64 && comicNeueBoldB64) return;
+            const [bufRegular, bufBold] = await Promise.all([
+                fetch('/public/fonts/ComicNeue-Regular.ttf').then(r => r.arrayBuffer()),
+                fetch('/public/fonts/ComicNeue-Bold.ttf').then(r => r.arrayBuffer()),
+            ]);
+            comicNeueRegularB64 = arrayBufferABase64(bufRegular);
+            comicNeueBoldB64 = arrayBufferABase64(bufBold);
+        }
+
+        function immagineComeDataURL(url) {
+            return fetch(url)
+                .then(r => r.blob())
+                .then(blob => new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                }));
+        }
+
+        function dimensioniImmagine(dataUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve({ larghezza: img.naturalWidth, altezza: img.naturalHeight });
+                img.onerror = reject;
+                img.src = dataUrl;
+            });
+        }
+
+        async function printStory() {
+            if (!currentStory || !currentStory.text) {
+                alert('Non c\'è ancora una storia da stampare!');
+                return;
+            }
+
+            const printBtn = document.getElementById('printBtn');
+            const testoOriginaleBtn = printBtn.textContent;
+            printBtn.disabled = true;
+            printBtn.textContent = '⏳ Preparo il PDF...';
+
+            try {
+                if (!currentStory.title) {
+                    currentStory.title = await richiediTitolo(currentStory.text);
+                }
+                await caricaFontComicNeue();
+
+                const doc = new jspdf.jsPDF({ unit: 'mm', format: 'a4' });
+                doc.addFileToVFS('ComicNeue-Regular.ttf', comicNeueRegularB64);
+                doc.addFont('ComicNeue-Regular.ttf', 'ComicNeue', 'normal');
+                doc.addFileToVFS('ComicNeue-Bold.ttf', comicNeueBoldB64);
+                doc.addFont('ComicNeue-Bold.ttf', 'ComicNeue', 'bold');
+
+                const larghezzaPagina = doc.internal.pageSize.getWidth();
+                const altezzaPagina = doc.internal.pageSize.getHeight();
+                const margine = 22;
+                const larghezzaUtile = larghezzaPagina - margine * 2;
+                let y = margine;
+
+                // Titolo
+                doc.setFont('ComicNeue', 'bold');
+                doc.setFontSize(24);
+                doc.setTextColor(102, 126, 234); // #667eea, lo stesso viola del sito
+                doc.splitTextToSize(currentStory.title, larghezzaUtile).forEach(riga => {
+                    doc.text(riga, larghezzaPagina / 2, y, { align: 'center' });
+                    y += 10;
+                });
+                y += 3;
+
+                // Filo decorativo sotto il titolo
+                doc.setDrawColor(102, 126, 234);
+                doc.setLineWidth(0.8);
+                doc.line(margine, y, larghezzaPagina - margine, y);
+                y += 10;
+
+                // Illustrazione, se la storia ne ha una
+                if (currentStory.illustration) {
+                    try {
+                        const dataUrl = await immagineComeDataURL(currentStory.illustration);
+                        const dimensioni = await dimensioniImmagine(dataUrl);
+                        const larghezzaImg = Math.min(110, larghezzaUtile);
+                        const altezzaImg = larghezzaImg * (dimensioni.altezza / dimensioni.larghezza);
+                        if (y + altezzaImg > altezzaPagina - margine) {
+                            doc.addPage();
+                            y = margine;
+                        }
+                        doc.addImage(dataUrl, 'PNG', (larghezzaPagina - larghezzaImg) / 2, y, larghezzaImg, altezzaImg);
+                        y += altezzaImg + 10;
+                    } catch (e) {
+                        console.warn('Illustrazione non inclusa nel PDF:', e);
+                    }
+                }
+
+                // Corpo della storia, paragrafo per paragrafo
+                doc.setFont('ComicNeue', 'normal');
+                doc.setFontSize(13);
+                doc.setTextColor(40, 40, 40);
+                const interlinea = 7;
+                const testoPulito = currentStory.text.replace(/<[^>]+>/g, '');
+
+                testoPulito.split(/\n\s*\n/).forEach(paragrafo => {
+                    const pulito = paragrafo.trim();
+                    if (!pulito) return;
+                    doc.splitTextToSize(pulito, larghezzaUtile).forEach(riga => {
+                        if (y > altezzaPagina - margine) {
+                            doc.addPage();
+                            y = margine;
+                        }
+                        doc.text(riga, margine, y);
+                        y += interlinea;
+                    });
+                    y += interlinea * 0.6;
+                });
+
+                // Piè di pagina su ogni pagina
+                const numPagine = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= numPagine; i++) {
+                    doc.setPage(i);
+                    doc.setFont('ComicNeue', 'normal');
+                    doc.setFontSize(9);
+                    doc.setTextColor(160, 160, 160);
+                    doc.text('Il Piccolo Bardo', larghezzaPagina / 2, altezzaPagina - 10, { align: 'center' });
+                }
+
+                const nomeFile = (currentStory.title || 'storia')
+                    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                    .replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_').slice(0, 60) || 'storia';
+                doc.save(`${nomeFile}.pdf`);
+
+            } catch (e) {
+                console.error('Errore nella creazione del PDF:', e);
+                alert('Non sono riuscito a creare il PDF. Riprova tra poco.');
+            } finally {
+                printBtn.disabled = false;
+                printBtn.textContent = testoOriginaleBtn;
             }
         }
 
@@ -1232,12 +1492,12 @@ if (response.ok) {
                 card.className = 'favorite-card';
                 card.innerHTML = `
                     <button class="delete-btn" onclick="deleteFavorite(${index}); event.stopPropagation();">×</button>
-                    <h3>${fav.childName ? `Favola di ${fav.childName}` : 'Favola Magica'}</h3>
+                    <h3>${fav.childName ? `Favola di ${escapeHTML(fav.childName)}` : 'Favola Magica'}</h3>
                     <p style="font-size: 0.85em; color: #999; margin-bottom: 10px;">
                         📅 ${new Date(fav.timestamp).toLocaleDateString('it-IT')} | 
-                        🎂 ${fav.age} anni
+                        🎂 ${escapeHTML(fav.age)} anni
                     </p>
-                    <p>${fav.text.substring(0, 150)}...</p>
+                    <p>${escapeHTML(fav.text.substring(0, 150))}...</p>
                 `;
                 card.onclick = () => loadFavorite(index);
                 container.appendChild(card);
@@ -1251,7 +1511,7 @@ if (response.ok) {
             document.getElementById('storyCard').style.display = 'block';
             document.getElementById('storyDisplay').innerHTML = `
                 <button class="favorite-btn active" onclick="toggleFavorite()" id="favoriteBtn">❤️</button>
-                ${currentStory.text}
+                ${escapeHTML(currentStory.text).replace(/\n/g, '<br>')}
             `;
 
             if (currentStory.illustration) {
@@ -1338,10 +1598,10 @@ if (response.ok) {
             if (currentUser) {
                 title.textContent = "Impostazioni Account";
                 body.innerHTML = `
-                    <p>Ciao <strong>${currentUser.name || currentUser.email}</strong>! 👋</p>
+                    <p>Ciao <strong>${escapeHTML(currentUser.name || currentUser.email)}</strong>! 👋</p>
                     <hr style="margin: 20px 0; border-color: #ddd;">
-                    <p><strong>Email:</strong> ${currentUser.email}</p>
-                    ${currentUser.childName ? `<p><strong>Bambino:</strong> ${currentUser.childName}</p>` : ''}
+                    <p><strong>Email:</strong> ${escapeHTML(currentUser.email)}</p>
+                    ${currentUser.childName ? `<p><strong>Bambino:</strong> ${escapeHTML(currentUser.childName)}</p>` : ''}
                     <br>
                     <button class="btn-danger" onclick="logout()" style="width:100%; padding:15px;">Esci</button>
                 `;
@@ -1380,7 +1640,7 @@ if (response.ok) {
             const nameSpan = document.getElementById('accountName');
 
             if (currentUser) {
-                btn.innerHTML = `👤 <span class="account-name">${(currentUser.name || currentUser.email).charAt(0).toUpperCase()}</span>`;
+                btn.innerHTML = `👤 <span class="account-name">${escapeHTML((currentUser.name || currentUser.email).charAt(0).toUpperCase())}</span>`;
                 nameSpan.style.display = 'inline';
                 nameSpan.textContent = (currentUser.name || currentUser.email).charAt(0).toUpperCase();
             } else {

@@ -9,6 +9,21 @@ from services.sky_context import ASTRONOMY_CRITERIA, sky_context
 
 logger = logging.getLogger(__name__)
 
+SAFETY_CRITERIA = (
+    "Controlla anche la sicurezza fattuale: nessuna frase, nemmeno detta da un "
+    "personaggio o in tono giocoso o poetico, deve poter essere letta da un "
+    "bambino come un'istruzione reale pericolosa o ambigua. Presta particolare "
+    "attenzione a sole e astri (mai suggerire di guardare il sole, nemmeno 'con "
+    "gli occhi chiusi' o socchiusi — un paradosso poetico può essere frainteso "
+    "alla lettera; es. non 'il sole si guarda solo con gli occhi chiusi' ma 'il "
+    "sole non si guarda direttamente'), fuoco, acqua profonda, altezze e "
+    "sporgersi da balconi o finestre, animali sconosciuti o selvatici, farmaci "
+    "e sostanze. Se una formulazione genera anche solo un dubbio ragionevole di "
+    "questo tipo, proponi una sostituzione diretta e inequivocabile che tolga "
+    "l'ambiguità senza cambiare il senso della scena: qui la chiarezza vale più "
+    "dell'eleganza poetica."
+)
+
 ACTION_CRITERIA = (
     "Verifica esplicitamente l'azione che risolve il problema centrale: confronta "
     "posizione iniziale dell'oggetto, ostacolo, strumento, contatto o sostegno, "
@@ -217,7 +232,7 @@ REVIEW_CRITERIA = (
     "personaggio non rende vera una spiegazione falsa. Non trasformare una "
     "fantasia esplicita in realismo: verifica solo che le sue possibilità siano coerenti. "
     "Se un tentativo fallisce, il successivo deve usare una nuova azione o informazione. "
-    "Non inventare problemi per giustificare una revisione. " + ACTION_CRITERIA
+    "Non inventare problemi per giustificare una revisione. " + ACTION_CRITERIA + SAFETY_CRITERIA
 )
 
 

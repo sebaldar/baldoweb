@@ -2,6 +2,11 @@
 import json
 
 ASTRONOMY_CRITERIA = (
+    "Il tool fornisce fatti geometrici verificati per l'istante indicato: il "
+    "racconto non può aumentare il grado di certezza oltre quello che il tool "
+    "garantisce. Evita 'di sicuro', 'sicuramente', 'senza dubbio' su "
+    "un'osservazione futura anche se la posizione geometrica attuale è nota — "
+    "es. non 'la troverai di sicuro' ma 'puoi provare a cercarla'. "
     "Per le osservazioni reali usa esclusivamente i dati astronomici forniti. "
     "Un corpo elencato è geometricamente disponibile: nuvole, ostacoli e luminosità "
     "possono impedirne l'osservazione. Usa la direzione_cardinale del corpo se presente; "

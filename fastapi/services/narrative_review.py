@@ -18,10 +18,14 @@ SAFETY_CRITERIA = (
     "alla lettera; es. non 'il sole si guarda solo con gli occhi chiusi' ma 'il "
     "sole non si guarda direttamente'), fuoco, acqua profonda, altezze e "
     "sporgersi da balconi o finestre, animali sconosciuti o selvatici, farmaci "
-    "e sostanze. Se una formulazione genera anche solo un dubbio ragionevole di "
-    "questo tipo, proponi una sostituzione diretta e inequivocabile che tolga "
-    "l'ambiguità senza cambiare il senso della scena: qui la chiarezza vale più "
-    "dell'eleganza poetica."
+    "e sostanze. Un paragone di colore o qualità che nomina il sole (es. 'gialla "
+    "come il sole', 'caldo come il sole') non è un problema di sicurezza: non "
+    "descrive né suggerisce l'atto di guardarlo, e non va segnalato o corretto. "
+    "Segnala solo una frase che descrive, consiglia o suggerisce di fissare, "
+    "osservare o guardare direttamente il sole. Se una formulazione genera anche "
+    "solo un dubbio ragionevole su questo, proponi una sostituzione diretta e "
+    "inequivocabile che tolga l'ambiguità senza cambiare il senso della scena: "
+    "qui la chiarezza vale più dell'eleganza poetica."
 )
 
 ACTION_CRITERIA = (

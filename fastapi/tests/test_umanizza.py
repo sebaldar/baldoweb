@@ -107,7 +107,7 @@ class UmanizzaTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertNotIn('racconto_finale', result)
 
-    async def test_length_deviation_over_five_percent_is_rejected(self):
+    async def test_large_length_deviation_is_rejected(self):
         draft = ('Lupetto sentì il cuore battere forte. Poi sentì il vento gelido sul muso. '
                   'Infine sentì la neve sotto le zampe.')
         edit = dict(
@@ -122,6 +122,20 @@ class UmanizzaTests(unittest.IsolatedAsyncioTestCase):
         result = await umanizza({'racconto_finale': draft, 'eta_bambino': 6}, llm)
 
         self.assertNotIn('racconto_finale', result)
+
+    async def test_length_deviation_between_five_and_eight_percent_is_accepted(self):
+        # Quasi tutte le categorie spingono ad aggiungere testo: con più di un
+        # edit contemporaneo capita di superare il vecchio tetto del 5% per pura
+        # somma, pur restando ragionevoli (osservato in produzione: +5,6% su 5
+        # edit validi, scartati tutti). Il tetto è stato alzato all'8%.
+        draft = ' '.join(f'w{i}' for i in range(1, 51))  # 50 parole
+        edit = dict(categoria='dettaglio-incidentale', originale='w25 w26 w27',
+                     sostituzione='w25 w26 w27 con più forza', motivo='aggiunge dettaglio')
+        llm = FakeLLM([diagnosi_json([edit])])
+
+        result = await umanizza({'racconto_finale': draft, 'eta_bambino': 6}, llm)
+
+        self.assertIn('w25 w26 w27 con più forza', result['racconto_finale'])
 
     async def test_edit_introducing_a_reduplication_is_neutralized_by_the_safety_net(self):
         # "forte forte" è già la reduplicazione ammessa nel testo di partenza;

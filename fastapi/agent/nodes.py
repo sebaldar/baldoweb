@@ -821,7 +821,12 @@ async def umanizza(state: BaldoState, llm: LLMRouter) -> dict:
         candidato = apply_edits(racconto, edits, max_edits=6)
         parole_originali = len(racconto.split())
         parole_candidato = len(candidato.split())
-        if parole_originali and abs(parole_candidato - parole_originali) / parole_originali > 0.05:
+        # Quasi tutte le categorie (goffaggine, attrito, dettaglio incidentale...)
+        # spingono ad aggiungere testo più che a toglierlo: con 4-6 edit "buoni"
+        # contemporaneamente capita di superare di poco un tetto stretto per pura
+        # somma, scartando un'intera diagnosi altrimenti valida (osservato: +5,6%
+        # su 5 edit individualmente ragionevoli, contro un tetto originale del 5%).
+        if parole_originali and abs(parole_candidato - parole_originali) / parole_originali > 0.08:
             raise ValueError("Variazione di lunghezza eccessiva")
     except (ValueError, TypeError, AttributeError) as errore:
         # Passo migliorativo, non un cancello: una diagnosi non valida lascia

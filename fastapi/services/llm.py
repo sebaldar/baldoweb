@@ -198,10 +198,14 @@ class LLMRouter:
             "diverso, un piccolo gesto. Non riscrivere l'intera frase se basta cambiare una parte. "
             "Non toccare trama, causalità, personaggi, luoghi, età target: conserva ogni fatto "
             "narrativo. Non aggiungere similitudini, ripetizioni o cornici affettive nuove. "
+            "Ogni originale deve occupare un passaggio distinto: se due punti diversi cadono "
+            "nella stessa frase o le loro citazioni si sovrappongono anche parzialmente, uniscili "
+            "in una sola modifica invece di proporli come due punti separati. "
             f"{vincolo_ritornello}"
             "Restituisci soltanto un oggetto JSON con il campo diagnosi: una lista di oggetti "
-            "con categoria (una delle sei sopra), originale (citazione esatta e univoca dal "
-            "racconto), sostituzione, motivo (perché il punto era troppo regolare)."
+            "con categoria (una delle categorie sopra), originale (citazione esatta e univoca "
+            "dal racconto, che non si sovrapponga a nessun'altra citazione della lista), "
+            "sostituzione, motivo (perché il punto era troppo regolare)."
         )
         return await self._cloud_chat(
             system=system,

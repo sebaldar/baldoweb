@@ -44,6 +44,33 @@ _TITOLO_MARKDOWN_RE = re.compile(r"^\s*#{1,6}\s.+\n+")
 _ENFASI_MARKDOWN_RE = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*")
 _SEPARATORE_MARKDOWN_RE = re.compile(r"^\s*-{3,}\s*$", re.MULTILINE)
 
+# Le sei categorie sono pattern verificabili nel testo (uno stesso costrutto
+# ripeso, la stessa apertura di frase...), non un giudizio estetico generico:
+# così il modello individua solo problemi realmente presenti invece di
+# inventarne per riempire il conteggio richiesto.
+HUMANIZE_CRITERIA = (
+    "Individua tra 4 e 6 punti in cui il racconto è troppo regolare, meccanico o "
+    "prevedibile — scegli i più significativi se ce ne sono di più, e se non ne trovi "
+    "almeno 4 restituisci solo quelli reali, senza inventarne per arrivare al numero. "
+    "Cerca solo pattern realmente presenti, in queste categorie: "
+    "(1) costrutto-stampella: la stessa struttura sintattica riusata più volte per "
+    "introdurre un'azione o una sensazione (es. tre frasi che iniziano tutte con "
+    "'Nome sentì...'); "
+    "(2) apertura di frase monotona: lo stesso avverbio o connettivo in testa a "
+    "frasi consecutive o quasi (es. 'Poi' ripetuto come apertura più volte); "
+    "(3) aggettivazione a coppia meccanica: un doppione aggettivale usato come tic "
+    "ritmico invece che come scelta espressiva (es. 'grande, vecchio, addormentato'); "
+    "(4) simmetria di scena: due momenti paralleli della trama raccontati con lo "
+    "stesso ordine di verbi e la stessa cadenza, che li rende intercambiabili invece "
+    "che distinti nel tono; "
+    "(5) dialogo piatto: sempre lo stesso verbo dichiarativo, nessuna esitazione, "
+    "interruzione o gesto che accompagni la battuta; "
+    "(6) assenza di dettaglio incidentale: ogni frase è strettamente funzionale alla "
+    "trama, senza mai un dettaglio sensoriale non necessario all'azione, di quelli "
+    "che un narratore userebbe per dare consistenza al mondo. "
+    "Non segnalare un punto se non rientra chiaramente in una di queste categorie."
+)
+
 
 @dataclass
 class RisultatoLLM:
@@ -141,6 +168,30 @@ class LLMRouter:
             system=system,
             user=f"Raffina questo racconto:\n\n{draft}",
             fase="rifinisci",
+        )
+
+    async def umanizza(self, draft: str, eta: int, ritornello: str | None = None) -> RisultatoLLM:
+        """Rompe la regolarità meccanica del racconto con interventi minimi e mirati."""
+        vincolo_ritornello = f"Non toccare il ritornello: {ritornello!r}. " if ritornello else ""
+        system = (
+            f"Sei un narratore che rilegge un racconto già pronto per bambini di {eta} anni, "
+            "cercando i segni di una scrittura troppo regolare — quelli che tradiscono un "
+            "testo scritto di fretta, non da un autore che si prende cura del ritmo. "
+            + HUMANIZE_CRITERIA +
+            " Per ogni punto individuato, proponi la modifica minima che lo risolve: una parola "
+            "diversa, un dettaglio concreto, una frase spezzata o unita, un verbo dichiarativo "
+            "diverso, un piccolo gesto. Non riscrivere l'intera frase se basta cambiare una parte. "
+            "Non toccare trama, causalità, personaggi, luoghi, età target: conserva ogni fatto "
+            "narrativo. Non aggiungere similitudini, ripetizioni o cornici affettive nuove. "
+            f"{vincolo_ritornello}"
+            "Restituisci soltanto un oggetto JSON con il campo diagnosi: una lista di oggetti "
+            "con categoria (una delle sei sopra), originale (citazione esatta e univoca dal "
+            "racconto), sostituzione, motivo (perché il punto era troppo regolare)."
+        )
+        return await self._cloud_chat(
+            system=system,
+            user=f"Rileggi questo racconto e individua i punti da variare:\n\n{draft}",
+            fase="umanizza",
         )
 
     # ------------------------------------------------------------------

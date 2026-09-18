@@ -37,7 +37,7 @@ from services.geo_service import GeoService
 from services.composer import StoryComposer
 from services.story_versions import snapshot
 from services.story_style import detect_refrain, count_similitudes
-from services.narrative_review import REVIEW_CRITERIA
+from services.narrative_review import REVIEW_CRITERIA, apply_edits
 
 logger = logging.getLogger(__name__)
 
@@ -774,6 +774,74 @@ async def rifinisci(state: BaldoState, llm: LLMRouter) -> dict:
         "racconto_finale": racconto,
         "versioni_racconto": versions,
         "similitudini_stimate": _conta_similitudini_approssimate(racconto, ritornello=ritornello_atteso),
+        "llm_usage": uso_llm,
+    }
+
+
+# ---------------------------------------------------------------------------
+# NODE 10a — Umanizzazione ritmica
+# ---------------------------------------------------------------------------
+# A differenza di rifinisci (chiarezza, lessico, ridondanza) e di
+# verifica_testo_finale (correttezza fattuale), questo nodo cerca la
+# regolarità meccanica tipica di un testo generato: costrutti-stampella
+# ripetuti, aperture di frase monotone, simmetrie di scena, dialogo piatto.
+# Interventi mirati come correggi_draft, non una riscrittura libera: il
+# modello diagnostica prima (citazioni esatte, riusa apply_edits di
+# narrative_review.py) e interviene solo lì, così il risultato resta
+# auditabile via diff e la trama non rischia di derivare.
+async def umanizza(state: BaldoState, llm: LLMRouter) -> dict:
+    logger.info("[NODE] umanizza")
+
+    racconto = state.get("racconto_finale") or ""
+    if not racconto or llm.routing.get_provider("umanizza") == "nessuno":
+        return {}
+
+    _emit(state, "umanizzazione:inizio",
+          "🎭  Cerco i punti troppo regolari, per dare loro un po' di respiro…")
+
+    ritornello_atteso = state.get("ritornello_atteso")
+    risultato = await llm.umanizza(
+        draft=racconto,
+        eta=state["eta_bambino"],
+        ritornello=ritornello_atteso,
+    )
+    uso_llm = [_uso_revisione(risultato, "umanizza")]
+
+    raw = (risultato.testo or "").strip()
+    fenced = re.fullmatch(r"```(?:json)?\s*\n([\s\S]*?)\n```", raw)
+    try:
+        payload = json.loads(fenced.group(1) if fenced else raw)
+        if not isinstance(payload, dict) or not isinstance(payload.get("diagnosi"), list):
+            raise ValueError("Risposta di umanizzazione non valida")
+        edits = [
+            {"originale": item.get("originale"), "sostituzione": item.get("sostituzione"),
+             "motivo": item.get("motivo")}
+            for item in payload["diagnosi"] if isinstance(item, dict)
+        ]
+        candidato = apply_edits(racconto, edits, max_edits=6)
+        parole_originali = len(racconto.split())
+        parole_candidato = len(candidato.split())
+        if parole_originali and abs(parole_candidato - parole_originali) / parole_originali > 0.05:
+            raise ValueError("Variazione di lunghezza eccessiva")
+    except (ValueError, TypeError, AttributeError) as errore:
+        # Passo migliorativo, non un cancello: una diagnosi non valida lascia
+        # il racconto invariato invece di far fallire l'intera generazione.
+        logger.warning(f"[NODE] umanizza: diagnosi scartata ({errore}). Risposta: {raw!r}")
+        _emit(state, "umanizzazione:fine", "La storia era già abbastanza viva così: nessuna modifica.")
+        return {"llm_usage": uso_llm}
+
+    candidato = _limita_reduplicazioni(candidato, ritornello=ritornello_atteso)
+    if candidato == racconto:
+        _emit(state, "umanizzazione:fine", "La storia era già abbastanza viva così: nessuna modifica.")
+        return {"llm_usage": uso_llm}
+
+    _emit(state, "umanizzazione:fine",
+          f"🎭  {len(payload['diagnosi'])} punti resi meno meccanici.")
+
+    return {
+        "racconto_finale": candidato,
+        "versioni_racconto": [snapshot("umanizza", candidato, uso_llm, diagnosi=payload["diagnosi"])],
+        "similitudini_stimate": _conta_similitudini_approssimate(candidato, ritornello=ritornello_atteso),
         "llm_usage": uso_llm,
     }
 

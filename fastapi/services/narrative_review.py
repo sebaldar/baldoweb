@@ -47,7 +47,9 @@ REQUEST_CRITERIA = (
     " Se è presente una richiesta, restituisci anche verifica_richiesta: una lista "
     "non vuota di oggetti requisito (citazione esatta dalla richiesta), esito "
     "(soddisfatto o mancante), evidenza (citazione esatta dal racconto se soddisfatto, "
-    "stringa vuota se mancante). Controlla tutti i vincoli espliciti, incluse le "
+    "breve, continua e senza omissioni o puntini di sospensione: se serve più di una "
+    "frase per dimostrare il requisito, cita solo il passaggio più diretto, non unire "
+    "più frasi con '...'; stringa vuota se mancante). Controlla tutti i vincoli espliciti, incluse le "
     "condizioni: una richiesta alternativa non impone entrambe le alternative. "
     "Se si chiede di scegliere un pianeta reale, il racconto deve nominarlo, anche "
     "se le nuvole ne impediscono la vista: 'il pianeta' o i soli anelli non bastano. "
@@ -219,20 +221,42 @@ REVIEW_CRITERIA = (
 )
 
 
-def apply_edits(text, edits):
+# Il modello tende a "correggere" apici e virgolette dritti in varianti
+# tipografiche quando ricopia una citazione in JSON, anche quando il testo
+# originale li usa dritti ovunque (osservato: 'originale' scartato perché
+# non trovava match esatto, pur essendo una citazione fedele). La mappa è
+# 1 carattere -> 1 carattere apposta: mantiene testo e sua versione
+# normalizzata della stessa lunghezza, così un indice trovato nella
+# versione normalizzata resta valido anche su quella originale.
+_TIPOGRAFIA_EQUIVALENTE = str.maketrans({
+    '’': "'", '‘': "'",
+    '“': '"', '”': '"',
+    '–': '-', '—': '-',
+})
+
+
+def apply_edits(text, edits, max_edits=5):
     """Validate against the original, then apply non-overlapping edits atomically."""
-    if not isinstance(edits, list) or len(edits) > 5:
-        raise ValueError("Sono ammesse al massimo cinque modifiche locali")
+    if not isinstance(edits, list) or len(edits) > max_edits:
+        raise ValueError(f"Sono ammesse al massimo {max_edits} modifiche locali")
+    normalized_text = text.translate(_TIPOGRAFIA_EQUIVALENTE)
     spans = []
     for edit in edits:
         if not isinstance(edit, dict):
             raise ValueError("Modifica non valida")
         old, new, reason = (edit.get(k) for k in ('originale', 'sostituzione', 'motivo'))
-        if not isinstance(old, str) or not old or text.count(old) != 1:
+        if not isinstance(old, str) or not old:
             raise ValueError("Il passaggio originale deve comparire esattamente una volta")
-        if not isinstance(new, str) or not isinstance(reason, str) or not reason.strip() or old == new:
+        normalized_old = old.translate(_TIPOGRAFIA_EQUIVALENTE)
+        if normalized_text.count(normalized_old) != 1:
+            raise ValueError("Il passaggio originale deve comparire esattamente una volta")
+        start = normalized_text.index(normalized_old)
+        old = text[start:start + len(old)]  # caratteri reali del testo, mai quelli citati dal modello
+        if not isinstance(new, str):
             raise ValueError("Sostituzione o motivazione non valida")
-        start = text.index(old)
+        new = new.translate(_TIPOGRAFIA_EQUIVALENTE)  # confronto e inserimento con la stessa tipografia
+        if not isinstance(reason, str) or not reason.strip() or old == new:
+            raise ValueError("Sostituzione o motivazione non valida")
         spans.append((start, start + len(old), new))
     spans.sort()
     if any(left[1] > right[0] for left, right in zip(spans, spans[1:])):
@@ -277,6 +301,7 @@ async def verifica_testo_finale(state, llm):
     initial_continuity = final_continuity = None
     initial_request = final_request = None
     evidence_repair_used = False
+    edit_repair_used = False
     evidence_errors = []
     try:
         # One correction round, then verify the complete candidate before accepting it.
@@ -412,7 +437,34 @@ async def verifica_testo_finale(state, llm):
                 candidate = original
                 break
             proposed = edits
-            candidate = apply_edits(original, edits)
+            try:
+                candidate = apply_edits(original, edits)
+            except ValueError as error:
+                # Una citazione leggermente sbagliata (tempo verbale, punteggiatura)
+                # non deve buttare via l'intera revisione, già passata dai controlli
+                # di azione/continuità/richiesta: un solo tentativo di ricopiatura
+                # fedele, stesso principio della riparazione evidenze sopra.
+                if edit_repair_used:
+                    raise
+                edit_repair_used = True
+                repair = await llm.chiedi(
+                    system=("Le modifiche proposte non sono state applicate: " + str(error) + ". "
+                            "Ricopia esattamente le citazioni dal racconto ricevuto, senza parafrasare "
+                            "né cambiare tempi verbali, punteggiatura o spazi. Mantieni le stesse "
+                            "sostituzioni e motivazioni, al massimo cinque modifiche. Restituisci "
+                            "soltanto un oggetto JSON con il campo modifiche."),
+                    user=json.dumps({**context, 'modifiche_da_correggere': edits}, ensure_ascii=False),
+                    fase=phase + '.ripara_modifiche')
+                usage.append({'nodo': phase + '.ripara_modifiche', 'modello': repair.modello,
+                              'token_input': repair.token_input, 'token_output': repair.token_output,
+                              'durata_secondi': round(repair.durata_secondi, 2)})
+                raw_repair = repair.testo.strip()
+                fence = re.fullmatch(r"```(?:json)?\s*\n([\s\S]*?)\n```", raw_repair)
+                repaired_payload = json.loads(fence.group(1) if fence else raw_repair)
+                if not isinstance(repaired_payload, dict) or not isinstance(repaired_payload.get('modifiche'), list):
+                    raise ValueError('Riparazione modifiche non valida')
+                edits = proposed = repaired_payload['modifiche']
+                candidate = apply_edits(original, edits)
             for name in [state.get('nome'), *(state.get('personaggi') or [])]:
                 if name and name in original and name not in candidate:
                     raise ValueError('La correzione rimuove un nome richiesto')

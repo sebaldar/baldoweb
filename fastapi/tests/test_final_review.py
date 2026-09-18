@@ -67,6 +67,64 @@ class FinalReviewTests(unittest.TestCase):
         invalid = asyncio.run(verifica_testo_finale(state, FakeLLM([answer(story)])))
         self.assertEqual(invalid['revisione_finale']['esito'], 'non_verificato')
 
+    def test_misquoted_requirement_correction_is_repaired_and_confirmed(self):
+        # Osservato in produzione: la correzione automatica dei requisiti
+        # mancanti citava il verbo sbagliato ("la porta" invece di "la
+        # portò"), apply_edits falliva, e l'intera revisione veniva scartata
+        # come non_verificato pur non avendo nulla di sbagliato nel racconto.
+        story = ('Il sole del mattino scaldava appena la neve intorno alla tana. Il tasso raccolse '
+                  'una nocciola e la portò a Lupetto, vicino al ruscello, mentre gli uccelli cantavano '
+                  'tra i rami spogli.')
+        request = 'Il tasso deve fare un regalo a Lupetto.'
+        audit = json.dumps({
+            'modifiche': [],
+            'azione_decisiva': {'passaggio': story, 'esito': 'coerente', 'collegamento_mancante': ''},
+            'continuita_narrativa': {'esito': 'coerente', 'problemi': []},
+            'verifica_richiesta': [{'requisito': request, 'esito': 'mancante', 'evidenza': ''}],
+        })
+        bad_correction = json.dumps({'modifiche': [
+            {'originale': 'Il tasso raccolse una noce e la porta a Lupetto',
+             'sostituzione': 'Il tasso raccolse una nocciola e la regalò a Lupetto',
+             'motivo': 'Rende esplicito il regalo'}]})
+        good_correction = json.dumps({'modifiche': [
+            {'originale': 'Il tasso raccolse una nocciola e la portò a Lupetto',
+             'sostituzione': 'Il tasso raccolse una nocciola e gliela regalò',
+             'motivo': 'Rende esplicito il regalo'}]})
+        edited_story = ('Il sole del mattino scaldava appena la neve intorno alla tana. Il tasso raccolse '
+                         'una nocciola e gliela regalò, vicino al ruscello, mentre gli uccelli cantavano '
+                         'tra i rami spogli.')
+        confirmation = json.dumps({
+            'modifiche': [],
+            'azione_decisiva': {'passaggio': edited_story, 'esito': 'coerente', 'collegamento_mancante': ''},
+            'continuita_narrativa': {'esito': 'coerente', 'problemi': []},
+            'verifica_richiesta': [{'requisito': request, 'esito': 'soddisfatto', 'evidenza': 'gliela regalò'}],
+        })
+        llm = FakeLLM([audit, bad_correction, good_correction, confirmation])
+        result = asyncio.run(verifica_testo_finale(dict(racconto_finale=story, prompt_originale=request), llm))
+
+        self.assertEqual(len(llm.calls), 4)
+        self.assertEqual(llm.calls[2]['fase'], 'verifica_testo_finale.ripara_modifiche')
+        self.assertEqual(result['revisione_finale']['esito'], 'corretto')
+        self.assertIn('gliela regalò', result['racconto_finale'])
+
+    def test_edit_repair_gives_up_after_one_retry(self):
+        story = 'Il tasso raccolse una nocciola e la portò a Lupetto, vicino al ruscello.'
+        request = 'Il tasso deve fare un regalo a Lupetto.'
+        audit = json.dumps({
+            'modifiche': [],
+            'azione_decisiva': {'passaggio': story, 'esito': 'coerente', 'collegamento_mancante': ''},
+            'continuita_narrativa': {'esito': 'coerente', 'problemi': []},
+            'verifica_richiesta': [{'requisito': request, 'esito': 'mancante', 'evidenza': ''}],
+        })
+        bad_correction = json.dumps({'modifiche': [
+            {'originale': 'frase mai comparsa nel racconto', 'sostituzione': 'altra frase', 'motivo': 'm'}]})
+        llm = FakeLLM([audit, bad_correction, bad_correction])
+        result = asyncio.run(verifica_testo_finale(dict(racconto_finale=story, prompt_originale=request), llm))
+
+        self.assertEqual(len(llm.calls), 3)
+        self.assertEqual(result['revisione_finale']['esito'], 'non_verificato')
+        self.assertEqual(result['racconto_finale'], story)
+
     def test_evidence_repair_keeps_story_and_valid_audits(self):
         data = json.loads(payload([]))
         data['verifica_richiesta'] = [{'requisito': 'Lupetto arriva al ruscello', 'esito': 'soddisfatto', 'evidenza': 'Lupetto raggiunge il ruscello'}]
@@ -261,6 +319,22 @@ class FinalReviewTests(unittest.TestCase):
                  dict(EDIT, originale='ghiaccio', sostituzione='neve')]
         result = apply_edits(STORY, edits)
         self.assertIn('neve con lo ghiaccio', result)
+
+    def test_typographic_apostrophe_in_originale_still_matches_straight_text(self):
+        # Il modello a volte "abbellisce" gli apici in JSON (’ invece di ')
+        # anche quando il testo originale li usa dritti ovunque: la citazione
+        # resta fedele al contenuto, va accettata comunque.
+        text = "L'orso dorme nella grotta fredda."
+        edit = dict(originale='L’orso dorme', sostituzione='L’orso russa forte',
+                     motivo='variare il verbo')
+        result = apply_edits(text, [edit])
+        self.assertEqual(result, "L'orso russa forte nella grotta fredda.")
+
+    def test_apostrophe_only_typographic_difference_is_not_a_valid_edit(self):
+        text = "L'orso dorme nella grotta fredda."
+        edit = dict(originale="L'orso dorme", sostituzione='L’orso dorme', motivo='nessun cambiamento reale')
+        with self.assertRaises(ValueError):
+            apply_edits(text, [edit])
 
 if __name__ == '__main__':
     unittest.main()

@@ -29,6 +29,7 @@ BYPASS: Provider = "nessuno"
 # senza riformulare la query. I controlli restano indipendenti dal bypass.
 FASI_CON_BYPASS: frozenset[str] = frozenset({
     "rifinisci",
+    "umanizza",
     "valuta_frammenti._riformula_termini",
 })
 
@@ -46,6 +47,7 @@ FASI: tuple[str, ...] = (
     "valuta_draft",
     "correggi_draft",
     "rifinisci",
+    "umanizza",
     "verifica_coerenza_domanda.ritornello",
     "verifica_coerenza_domanda.check",
     "verifica_coerenza_domanda.fix",

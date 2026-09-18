@@ -336,5 +336,28 @@ class FinalReviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             apply_edits(text, [edit])
 
+    def test_midsentence_quote_capitalized_by_the_model_still_matches(self):
+        # Osservato in produzione: il modello cita un frammento a metà frase
+        # come se fosse l'inizio di una nuova frase ("Il rondone tornò...")
+        # quando nel testo è in realtà "...e il rondone tornò..." minuscolo.
+        text = ("Nico posò il biscotto sul davanzale e restò a guardare quella pallina di fango "
+                 "incastrata sotto il tetto, piccola e scura contro il cielo chiaro del pomeriggio. "
+                 "Il sole scaldava il muro, l'aria sapeva di polvere e di foglie secche, "
+                 "e il rondone tornò dopo un po', con qualcosa nel becco, e sparì dentro il nido.")
+        edit = dict(originale="Il rondone tornò dopo un po', con qualcosa nel becco, e sparì dentro il nido.",
+                     sostituzione="Il rondone tornò dopo un po', sbandò nel vento, poi con qualcosa nel becco sparì dentro il nido.",
+                     motivo='aggiunge un\'imprecisione fisica')
+        result = apply_edits(text, [edit])
+        self.assertIn("sbandò nel vento, poi con qualcosa nel becco sparì dentro il nido.", result)
+        self.assertNotIn(', e Il rondone', result)
+
+    def test_capitalization_swap_only_applies_when_it_resolves_the_ambiguity(self):
+        # Se anche dopo l'inversione la citazione non è univoca (0 o più occorrenze),
+        # resta un errore: l'inversione non deve inventare un match che non c'è.
+        text = "Il gatto dorme. Il gatto corre."
+        edit = dict(originale='il gatto salta', sostituzione='il gatto vola', motivo='m')
+        with self.assertRaises(ValueError):
+            apply_edits(text, [edit])
+
 if __name__ == '__main__':
     unittest.main()

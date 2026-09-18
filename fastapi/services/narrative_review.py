@@ -248,12 +248,31 @@ def apply_edits(text, edits, max_edits=5):
         if not isinstance(old, str) or not old:
             raise ValueError("Il passaggio originale deve comparire esattamente una volta")
         normalized_old = old.translate(_TIPOGRAFIA_EQUIVALENTE)
+        case_swapped = False
         if normalized_text.count(normalized_old) != 1:
-            raise ValueError("Il passaggio originale deve comparire esattamente una volta")
+            # Il modello a volte "risistema" in maiuscola la prima lettera di una
+            # citazione presa a metà frase (osservato: 'Il rondone tornò...' citato
+            # così, ma nel testo è '...e il rondone tornò...' minuscolo). Si prova
+            # a invertire solo il maiuscolo/minuscolo del primo carattere, mai il
+            # resto della citazione, per non allargare il match ad altre frasi.
+            swapped = (
+                normalized_old[:1].swapcase() + normalized_old[1:]
+                if normalized_old[:1].isalpha() else None
+            )
+            if swapped and normalized_text.count(swapped) == 1:
+                normalized_old, case_swapped = swapped, True
+            else:
+                raise ValueError("Il passaggio originale deve comparire esattamente una volta")
         start = normalized_text.index(normalized_old)
         old = text[start:start + len(old)]  # caratteri reali del testo, mai quelli citati dal modello
         if not isinstance(new, str):
             raise ValueError("Sostituzione o motivazione non valida")
+        if case_swapped and new[:1].isalpha():
+            # Stessa correzione applicata alla sostituzione: il modello capitalizza
+            # allo stesso modo entrambi i lati della citazione, quindi la stessa
+            # inversione va rispecchiata qui per non introdurre un maiuscolo a
+            # metà frase che il testo originale non aveva.
+            new = new[:1].swapcase() + new[1:]
         new = new.translate(_TIPOGRAFIA_EQUIVALENTE)  # confronto e inserimento con la stessa tipografia
         if not isinstance(reason, str) or not reason.strip() or old == new:
             raise ValueError("Sostituzione o motivazione non valida")

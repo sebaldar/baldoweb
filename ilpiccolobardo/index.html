@@ -503,6 +503,20 @@
         .close-modal, .delete-btn { min-width: 44px; min-height: 44px; }
         .delete-btn { width: 44px; height: 44px; top: 4px; right: 4px; }
         .tab-icon { margin-right: 6px; }
+        .install-btn {
+            min-height: 44px; padding: 8px 16px; font-size: 1em; border-radius: 999px;
+            background: var(--primary); color: white; margin: 0 auto;
+        }
+        .install-btn[hidden] { display: none; }
+        @media (max-width: 420px) { .install-btn { padding: 8px 12px; font-size: .9em; } }
+        .favorites-tools { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+        .favorites-tools[hidden] { display: none; }
+        .favorites-tools input { flex: 1 1 200px; min-height: 44px; }
+        .favorites-tools select { flex: 0 1 180px; min-height: 44px; }
+        .favorites-backup { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+        .favorites-section { margin-top: 16px; }
+        .progress { height: 10px; background: rgba(102,126,234,.2); border-radius: 999px; overflow: hidden; margin: 6px auto 0; max-width: 360px; }
+        .progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--primary), var(--secondary)); border-radius: 999px; transition: width .6s ease; }
 
         .reading-tools { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
         .reading-tools .chip { min-width: 44px; }
@@ -803,6 +817,7 @@
             <span class="account-name" id="accountName" style="display:none;"></span>
         </button>
 
+        <button class="install-btn" id="installBtn" onclick="installApp()" hidden>📲 Installa l'app</button>
         <button class="nightmode-toggle" onclick="toggleNightMode()" title="Modalità buonanotte" aria-label="Attiva la modalità buonanotte" aria-pressed="false">🌙</button>
     </div>
 
@@ -942,6 +957,20 @@
         <div id="favorites-tab" class="tab-content">
             <div class="card">
                 <h2>❤️ Le Mie Favole Preferite</h2>
+                <div class="favorites-tools" id="favoritesTools" hidden>
+                    <input type="search" id="favoritesSearch" placeholder="🔎 Cerca tra le favole" aria-label="Cerca tra le favole preferite" oninput="displayFavorites()">
+                    <select id="favoritesSort" aria-label="Ordina le favole" onchange="displayFavorites()">
+                        <option value="recent">Più recenti</option>
+                        <option value="old">Più vecchie</option>
+                        <option value="title">Titolo A-Z</option>
+                    </select>
+                </div>
+                <div class="favorites-backup">
+                    <button class="chip" onclick="exportFavorites()">⬇️ Esporta</button>
+                    <button class="chip" onclick="document.getElementById('importFavorites').click()">⬆️ Importa</button>
+                    <input type="file" id="importFavorites" accept="application/json,.json" hidden onchange="importFavorites(this)">
+                </div>
+                <p class="field-hint">Le favole sono salvate solo su questo dispositivo: usa Esporta per farne una copia.</p>
                 <div class="favorites-section" id="favoritesContainer">
                     <div class="empty-state">
                         <div class="empty-state-icon">📚</div>
@@ -997,7 +1026,7 @@
     <!-- Footer con dati aziendali -->
     <footer>
         <div class="company-info" id="companyInfo">
-            Caricamento dati aziendali...
+            © Il Piccolo Bardo. Tutti i diritti riservati.
         </div>
     </footer>
 
@@ -1068,11 +1097,12 @@
 		
        // Carica preferiti dal localStorage
         function loadFavorites() {
-            const stored = localStorage.getItem('bardo_favorites');
-            if (stored) {
-                favorites = JSON.parse(stored);
-                displayFavorites();
-            }
+            try {
+                const stored = localStorage.getItem('bardo_favorites');
+                if (stored) favorites = JSON.parse(stored);
+            } catch (e) { favorites = []; }
+            if (!Array.isArray(favorites)) favorites = [];
+            displayFavorites();
         }
 
         function saveFavorites() {
@@ -1220,13 +1250,8 @@ if (response.ok) {
                 updateAccountButton();
             } 
             else if (response.action === 'company_info') {
-                document.getElementById('companyInfo').innerHTML = `
-                    <strong>${escapeHTML(response.data.name)}</strong><br>
-                    P.IVA: ${escapeHTML(response.data.vat)}<br>
-                    ${escapeHTML(response.data.address)}<br>
-                    Email: <a href="mailto:${escapeHTML(response.data.email)}" style="color:#667eea;">${escapeHTML(response.data.email)}</a><br>
-                    © ${new Date().getFullYear()} Tutti i diritti riservati.
-                `;
+                try { localStorage.setItem('bardo_company', JSON.stringify(response.data)); } catch (e) {}
+                renderCompanyInfo(response.data);
 			// ── Nuovi eventi SSE ritrasmessi da Node ────────────────────────
 			} else if (response.tipo === 'nodo_start') {
 				const statusEl = document.getElementById('loadingStatus');
@@ -1239,7 +1264,7 @@ if (response.ok) {
 						'fetch_contesto_fisico': '🌍 Meteo e cielo stellato in arrivo...',
 						'query_neo4j':           '📚 Sfoglio il libro dei ricordi del Bardo...',
 						'valuta_frammenti':      '🔎 Valuto i ricordi trovati...',
-						'componi_prompt':        '🖊️ Intrecciо personaggi, stelle e ricordi...',
+						'componi_prompt':        '🖊️ Intreccio personaggi, stelle e ricordi...',
 						'genera_draft':          '✍️ Il Bardo prende la penna... la storia sta nascendo!',
 						'valuta_draft':          '🧐 Rileggo la bozza con occhio critico...',
 						'correggi_draft':        '🔧 Limo gli spigoli del racconto...',
@@ -1248,6 +1273,7 @@ if (response.ok) {
 						'nodo_errore':           '😔 Qualcosa non va... riprovo!',
 					};
 					const testo = messaggi[response.nodo] ?? `✨ ${response.nodo.replace(/_/g, ' ')}...`;
+					advanceProgress(response.nodo);
 					statusEl.style.transition = 'opacity 0.2s';
 					statusEl.style.opacity = '0';
 					setTimeout(() => { statusEl.textContent = testo; statusEl.style.opacity = '1'; }, 200);
@@ -1259,6 +1285,7 @@ if (response.ok) {
 				const streamEl = document.getElementById('streamingText');
 
 				if (loadingEl) loadingEl.style.display = 'none';
+				stopProgress();
 				if (streamEl) {
 					streamEl.style.display = 'block';
 					streamEl.textContent += response.testo;
@@ -1272,6 +1299,7 @@ if (response.ok) {
 				// bambino/genitore vedeva solo una card vuota, senza
 				// nessuna spiegazione del perché.
 				if (response.errore) {
+					stopProgress();
 					document.getElementById('storyDisplay').innerHTML = `
 						<p style="color: #b33; text-align: center; padding: 20px;">
 							😔 Non posso scrivere questa storia così com'è: ${escapeHTML(response.motivo_rifiuto || response.errore)}<br>
@@ -1442,10 +1470,12 @@ if (response.ok) {
 				<button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
 				<div class="loading" id="loadingIndicator">
 					<div class="loading-spinner"></div>
-					<p id="loadingStatus">🪄 Il Piccolo Bardo si sveglia...</p>
+					<p id="loadingStatus" role="status" aria-live="polite">🪄 Il Piccolo Bardo si sveglia...</p>
+					<div class="progress" role="progressbar" aria-label="Avanzamento della favola" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loadingProgress"><div class="progress-fill" id="loadingProgressFill"></div></div>
 				</div>
 				<div id="streamingText" style="display:none; white-space: pre-wrap; line-height: 1.8;"></div>
 			`;
+			startProgress();
 			document.getElementById('readBtn').disabled = true;
 			document.getElementById('illustrateBtn').disabled = true;
 			document.getElementById('storyIllustration').style.display = 'none';
@@ -1468,7 +1498,37 @@ if (response.ok) {
 			});
 		}        
 
+        // ── Barra di avanzamento della generazione ───────────────────────────
+        const PROGRESS_STEPS = ['avvio', 'analizza_prompt', 'valuta_prompt', 'decide_tools', 'fetch_contesto_fisico',
+            'query_neo4j', 'valuta_frammenti', 'componi_prompt', 'genera_draft', 'valuta_draft', 'correggi_draft', 'rifinisci', 'salva_memoria'];
+        let progressReached = 0;
+        let slowTimer = null;
+
+        function setProgress(pct) {
+            const fill = document.getElementById('loadingProgressFill');
+            const bar = document.getElementById('loadingProgress');
+            if (fill) fill.style.width = `${pct}%`;
+            if (bar) bar.setAttribute('aria-valuenow', String(Math.round(pct)));
+        }
+        function startProgress() {
+            progressReached = 0;
+            clearTimeout(slowTimer);
+            // se ci mette parecchio, avvisa che sta ancora lavorando
+            slowTimer = setTimeout(() => {
+                const el = document.getElementById('loadingStatus');
+                if (el) el.textContent = '⏳ Ci sta mettendo un po\'... il Bardo sta ancora lavorando, ancora un attimo ✨';
+            }, 45000);
+        }
+        function advanceProgress(node) {
+            const i = PROGRESS_STEPS.indexOf(node);
+            if (i < 0) return;
+            progressReached = Math.max(progressReached, i + 1); // i nodi possono ripetersi: non si torna indietro
+            setProgress(Math.min(95, (progressReached / PROGRESS_STEPS.length) * 100));
+        }
+        function stopProgress() { clearTimeout(slowTimer); }
+
         function displayStory(story) {
+            stopProgress();
             currentStory.text = story;
             
             const display = document.getElementById('storyDisplay');
@@ -1860,11 +1920,71 @@ if (response.ok) {
             } else {
                 // Aggiungi ai preferiti
                 favorites.unshift(currentStory);
+                nameFavorite(currentStory);
             }
 
             saveFavorites();
             updateFavoriteButton();
             displayFavorites();
+        }
+
+        // Il titolo si genera in background: non blocca il salvataggio e, se fallisce, resta il titolo di riserva
+        const TITOLO_PREDEFINITO = 'La mia favola';
+        async function nameFavorite(story) {
+            if (story.title || !story.text || navigator.onLine === false || titoloResolver) return;
+            const titolo = await richiediTitolo(story.text);
+            if (titolo && titolo !== TITOLO_PREDEFINITO) {
+                story.title = titolo;
+                saveFavorites();
+                displayFavorites();
+            }
+        }
+
+        function favoriteTitle(fav) {
+            return fav.title || (fav.childName ? `Favola di ${fav.childName}` : 'Favola Magica');
+        }
+
+        function exportFavorites() {
+            if (!favorites.length) { showToast('Non ci sono ancora favole da esportare.', 'info'); return; }
+            const blob = new Blob([JSON.stringify(favorites, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `favole-piccolo-bardo-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
+
+        async function importFavorites(input) {
+            const file = input.files[0];
+            input.value = '';
+            if (!file) return;
+            try {
+                if (file.size > 5 * 1024 * 1024) throw new Error('file troppo grande');
+                const data = JSON.parse(await file.text());
+                if (!Array.isArray(data)) throw new Error('formato non valido');
+                const known = new Set(favorites.map(f => f.timestamp));
+                let added = 0;
+                for (const f of data) {
+                    if (!f || typeof f.text !== 'string' || typeof f.timestamp !== 'string' || known.has(f.timestamp)) continue;
+                    favorites.push({
+                        text: f.text.slice(0, 20000),
+                        timestamp: f.timestamp,
+                        age: Number.isFinite(Number(f.age)) ? Number(f.age) : null,
+                        childName: typeof f.childName === 'string' ? f.childName.slice(0, 60) : null,
+                        title: typeof f.title === 'string' ? f.title.slice(0, 120) : undefined,
+                        prompt: typeof f.prompt === 'string' ? f.prompt.slice(0, 8000) : '',
+                    });
+                    known.add(f.timestamp);
+                    added++;
+                }
+                saveFavorites();
+                displayFavorites();
+                showToast(added ? `Importate ${added} favole.` : 'Nessuna favola nuova da importare.', added ? 'success' : 'info');
+            } catch (e) {
+                showToast('Non riesco a leggere questo file: ' + e.message, 'error');
+            }
         }
 
         function updateFavoriteButton() {
@@ -1892,15 +2012,29 @@ if (response.ok) {
                 return;
             }
 
+            const tools = document.getElementById('favoritesTools');
+            tools.hidden = favorites.length < 4;
+            const query = tools.hidden ? '' : document.getElementById('favoritesSearch').value.trim().toLowerCase();
+            const sort = tools.hidden ? 'recent' : document.getElementById('favoritesSort').value;
+            let list = favorites.map((fav, index) => ({ fav, index }));
+            if (query) list = list.filter(({ fav }) => `${favoriteTitle(fav)} ${fav.text}`.toLowerCase().includes(query));
+            if (sort === 'old') list.sort((a, b) => a.fav.timestamp.localeCompare(b.fav.timestamp));
+            else if (sort === 'title') list.sort((a, b) => favoriteTitle(a.fav).localeCompare(favoriteTitle(b.fav), 'it'));
+            else list.sort((a, b) => b.fav.timestamp.localeCompare(a.fav.timestamp));
+
             container.innerHTML = '';
-            favorites.forEach((fav, index) => {
+            if (!list.length) {
+                container.innerHTML = '<div class="empty-state"><p>Nessuna favola corrisponde alla ricerca.</p></div>';
+                return;
+            }
+            list.forEach(({ fav, index }) => {
                 const card = document.createElement('div');
                 card.className = 'favorite-card';
                 card.setAttribute('role', 'button');
                 card.tabIndex = 0;
                 card.innerHTML = `
                     <button class="delete-btn" aria-label="Elimina questa favola" onclick="deleteFavorite(${index}); event.stopPropagation();">×</button>
-                    <h3>${fav.childName ? `Favola di ${escapeHTML(fav.childName)}` : 'Favola Magica'}</h3>
+                    <h3>${escapeHTML(favoriteTitle(fav))}</h3>
                     <p style="font-size: 0.85em; color: #999; margin-bottom: 10px;">
                         📅 ${new Date(fav.timestamp).toLocaleDateString('it-IT')} | 
                         🎂 ${escapeHTML(fav.age)} anni
@@ -2147,6 +2281,52 @@ if (response.ok) {
             if (document.visibilityState === 'visible') reconnectIfNeeded();
         });
         updateOnlineBanner();
+
+        // ── Footer: dati aziendali dal server, con copia locale per l'offline ──
+        function renderCompanyInfo(data) {
+            document.getElementById('companyInfo').innerHTML = `
+                <strong>${escapeHTML(data.name)}</strong><br>
+                P.IVA: ${escapeHTML(data.vat)}<br>
+                ${escapeHTML(data.address)}<br>
+                Email: <a href="mailto:${escapeHTML(data.email)}" style="color:#667eea;">${escapeHTML(data.email)}</a><br>
+                © ${new Date().getFullYear()} Tutti i diritti riservati.
+            `;
+        }
+        (function showCachedCompany() {
+            try {
+                const cached = JSON.parse(localStorage.getItem('bardo_company'));
+                if (cached && cached.name) renderCompanyInfo(cached);
+            } catch (e) {}
+        })();
+
+        // ── Installazione come app ───────────────────────────────────────────
+        let installPrompt = null;
+        const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            installPrompt = e;
+            document.getElementById('installBtn').hidden = false;
+        });
+        window.addEventListener('appinstalled', () => {
+            installPrompt = null;
+            document.getElementById('installBtn').hidden = true;
+            showToast('App installata! La trovi nella schermata Home. ✨', 'success');
+        });
+        // Su iPhone e iPad non esiste il prompt: si mostra un'istruzione
+        if (isIOS && !isStandalone()) document.getElementById('installBtn').hidden = false;
+
+        async function installApp() {
+            if (installPrompt) {
+                installPrompt.prompt();
+                await installPrompt.userChoice.catch(() => {});
+                installPrompt = null;
+                document.getElementById('installBtn').hidden = true;
+            } else {
+                showToast('Per installare: tocca Condividi, poi "Aggiungi a Home".', 'info', 8000);
+            }
+        }
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {

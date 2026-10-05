@@ -13,6 +13,17 @@
     <link rel="apple-touch-icon" href="/public/icons/apple-touch-icon.png">
     <title>Il Piccolo Bardo - Crea la Tua Favola</title>
     <style>
+        @font-face {
+            font-family: 'Comic Neue';
+            src: url('/public/fonts/ComicNeue-Regular.ttf') format('truetype');
+            font-weight: 400; font-style: normal; font-display: swap;
+        }
+        @font-face {
+            font-family: 'Comic Neue';
+            src: url('/public/fonts/ComicNeue-Bold.ttf') format('truetype');
+            font-weight: 700; font-style: normal; font-display: swap;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -30,7 +41,7 @@
         }
 
         body {
-            font-family: 'Comic Sans MS', 'Segoe UI', Arial, sans-serif;
+            font-family: 'Comic Neue', 'Comic Sans MS', 'Segoe UI', Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             min-height: 100dvh;
@@ -100,7 +111,7 @@
             font-size: 0.9em;
         }
 
-        .connection-badge.connected { background: var(--success); color: white; }
+        .connection-badge.connected { display: none; }
         .connection-badge.disconnected { background: var(--danger); color: white; }
         .connection-badge.connecting { background: var(--warning); color: white; }
 
@@ -492,6 +503,16 @@
         .close-modal, .delete-btn { min-width: 44px; min-height: 44px; }
         .delete-btn { width: 44px; height: 44px; top: 4px; right: 4px; }
         .tab-icon { margin-right: 6px; }
+        .field-hint { margin-top: 6px; font-size: 0.9em; color: #666; }
+        .field-hint[hidden] { display: none; }
+        body.nightmode .field-hint { color: #bdc3c7; }
+        .link-btn {
+            display: inline; padding: 0; min-height: 0; background: none; border: none; font-size: inherit;
+            font-weight: 700; color: var(--primary); text-decoration: underline; cursor: pointer;
+        }
+        .link-btn:hover { transform: none; }
+        body.nightmode .link-btn { color: #f39c12; }
+        #illustrateBtn[hidden] { display: none; }
 
         .chip-group { display: flex; flex-wrap: wrap; gap: 10px; }
         .chip {
@@ -715,6 +736,10 @@
         /* Smartphone: le schede diventano una barra in basso, raggiungibile col pollice */
         @media (max-width: 768px) {
             body { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
+            header { padding: 14px 12px; margin-bottom: 16px; border-radius: 16px; }
+            header h1 { font-size: 1.6em; margin-bottom: 4px; }
+            header .subtitle { font-size: 1em; }
+            .connection-badge { margin-top: 8px; padding: 4px 14px; }
             .tabs {
                 position: fixed; left: 0; right: 0; bottom: 0; z-index: 998; margin: 0; gap: 0;
                 border: none; background: rgba(255,255,255,0.96); backdrop-filter: blur(10px);
@@ -764,7 +789,7 @@
         <header>
             <h1>🎭 Il Piccolo Bardo</h1>
             <p class="subtitle">Crea Favole Magiche Personalizzate</p>
-            <div class="connection-badge" id="connectionStatus">Disconnesso</div>
+            <div class="connection-badge" id="connectionStatus" role="status" aria-live="polite">Disconnesso</div>
         </header>
 
 
@@ -782,6 +807,7 @@
                 <div class="form-group">
                     <label for="childName">👤 Come si chiama il bambino? (opzionale)</label>
                     <input type="text" id="childName" placeholder="es: Giulia" autocomplete="off">
+                    <p class="field-hint" id="profileHint" hidden>Nome ed età restano salvati solo su questo dispositivo. <button type="button" class="link-btn" onclick="forgetProfile()">Dimentica</button></p>
                 </div>
 
                 <div class="form-group">
@@ -865,7 +891,7 @@
                       <small>Attendi qualche secondo ✨</small>
                     </div>
                     <button class="btn-success" onclick="listenStory()" id="readBtn" disabled>🔊 Leggi ad Alta Voce</button>
-                    <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled title="Disponibile per gli utenti registrati">🎨 Crea Illustrazione 🔒</button>
+                    <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled hidden title="Disponibile per gli utenti registrati">🎨 Crea Illustrazione 🔒</button>
                     <button class="btn-primary" onclick="printStory()" id="printBtn" disabled>🖨️ Stampa PDF</button>
                     <button class="btn-warning" onclick="togglePause()" id="pauseBtn" style="display: none;">⏸️ Pausa</button>
                     <button class="btn-danger" onclick="stopReading()" id="stopBtn" style="display: none;">⏹️ Ferma Lettura</button>
@@ -1281,6 +1307,36 @@ if (response.ok) {
             return `Racconta una storia ${genre || ''}${setting ? ` ambientata ${setting}` : ''}.`.replace(/\s+/g, ' ');
         }
 
+        // ── Profilo ricordato su questo dispositivo ──────────────────────────
+        function saveProfile() {
+            try {
+                const name = document.getElementById('childName').value.trim();
+                localStorage.setItem('bardo_profile', JSON.stringify({ name, age: selectedAge }));
+            } catch (e) {}
+            document.getElementById('profileHint').hidden = false;
+        }
+
+        function loadProfile() {
+            let profile = null;
+            try { profile = JSON.parse(localStorage.getItem('bardo_profile')); } catch (e) {}
+            if (!profile) return;
+            if (profile.name) document.getElementById('childName').value = profile.name;
+            if (profile.age) {
+                const btn = [...document.querySelectorAll('.age-btn')].find(b => b.textContent.trim().startsWith(String(profile.age)));
+                if (btn) selectAge(profile.age, btn);
+            }
+            document.getElementById('profileHint').hidden = false;
+        }
+
+        function forgetProfile() {
+            try { localStorage.removeItem('bardo_profile'); } catch (e) {}
+            document.getElementById('childName').value = '';
+            selectedAge = null;
+            document.querySelectorAll('.age-btn').forEach(b => { b.classList.remove('selected'); b.setAttribute('aria-pressed', 'false'); });
+            document.getElementById('profileHint').hidden = true;
+            showToast('Ho dimenticato nome ed età.', 'info');
+        }
+
         function selectAge(age, btn) {
             selectedAge = age;
             document.querySelectorAll('.age-btn').forEach(b => {
@@ -1304,6 +1360,7 @@ if (response.ok) {
 				return;
 			}
 			stopReading();
+			saveProfile();
 
 			const childName = document.getElementById('childName').value;
 			const favoriteAnimal = document.getElementById('favoriteAnimal').value;
@@ -1851,6 +1908,8 @@ if (response.ok) {
         window.addEventListener('load', () => {
             connect();
             loadFavorites();
+            loadProfile();
+            document.getElementById('illustrateBtn').hidden = !ILLUSTRAZIONE_DISPONIBILE;
             updateAccountButton(); // iniziale
             
             // Carica voci per TTS in anticipo (importante per la fluidità)

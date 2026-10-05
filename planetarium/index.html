@@ -157,6 +157,7 @@
 <body>
     <div id="canvas-container"></div>
     
+    <div id="pointing-status" role="status" aria-live="polite" hidden></div>
     <div id="top-bar">
         <div id="search-box" role="search">
             <input type="search" id="sky-search" placeholder="🔎 Cerca: Luna, Sirio, Orione…"
@@ -250,7 +251,7 @@
     </button>
 
     <div id="controls" role="toolbar" aria-label="Strumenti">
-        <button id="toggle-labels" aria-label="Etichette sul cielo" aria-pressed="false" title="Etichette sul cielo (T)">🏷️ <span class="dock-text">Etichette</span></button>
+        <button id="toggle-labels" aria-label="Etichette sul cielo: spente" aria-pressed="false" data-level="0" title="Etichette sul cielo (T)">🏷️ <span class="dock-text">Etichette</span> <span class="label-state" aria-hidden="true">Off</span></button>
         <button id="toggle-help" aria-label="Comandi da tastiera" aria-controls="keyboard-help" title="Comandi da tastiera">⌨️ <span class="dock-text">Tastiera</span></button>
         <button id="toggle-console" aria-label="Console" aria-controls="console-log" title="Console (C)">📋 <span class="dock-text">Console</span></button>
         <label for="zoom-slider" class="dock-zoom">🔍 <span id="zoom-value">1.0</span></label>
@@ -291,11 +292,11 @@
         <div class="dialog-content"></div>
     </div>
 
-    <div id="location-dialog" style="display:none;">
+    <div id="location-dialog" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="location-title">
         <div class="location-dialog-content">
             <div class="location-dialog-header">
-                <h3>🌍 Seleziona Posizione e Vista</h3>
-                <button class="dialog-close" onclick="closeLocationDialog()">×</button>
+                <h3 id="location-title">🌍 Seleziona Posizione e Vista</h3>
+                <button class="dialog-close" onclick="closeLocationDialog()" aria-label="Chiudi">×</button>
             </div>
             
             <div id="location-map" style="width:100%;height:400px;margin:15px 0;border-radius:8px;"></div>
@@ -360,7 +361,7 @@
         <div id="chatbot-popup">
             <div id="chatbot-popup-header">
                 <span>🤖 Assistente Planetarium</span>
-                <button id="chatbot-popup-close" onclick="chatbotClosePopup()">×</button>
+                <button id="chatbot-popup-close" onclick="chatbotClosePopup()" aria-label="Chiudi la chat"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
             </div>
             <div id="chatbot-messages"></div>
             <div id="chatbot-typing" class="chatbot-hidden">
@@ -375,21 +376,24 @@
         </div>
         
         <div id="chatbot-bar">
-            <button id="chatbot-toggle-btn" onclick="chatbotTogglePopup()" title="Apri/chiudi chat">
-                <span id="chatbot-toggle-icon">💬</span>
+            <button id="chatbot-toggle-btn" onclick="chatbotTogglePopup()" title="Apri/chiudi chat" aria-label="Apri o chiudi la chat">
+                <span id="chatbot-toggle-icon">
+                    <svg class="icon-chat" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg>
+                    <svg class="icon-close" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </span>
             </button>
             <input  type="text" id="chatbot-input"
                     placeholder="Chiedi qualcosa sulle stelle…"
                     onkeydown="event.stopPropagation(); if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); chatbotSend(); }"
                     autocomplete="off">
             
-            <button id="chatbot-mic-btn" onclick="chatbotToggleVoice()" title="Parla">
+            <button id="chatbot-mic-btn" onclick="chatbotToggleVoice()" title="Parla" aria-label="Detta un messaggio">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                     <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                 </svg>
             </button>
             
-            <button id="chatbot-send-btn" onclick="chatbotSend()">
+            <button id="chatbot-send-btn" onclick="chatbotSend()" title="Invia" aria-label="Invia il messaggio">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
                     <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                 </svg>
@@ -397,11 +401,11 @@
         </div>   
     </div>
 
-    <div id="help-modal" style="display:none;">
+    <div id="help-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="help-title">
         <div class="help-content">
             <div class="help-header">
-                <h3>🌌 Guida al Planetario 3D</h3>
-                <button class="dialog-close" onclick="toggleHelpModal()">×</button>
+                <h3 id="help-title">🌌 Guida al Planetario 3D</h3>
+                <button class="dialog-close" onclick="toggleHelpModal()" aria-label="Chiudi la guida">×</button>
             </div>
             
             <div class="help-body">
@@ -1118,7 +1122,7 @@
                 const suggestions = document.getElementById('chatbot-suggestions');
 
                 popup.classList.toggle('chatbot-popup-visible', _popupOpen);
-                icon.textContent = _popupOpen ? '✕' : '💬';
+                icon.classList.toggle('open', _popupOpen);
                 
                 if (suggestions) suggestions.style.display = _popupOpen ? 'none' : 'flex';
 
@@ -1131,7 +1135,7 @@
             window.chatbotClosePopup = function() {
                 _popupOpen = false;
                 document.getElementById('chatbot-popup').classList.remove('chatbot-popup-visible');
-                document.getElementById('chatbot-toggle-icon').textContent = '💬';
+                document.getElementById('chatbot-toggle-icon').classList.remove('open');
                 
                 const suggestions = document.getElementById('chatbot-suggestions');
                 if (suggestions) suggestions.style.display = 'flex';

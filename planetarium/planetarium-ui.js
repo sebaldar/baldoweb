@@ -41,7 +41,29 @@ const skyUI = (function () {
         return [...starts, ...contains].slice(0, 8);
     }
 
+    // ── Feedback di puntamento ────────────────────────────────────────────────
+    let pointing = null; // { since, last, stable }
+    function showPointing(name) {
+        const el = document.getElementById('pointing-status');
+        if (!el) return;
+        el.textContent = `Sto puntando ${name}…`;
+        el.hidden = false;
+        pointing = { since: performance.now(), last: null, stable: 0 };
+    }
+    function trackPointing(view) {
+        if (!pointing) return;
+        const elapsed = performance.now() - pointing.since;
+        pointing.stable = view === pointing.last ? pointing.stable + 1 : 0;
+        pointing.last = view;
+        // fine quando la vista smette di cambiare, comunque entro 8 secondi
+        if ((elapsed > 1200 && pointing.stable >= 2) || elapsed > 8000) {
+            document.getElementById('pointing-status').hidden = true;
+            pointing = null;
+        }
+    }
+
     function goTo(item) {
+        showPointing(item.name);
         if (item.body) {
             const { lon, lat } = simulation.snapshot();
             sendCommand(`observe ${lon} ${lat} ${item.body}`);
@@ -88,7 +110,16 @@ const skyUI = (function () {
                 li.addEventListener('pointerdown', (e) => { e.preventDefault(); choose(item); });
                 list.appendChild(li);
             });
-            list.hidden = items.length === 0;
+            if (!items.length && input.value.trim()) {
+                const li = document.createElement('li');
+                li.className = 'sky-no-result';
+                li.setAttribute('role', 'status');
+                li.textContent = 'Nessun risultato';
+                list.appendChild(li);
+                list.hidden = false;
+            } else {
+                list.hidden = items.length === 0;
+            }
             input.setAttribute('aria-expanded', String(items.length > 0));
             active = -1;
         }
@@ -110,6 +141,7 @@ const skyUI = (function () {
     const NOT_LABELLED = new Set(['sky', 'eclittica', 'ecliptic', 'equatore', 'equator',
         'hor_circle', 'hor_line', 'hor_nord', 'grid', 'axis', 'sunlight']);
     const LEVEL_TEXT = ['spente', 'corpi del sistema solare', 'tutti gli oggetti'];
+    const LEVEL_BADGE = ['Off', 'Corpi', 'Tutti'];
     let labelLevel = 0;
     const labelEls = new Map();
     const _pos = typeof THREE !== 'undefined' ? new THREE.Vector3() : null;
@@ -119,7 +151,11 @@ const skyUI = (function () {
         const btn = document.getElementById('toggle-labels');
         if (btn) {
             btn.setAttribute('aria-pressed', String(level > 0));
+            btn.dataset.level = String(level);
             btn.title = `Etichette: ${LEVEL_TEXT[level]} (T)`;
+            btn.setAttribute('aria-label', `Etichette sul cielo: ${LEVEL_TEXT[level]}`);
+            const badge = btn.querySelector('.label-state');
+            if (badge) badge.textContent = LEVEL_BADGE[level];
         }
         if (level === 0) { document.getElementById('sky-labels').replaceChildren(); labelEls.clear(); }
         if (typeof logToPage === 'function') logToPage(`🏷️ Etichette: ${LEVEL_TEXT[level]}`, 'info');
@@ -167,7 +203,9 @@ const skyUI = (function () {
         document.getElementById('strip-datetime').textContent =
             date && time ? `${d}/${m}/${y} ${time} UT` : '--';
         document.getElementById('strip-place').textContent = `${text('latitude')} ${text('longitude')}`.replace(/--\s--/, '--');
-        document.getElementById('strip-view').textContent = `Az ${text('azimut')} · Alt ${text('height')}`;
+        const view = `Az ${text('azimut')} · Alt ${text('height')}`;
+        document.getElementById('strip-view').textContent = view;
+        trackPointing(view);
     }
 
     // ── Gesti touch: un dito ruota la vista, due dita fanno zoom ──────────────
@@ -221,10 +259,69 @@ const skyUI = (function () {
         container.addEventListener('pointercancel', release);
     }
 
+    // ── Finestre modali: focus, Esc, sfondo inerte ────────────────────────────
+    // Osserva display di #location-dialog e #help-modal, così funziona con le
+    // funzioni di apertura/chiusura esistenti senza riscriverle.
+    function initModals() {
+        const closers = {
+            'location-dialog': () => typeof closeLocationDialog === 'function' && closeLocationDialog(),
+            'help-modal': () => typeof toggleHelpModal === 'function' && toggleHelpModal(),
+        };
+        const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+        const stack = []; // { el, opener }
+        const isOpen = (el) => el.style.display !== 'none' && getComputedStyle(el).display !== 'none';
+
+        function refreshInert() {
+            const top = stack[stack.length - 1]?.el;
+            for (const child of document.body.children) {
+                if (['SCRIPT', 'STYLE', 'LINK'].includes(child.tagName)) continue;
+                child.inert = !!top && child !== top;
+            }
+        }
+        function onOpen(el) {
+            if (stack.some(m => m.el === el)) return;
+            stack.push({ el, opener: document.activeElement });
+            refreshInert();
+            (el.querySelector('[autofocus]') || el.querySelector(FOCUSABLE) || el).focus?.();
+        }
+        function onClose(el) {
+            const i = stack.findIndex(m => m.el === el);
+            if (i < 0) return;
+            const [{ opener }] = stack.splice(i, 1);
+            refreshInert();
+            if (opener && document.contains(opener)) opener.focus?.();
+        }
+
+        Object.keys(closers).forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.tabIndex = -1;
+            const sync = () => (isOpen(el) ? onOpen(el) : onClose(el));
+            new MutationObserver(sync).observe(el, { attributes: true, attributeFilter: ['style', 'class'] });
+            sync();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            const top = stack[stack.length - 1];
+            if (!top) return;
+            if (e.key === 'Escape') {
+                e.preventDefault(); e.stopPropagation();
+                closers[top.el.id]?.();
+            } else if (e.key === 'Tab') {
+                const items = [...top.el.querySelectorAll(FOCUSABLE)].filter(n => n.offsetParent !== null);
+                if (!items.length) { e.preventDefault(); return; }
+                const first = items[0], last = items[items.length - 1];
+                if (e.shiftKey && (document.activeElement === first || !top.el.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && (document.activeElement === last || !top.el.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+            }
+        }, true);
+    }
+
     // ── Avvio ─────────────────────────────────────────────────────────────────
     function init() {
         initSearch();
         initTouch();
+        initModals();
         document.getElementById('toggle-labels')?.addEventListener('click', cycleLabels);
         document.getElementById('toggle-console')?.addEventListener('click', () => {
             const open = document.getElementById('console-log').classList.contains('visible');

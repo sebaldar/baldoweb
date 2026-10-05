@@ -266,17 +266,17 @@ async createPlotFragment(fragmentData) {
   async createCharacter(charData) {
     const session = this.getSession();
     try {
+      // MERGE per nome (non CREATE): i frammenti caricati da /loader/ collegano
+      // i personaggi via MERGE (p:Character {name}) — usare CREATE qui avrebbe
+      // creato doppioni invece di riusare/arricchire lo stesso nodo.
       const result = await session.run(
-        `CREATE (c:Character {
-          id: $id,
-          name: $name,
-          traits: $traits,
-          description: $description
-        })
+        `MERGE (c:Character {name: $name})
+        SET c.traits = $traits,
+            c.description = $description
         RETURN c`,
         charData
       );
-      console.log(`✓ Personaggio creato: ${charData.name}`);
+      console.log(`✓ Personaggio creato/aggiornato: ${charData.name}`);
       return result.records[0].get('c').properties;
     } finally {
       await session.close();
@@ -1162,10 +1162,12 @@ const result = await session.run(
   async updateCharacter(charData) {
     const session = this.getSession();
     try {
+      // Il nome è la chiave (non un id separato): coerente con come i
+      // frammenti collegano i personaggi ovunque nel grafo. Non permette
+      // di rinominare: il campo Nome resta bloccato in modifica lato UI.
       const result = await session.run(
-        `MATCH (c:Character {id: $id})
-         SET c.name = $name,
-             c.description = $description,
+        `MATCH (c:Character {name: $name})
+         SET c.description = $description,
              c.traits = $traits
          RETURN c`,
         charData
@@ -1302,10 +1304,16 @@ const result = await session.run(
   }
 
   /**
-   * Elimina un personaggio
+   * Elimina un personaggio (per nome: i Character non hanno un id, vedi createCharacter)
    */
-  async deleteCharacter(characterId) {
-    await this.deleteNode('Character', characterId);
+  async deleteCharacter(name) {
+    const session = this.getSession();
+    try {
+      await session.run(`MATCH (c:Character {name: $name}) DETACH DELETE c`, { name });
+      console.log(`✓ Personaggio eliminato: ${name}`);
+    } finally {
+      await session.close();
+    }
   }
 
   /**
@@ -1362,8 +1370,9 @@ const response = await this.openai.audio.speech.create({
 
 
     // Crea cartella public/audio se non esiste
-  //  const audioDir = path.join(__dirname, 'public', 'audio');
-    const audioDir = "/home/dedalo/IL_PICCOLO_BARDO/www/public/audio";
+    // Deve puntare al mount Docker (./ilpiccolobardo/public → /app/ilpiccolobardo/public)
+    // che è la cartella servita da Apache (DocumentRoot .../ilpiccolobardo)
+    const audioDir = "/app/ilpiccolobardo/public/audio";
 
     await fs.mkdir(audioDir, { recursive: true });
 
@@ -1375,8 +1384,40 @@ const response = await this.openai.audio.speech.create({
     // Restituisci URL accessibile dal frontend
     return `/public/audio/${fileName}`;
   }
-  
-  async generateImageFromStory (generatedStory) 
+
+  /**
+   * Genera un titolo breve ed evocativo per una favola, per il pulsante
+   * "Stampa PDF" del frontend (le storie non hanno un titolo proprio,
+   * vengono identificate solo dal prompt originale).
+   * @param {string} storyText - testo completo della favola
+   * @returns {Promise<string>} titolo breve, senza virgolette o punteggiatura finale
+   */
+  async generateTitle(storyText) {
+    const response = await this.openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "system",
+          content: `
+  Sei un editor di libri per l'infanzia. Data una favola per bambini in età
+  prescolare, crea un titolo breve (massimo 5-6 parole), evocativo e adatto
+  all'età, nello stile di un titolo di libro illustrato per bambini.
+  Rispondi ESCLUSIVAMENTE con il titolo: niente virgolette, niente punto
+  finale, nessun'altra parola.
+  `
+        },
+        {
+          role: "user",
+          content: `FAVOLA:\n${storyText}`
+        }
+      ]
+    });
+
+    const titolo = (response.output_text || "").trim().replace(/^["'«]+|["'»]+$/g, "");
+    return titolo || "La mia favola";
+  }
+
+  async generateImageFromStory (generatedStory)
   {
     const visualPrompt = await  this.extractVisualPromptFromStory(generatedStory) ;
     return this.generateImageFromPrompt(visualPrompt) ;
@@ -1456,7 +1497,9 @@ const response = await this.openai.audio.speech.create({
     }
 
     // Directory immagini pubbliche
-    const imagesDir = "/home/dedalo/IL_PICCOLO_BARDO/www/public/images";
+    // Deve puntare al mount Docker (./ilpiccolobardo/public → /app/ilpiccolobardo/public)
+    // che è la cartella servita da Apache (DocumentRoot .../ilpiccolobardo)
+    const imagesDir = "/app/ilpiccolobardo/public/images";
     await fs.mkdir(imagesDir, { recursive: true });
 
     const fileName = `illustration_${Date.now()}.png`;

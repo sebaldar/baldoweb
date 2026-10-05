@@ -1,5 +1,5 @@
 # --- STAGE 1: BUILDER ---
-FROM node:18-bookworm AS builder
+FROM node:24-bookworm AS builder
 
 # Installazione dipendenze di sistema
 RUN apt-get update && apt-get install -y \
@@ -26,20 +26,33 @@ RUN cd cpp/geometria/source && g++ -fPIC -Wall -Wextra -std=c++17 -I. $COMMON_IN
 RUN cd cpp/libPlanetarium/color && g++ -fPIC -Wall -Wextra -std=c++17 -I. $COMMON_INCLUDES -c color.cpp -o color.o
 RUN cd cpp/libPlanetarium/timer/source && g++ -fPIC -Wall -Wextra -std=c++17 -I. $COMMON_INCLUDES -c timer.cpp -o timer.o
 
+# ... [Tutta la parte C++ precedente rimane IDENTICA] ...
+
 # Creazione libreria finale Planetarium
 RUN cd cpp/libPlanetarium && make -f Makefile clean && cp /app/cpp/Utils/Utils.o . && cp /app/cpp/libPlanetarium/elp82b/*.o . \
     && cp /app/cpp/geometria/source/*.o . && cp /app/cpp/libPlanetarium/color/*.o . && cp /app/cpp/libPlanetarium/timer/source/*.o . \
     && make -f Makefile libPlanetarium.so && make -f Makefile install
 
-# 2. Copia i file del server Node.js (Questo layer cambierà spesso)
+# -----------------------------------------------------------------------------
+# 2. Ottimizzazione Cache per Node.js
+# -----------------------------------------------------------------------------
+
+# A. Copia SOLO i file di configurazione e i sorgenti C++ dei binding
+# Questo crea un layer che cambia SOLO se modifichi le dipendenze o il binding nativo
+COPY server/package*.json ./server/
+COPY server/native ./server/native
+
+# B. Esegui le compilazioni pesanti
+RUN cd server/native && npm install -g node-gyp@13.0.2 && node-gyp rebuild
+RUN cd server && npm ci --omit=dev
+
+# C. ORA copia il resto del codice Node.js (i file .js, le rotte, ecc.)
+# Modificare un file .js invaliderà solo questo layer, saltando la compilazione sopra!
 COPY server ./server
 
-# Compilazione dei bindings nativi Node e installazione moduli
-RUN cd server/native && npm install -g node-gyp && node-gyp rebuild --verbose
-RUN cd server && npm install --omit=dev
-
 # --- STAGE 2: RUNTIME ---
-FROM node:18-bookworm-slim
+
+FROM node:24-bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     libmariadb3 libcurl4 \
@@ -62,6 +75,7 @@ RUN ldconfig
 # Copia il server Node compilato
 COPY --from=builder /app/server /app/server
 RUN mkdir -p /app/server/logs
+RUN mkdir -p /app/data/uploads && chmod 777 /app/data/uploads
 
 EXPOSE 3000
 

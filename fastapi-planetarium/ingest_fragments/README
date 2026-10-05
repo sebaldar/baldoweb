@@ -1,0 +1,26 @@
+# Aggiorna gli indici dei pacchetti
+sudo apt update
+
+# Installa pip e il supporto agli ambienti virtuali
+sudo apt install python3-pip python3-venv
+
+# Crea l'ambiente virtuale chiamato 'venv'
+python3 -m venv venv
+
+# Attivalo
+source venv/bin/activate
+
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Crea il file init se non esiste
+touch src/__init__.py
+
+# Crea la cartella log (necessaria per il FileHandler in main.py)
+mkdir -p logs
+
+# Lancia l'ingestione
+export PYTHONPATH=$PYTHONPATH:.
+
+
+python3 main.py --mag-limit 6.5

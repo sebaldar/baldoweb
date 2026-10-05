@@ -1,53 +1,32 @@
 import 'dotenv/config';
-import { createRequire } from 'module';
-import path from 'path';
+import { loadSolarModule } from '../../services/native-loader.js';
+import { handleChat } from '../../services/planetarium-chat.js';
 
-// Inizializziamo require per caricare il binario .node
-const require = createRequire(import.meta.url);
-
-// Percorso assoluto basato sulla root del container (/app)
-const SOLAR_PATH = '/app/server/native/build/Release/solar.node';
-
-let solar;
-try {
-    solar = require(SOLAR_PATH);
-    console.log("✅ Modulo C++ Solar caricato correttamente");
-} catch (err) {
-    console.error("❌ Errore critico nel caricamento del modulo Solar:", err.message);
-    process.exit(1);
-}
+const solar = loadSolarModule();
+const escapeXml = value => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export default {
     async exe(server, ws, message) {
-        const doc = message.doc;
-        
+        const doc = message.doc || message.action;
         switch (doc) {
-            case "command": {
-                const command = `<data azione="command" data="${message.data}" />`;
-
-                if (!ws.clientData) {
-                    console.error("Client non trovato");
-                    return;
-                }
-
-                // Chiamata al core C++
+            case 'command': {
+                if (!ws.clientData || ws.readyState !== ws.OPEN) return;
+                const command = '<data azione="command" data="' + escapeXml(message.data) + '" />';
                 try {
-
                     const responseXml = solar.handleClient(ws.clientData.id, command);
-                    
-                    ws.send(JSON.stringify({
-                        tipo: "command",
-                        xml: responseXml
-                    }));
-                } catch (e) {
-                    console.error("Errore durante l'esecuzione C++ handleClient:", e);
+                    ws.send(JSON.stringify({ tipo: 'command', xml: responseXml }));
+                } catch (error) {
+                    console.error('[PLANETARIUM] Comando:', error.message);
                 }
                 break;
             }
-            case "init": {
-                ws.send(JSON.stringify({ tipo: "init" }));
+            case 'init':
+                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ tipo: 'init' }));
                 break;
-            }
+            case 'CHATBOT':
+                await handleChat(solar, ws, message);
+                break;
         }
     }
 };

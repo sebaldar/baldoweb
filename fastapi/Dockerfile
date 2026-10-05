@@ -4,8 +4,8 @@ FROM python:3.12-bookworm AS builder
 WORKDIR /app
 
 # Installa le dipendenze in una cartella isolata
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+COPY requirements.txt requirements.lock.txt ./
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt -c requirements.lock.txt
 
 
 # --- STAGE 2: RUNTIME ---

@@ -21,9 +21,11 @@
         "-lmariadb"
       ],
       "cflags_cc": [
-        "-std=c++17",
-        "-fPIC"
-      ]
+        "-std=c++20",
+        "-fPIC",
+        "-fexceptions"
+      ],
+      "cflags_cc!": [ "-fno-exceptions" ]
     }
   ]
 }

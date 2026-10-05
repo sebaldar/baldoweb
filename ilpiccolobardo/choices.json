@@ -1,0 +1,19 @@
+{
+  "genre": [
+    { "key": "amicizia", "label": "🤝 Amicizia", "phrase": "amicizia" },
+    { "key": "avventura", "label": "🗺️ Avventura", "phrase": "avventura" },
+    { "key": "coraggio", "label": "🦁 Coraggio", "phrase": "coraggio" },
+    { "key": "nanna", "label": "🌙 Per addormentarsi", "phrase": "per addormentarsi" },
+    { "key": "magia", "label": "✨ Magia e sogni", "phrase": "magia e sogni" },
+    { "key": "divertente", "label": "😄 Divertente", "phrase": "divertente, con situazioni buffe e tanta allegria" }
+  ],
+  "setting": [
+    { "key": "bosco", "label": "🌲 Bosco magico", "phrase": "un bosco magico" },
+    { "key": "castello", "label": "🏰 Castello", "phrase": "un castello antico" },
+    { "key": "acqua", "label": "🌊 Mare e fiume", "phrase": "mare, fiume e rive" },
+    { "key": "montagna", "label": "⛰️ Montagna", "phrase": "un villaggio tra le montagne" },
+    { "key": "nuvole", "label": "☁️ Tra le nuvole", "phrase": "una città tra le nuvole" },
+    { "key": "cielo", "label": "🌌 Cielo e stelle", "phrase": "il cielo stellato e l'osservazione delle stelle" },
+    { "key": "giardino", "label": "🏡 Giardino o casa", "phrase": "un giardino segreto o una casa accogliente" }
+  ]
+}

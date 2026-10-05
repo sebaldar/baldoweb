@@ -1,0 +1,11 @@
+Endpoint disponibili:
+MetodoURLCosa fa
+POST/admin/frammenti/bulkCarica uno o più frammenti
+GET/admin/frammentiLista tutti i frammenti
+DELETE/admin/frammentiElimina per IDGET/admin/statsConteggio nodi per label
+
+Per caricare i frammenti dal tuo host (dato che FastAPI è in Docker esposto sulla porta 8000):
+bash
+curl -X POST http://localhost:8000/admin/frammenti/bulk \
+  -H "Content-Type: application/json" \
+  -d @frammenti.json

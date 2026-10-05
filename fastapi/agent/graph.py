@@ -24,10 +24,14 @@ from agent.nodes import (
     valuta_draft,
     correggi_draft,
     rifinisci,
+    umanizza,
+    verifica_coerenza_domanda,
     salva_memoria,
     nodo_errore,
+    verifica_sicurezza_output,
 )
 from services.llm import LLMRouter
+from services.narrative_review import verifica_testo_finale
 from services.neo4j_client import Neo4jClient
 from services.astronomy import AstronomyClient
 from services.weather import WeatherClient
@@ -58,6 +62,8 @@ def build_graph(
     _valuta_draft = partial(valuta_draft, llm=llm)
     _correggi_draft = partial(correggi_draft, llm=llm)
     _rifinisci = partial(rifinisci, llm=llm)
+    _umanizza = partial(umanizza, llm=llm)
+    _verifica_domanda = partial(verifica_coerenza_domanda, llm=llm)
     _salva_memoria = partial(salva_memoria, neo4j=neo4j)
 
     grafo = StateGraph(BaldoState)
@@ -74,6 +80,10 @@ def build_graph(
     grafo.add_node("valuta_draft", _valuta_draft)
     grafo.add_node("correggi_draft", _correggi_draft)
     grafo.add_node("rifinisci", _rifinisci)
+    grafo.add_node("umanizza", _umanizza)
+    grafo.add_node("verifica_domanda", _verifica_domanda)
+    grafo.add_node("verifica_testo_finale", partial(verifica_testo_finale, llm=llm))
+    grafo.add_node("verifica_sicurezza_output", verifica_sicurezza_output)
     grafo.add_node("salva_memoria", _salva_memoria)
     grafo.add_node("nodo_errore", nodo_errore)
 
@@ -119,7 +129,15 @@ def build_graph(
     )
 
     grafo.add_edge("correggi_draft", "valuta_draft")
-    grafo.add_edge("rifinisci", "salva_memoria")
+    grafo.add_edge("rifinisci", "umanizza")
+    grafo.add_edge("umanizza", "verifica_domanda")
+    grafo.add_edge("verifica_domanda", "verifica_testo_finale")
+    grafo.add_edge("verifica_testo_finale", "verifica_sicurezza_output")
+    grafo.add_conditional_edges(
+        "verifica_sicurezza_output",
+        _route_sicurezza_output,
+        {"salva_memoria": "salva_memoria", "nodo_errore": "nodo_errore"}
+    )
     grafo.add_edge("salva_memoria", END)
     grafo.add_edge("nodo_errore", END)
 
@@ -130,6 +148,10 @@ def build_graph(
 def _route_valuta_prompt(state: BaldoState) -> str:
     if not state.get("prompt_chiaro", True): return "nodo_errore"
     return "decide_tools"
+
+def _route_sicurezza_output(state: BaldoState) -> str:
+    if not state.get("prompt_chiaro", True): return "nodo_errore"
+    return "salva_memoria"
 
 def _route_valuta_frammenti(state: BaldoState) -> str:
     # Torna a query_neo4j solo se mancano frammenti e abbiamo ancora tentativi

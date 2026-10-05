@@ -36,12 +36,39 @@ class Neo4jClient:
     # ------------------------------------------------------------------
     # FRAGMENT SEARCH
     # ------------------------------------------------------------------
+    async def get_character_bios(self, names: list[str]) -> dict[str, dict]:
+        """
+        Recupera descrizione/tratti dei personaggi nominati, per coerenza
+        narrativa tra una storia e l'altra. L'identificativo è il nome
+        (Character.name), lo stesso usato ovunque per collegare i frammenti
+        ai personaggi — non serve un id separato per questa relazione.
+        Un personaggio senza descrizione/tratti (il caso comune per quelli
+        creati automaticamente dal caricamento dei frammenti) viene escluso.
+        """
+        if not names:
+            return {}
+        async with self.driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (c:Character)
+                WHERE c.name IN $names
+                  AND (c.description IS NOT NULL OR c.traits IS NOT NULL)
+                RETURN c.name AS name, c.description AS description, c.traits AS traits
+                """,
+                names=names,
+            )
+            return {
+                r["name"]: {"description": r["description"], "traits": r["traits"]}
+                async for r in result
+            }
+
     async def cerca_frammenti(
         self,
         characters: list[str],
         emotions: list[str],
         setting: str,
         extra_terms: list[str] = None,
+        eta_bambino: int = None,
     ) -> list[dict]:
         all_terms = list(set((extra_terms or []) + characters + emotions))
 
@@ -50,41 +77,66 @@ class Neo4jClient:
                 """
                 MATCH (f:PlotFragment)
                 OPTIONAL MATCH (f)-[:CONTAINS]->(p:Character)
+                WITH f, collect(DISTINCT p.name) AS nomi_personaggi
                 OPTIONAL MATCH (f)-[:EVOKES]->(e:Emotion)
+                WITH f, nomi_personaggi, collect(DISTINCT e.name) AS nomi_emozioni
                 WITH f,
-                     count(CASE WHEN p.name IN $characters THEN 1 END) AS match_p,
-                     count(CASE WHEN e.name IN $emotions THEN 1 END) AS match_e,
-                     count(CASE WHEN p.name IN $terms OR e.name IN $terms THEN 1 END) AS match_t
+                     size([n IN nomi_personaggi WHERE n IN $characters]) AS match_p,
+                     size([n IN nomi_emozioni WHERE n IN $emotions]) AS match_e,
+                     size([n IN nomi_personaggi WHERE n IN $terms]) +
+                     size([n IN nomi_emozioni WHERE n IN $terms]) AS match_t
                 WHERE match_p > 0 OR match_e > 0 OR match_t > 0
+                WITH f, match_p, match_e, match_t,
+                     CASE
+                       WHEN $eta_bambino IS NULL OR f.fascia_eta IS NULL THEN 0
+                       WHEN $eta_bambino >= toInteger(trim(split(f.fascia_eta, '-')[0]))
+                        AND $eta_bambino <= toInteger(trim(split(f.fascia_eta, '-')[1]))
+                       THEN 1
+                       ELSE 0
+                     END AS match_eta
                 RETURN f.id AS id, f.text AS testo, f.setting AS ambientazione,
-                       (match_p * 2 + match_e + match_t) AS score
-                ORDER BY score DESC
+                       f.tecnica_narrativa AS tecnica_narrativa, f.domanda AS domanda,
+                       f.ritornello AS ritornello, f.archetipo AS archetipo,
+                       (match_p * 2 + match_e + match_t + match_eta) AS score
+                ORDER BY score DESC, rand()
                 LIMIT $limit
                 """,
                 characters=characters,
                 emotions=emotions,
                 terms=all_terms,
+                eta_bambino=eta_bambino,
                 limit=MAX_FRAGMENTS,
             )
             fragments = [dict(record) async for record in result]
 
         if not fragments:
-            fragments = await self._search_by_setting(setting)
+            fragments = await self._search_by_setting(setting, eta_bambino)
 
         logger.info(f"Neo4j: found {len(fragments)} fragments")
         return fragments
 
-    async def _search_by_setting(self, setting: str) -> list[dict]:
+    async def _search_by_setting(self, setting: str, eta_bambino: int = None) -> list[dict]:
         keyword = setting.split()[0] if setting else ""
         async with self.driver.session() as session:
             result = await session.run(
                 """
                 MATCH (f:PlotFragment)
                 WHERE toLower(f.setting) CONTAINS toLower($keyword)
-                RETURN f.id AS id, f.text AS testo, f.setting AS ambientazione, 0 AS score
+                RETURN f.id AS id, f.text AS testo, f.setting AS ambientazione,
+                       f.tecnica_narrativa AS tecnica_narrativa, f.domanda AS domanda,
+                       f.ritornello AS ritornello, f.archetipo AS archetipo,
+                       CASE
+                         WHEN $eta_bambino IS NULL OR f.fascia_eta IS NULL THEN 0
+                         WHEN $eta_bambino >= toInteger(trim(split(f.fascia_eta, '-')[0]))
+                          AND $eta_bambino <= toInteger(trim(split(f.fascia_eta, '-')[1]))
+                         THEN 1
+                         ELSE 0
+                       END AS score
+                ORDER BY score DESC, rand()
                 LIMIT $limit
                 """,
                 keyword=keyword,
+                eta_bambino=eta_bambino,
                 limit=MAX_FRAGMENTS,
             )
             return [dict(record) async for record in result]
@@ -98,10 +150,12 @@ class Neo4jClient:
                 """
                 MATCH (s:Story)
                 OPTIONAL MATCH (s)-[:CONTAINS]->(p:Character)
+                WITH s, collect(DISTINCT p.name) AS nomi_personaggi
                 OPTIONAL MATCH (s)-[:EVOKES]->(e:Emotion)
+                WITH s, nomi_personaggi, collect(DISTINCT e.name) AS nomi_emozioni
                 WITH s,
-                     count(CASE WHEN p.name IN $characters THEN 1 END) AS match_p,
-                     count(CASE WHEN e.name IN $emotions THEN 1 END) AS match_e
+                     size([n IN nomi_personaggi WHERE n IN $characters]) AS match_p,
+                     size([n IN nomi_emozioni WHERE n IN $emotions]) AS match_e
                 WHERE match_p > 0 OR match_e > 0
                 RETURN s.id AS id, s.text AS testo, s.setting AS ambientazione,
                        s.timestamp AS timestamp,

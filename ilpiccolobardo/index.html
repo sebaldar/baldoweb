@@ -808,13 +808,13 @@
                 <div class="form-group">
                     <label id="settingLabel">🏞️ Dove si svolge?</label>
                     <div class="chip-group" id="settingChips" role="group" aria-labelledby="settingLabel">
-                        <button class="chip" aria-pressed="false" data-value="in un bosco magico" onclick="pickChip('setting', this)">🌲 Bosco magico</button>
-                        <button class="chip" aria-pressed="false" data-value="in un castello antico" onclick="pickChip('setting', this)">🏰 Castello</button>
-                        <button class="chip" aria-pressed="false" data-value="vicino a un fiume incantato, tra acqua e riva" onclick="pickChip('setting', this)">🌊 Mare e fiume</button>
-                        <button class="chip" aria-pressed="false" data-value="in un villaggio tra le montagne" onclick="pickChip('setting', this)">⛰️ Montagna</button>
-                        <button class="chip" aria-pressed="false" data-value="in una città tra le nuvole" onclick="pickChip('setting', this)">☁️ Tra le nuvole</button>
-                        <button class="chip" aria-pressed="false" data-value="sotto il cielo stellato, osservando le stelle" onclick="pickChip('setting', this)">🌌 Cielo e stelle</button>
-                        <button class="chip" aria-pressed="false" data-value="in un giardino segreto" onclick="pickChip('setting', this)">🏡 Giardino o casa</button>
+                        <button class="chip" aria-pressed="false" data-value="in un bosco magico" data-key="bosco" onclick="pickChip('setting', this)">🌲 Bosco magico</button>
+                        <button class="chip" aria-pressed="false" data-value="in un castello antico" data-key="castello" onclick="pickChip('setting', this)">🏰 Castello</button>
+                        <button class="chip" aria-pressed="false" data-value="vicino a un fiume incantato, tra acqua e riva" data-key="acqua" onclick="pickChip('setting', this)">🌊 Mare e fiume</button>
+                        <button class="chip" aria-pressed="false" data-value="in un villaggio tra le montagne" data-key="montagna" onclick="pickChip('setting', this)">⛰️ Montagna</button>
+                        <button class="chip" aria-pressed="false" data-value="in una città tra le nuvole" data-key="nuvole" onclick="pickChip('setting', this)">☁️ Tra le nuvole</button>
+                        <button class="chip" aria-pressed="false" data-value="sotto il cielo stellato, osservando le stelle" data-key="cielo" onclick="pickChip('setting', this)">🌌 Cielo e stelle</button>
+                        <button class="chip" aria-pressed="false" data-value="in un giardino segreto" data-key="giardino" onclick="pickChip('setting', this)">🏡 Giardino o casa</button>
                     </div>
                 </div>
 
@@ -1250,7 +1250,7 @@ if (response.ok) {
 
         // Age Selection
         // ── Tipo di storia e ambientazione ──────────────────────────────────
-        const chosen = { genre: null, setting: null };
+        const chosen = { genre: null, setting: null, settingKey: null };
         const GENRE_PHRASE = {
             amicizia: "sull'amicizia",
             avventura: "d'avventura",
@@ -1264,6 +1264,7 @@ if (response.ok) {
             btn.parentElement.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
             btn.setAttribute('aria-pressed', String(on));
             chosen[group] = on ? btn.dataset.value : null;
+            if (group === 'setting') chosen.settingKey = on ? btn.dataset.key : null;
         }
 
         function buildPrompt(freeText) {
@@ -1364,6 +1365,8 @@ if (response.ok) {
 				nome: childName || null,
 				coloreP: favoriteColor || null,
 				animaleP: favoriteAnimal || null,
+				genere: chosen.genre,
+				ambientazione: chosen.settingKey,
 			});
 		}        
 

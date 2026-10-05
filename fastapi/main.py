@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from config import settings
 from services.llm import LLMRouter
@@ -90,6 +90,10 @@ app.include_router(admin_router)
 # ---------------------------------------------------------------------------
 # Modelli Pydantic
 # ---------------------------------------------------------------------------
+GENERI_AMMESSI = {"amicizia", "avventura", "coraggio", "nanna", "magia"}
+AMBIENTAZIONI_AMMESSE = {"bosco", "castello", "acqua", "montagna", "nuvole", "cielo", "giardino"}
+
+
 class StoryStreamRequest(BaseModel):
     prompt:      str = Field(min_length=1, max_length=8000)
     lingua:      str = "it"
@@ -107,6 +111,20 @@ class StoryStreamRequest(BaseModel):
     nome:              Optional[str] = None
     colore_preferito:  Optional[str] = None
     animale_preferito: Optional[str] = None
+    # Scelte a chip del form (genere e ambientazione): valori fuori elenco
+    # vengono scartati invece di far fallire la richiesta.
+    genere:        Optional[str] = None
+    ambientazione: Optional[str] = None
+
+    @field_validator("genere")
+    @classmethod
+    def _genere_valido(cls, v):
+        return v if v in GENERI_AMMESSI else None
+
+    @field_validator("ambientazione")
+    @classmethod
+    def _ambientazione_valida(cls, v):
+        return v if v in AMBIENTAZIONI_AMMESSE else None
 
 class StoryResponse(BaseModel):
     racconto:        str
@@ -143,6 +161,8 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
         "nome": body.nome,
         "colore_preferito": body.colore_preferito,
         "animale_preferito": body.animale_preferito,
+        "genere": body.genere,
+        "ambientazione": body.ambientazione,
         "luogo": "Roma", # Default che verrà sovrascritto dal Nodo 1
         "iterazioni_totali": 0,
         "frammenti": [],

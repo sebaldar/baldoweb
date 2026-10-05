@@ -24,6 +24,9 @@ class BaldoState(TypedDict):
     nome: Optional[str]
     colore_preferito: Optional[str]
     animale_preferito: Optional[str]
+    # Scelte a chip del form (chiavi brevi, vedi GENERI_AMMESSI in main.py)
+    genere: Optional[str]
+    ambientazione: Optional[str]
 
     # --- ANALISI PROMPT (Nodo 1) ---
     personaggi: List[str]

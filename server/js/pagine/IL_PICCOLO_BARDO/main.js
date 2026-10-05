@@ -38,6 +38,8 @@ async function manage_fastapi(server, ws, message) {
         nome:              data.nome || null,
         colore_preferito:  data.coloreP || null,
         animale_preferito: data.animaleP || null,
+        genere:            data.genere || null,
+        ambientazione:     data.ambientazione || null,
     };
 
     // ── Helper: invia evento al browser ──────────────────────────────────

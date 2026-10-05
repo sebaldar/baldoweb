@@ -72,6 +72,8 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "nome_presente_in_output": state.get("nome_presente_in_output"),
             "colore_preferito": state.get("colore_preferito"),
             "animale_preferito": state.get("animale_preferito"),
+            "genere": state.get("genere"),
+            "ambientazione": state.get("ambientazione"),
             "prompt": state.get("prompt_originale"),
             "diagnosi_draft": state.get("diagnosi_draft") or [],
             "valutazione_draft_finale": state.get("valutazione_draft"),

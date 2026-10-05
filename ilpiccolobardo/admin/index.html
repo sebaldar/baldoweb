@@ -791,6 +791,7 @@
     </div>
 
     <script src="../safe-html.js"></script>
+    <script src="../confirm-dialog.js"></script>
 <script src="access.js"></script>
 <script>
         let ws = null;
@@ -962,14 +963,14 @@ function switchMainTab(tabName, element) {
             document.getElementById(`${tabName}-tab`).classList.add('active');
         }
 
-        function initDatabase() {
-            if (confirm('Sei sicuro di voler inizializzare il database?')) {
+        async function initDatabase() {
+            if (await confirmDialog('Sei sicuro di voler inizializzare il database?', { title: 'Inizializza database', confirmText: 'Inizializza' })) {
                 sendMessage('init_database');
             }
         }
 
-        function clearDatabase() {
-            if (confirm('ATTENZIONE: Questa operazione cancellerà TUTTI i dati!')) {
+        async function clearDatabase() {
+            if (await confirmDialog('ATTENZIONE: Questa operazione cancellerà TUTTI i dati!', { title: 'Cancella database', confirmText: 'Cancella tutto', danger: true })) {
                 sendMessage('clear_database');
             }
         }

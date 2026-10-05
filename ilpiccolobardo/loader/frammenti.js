@@ -148,7 +148,7 @@ async function deleteFragments() {
     if (!rawIds) return updateLog('Inserire ID validi', 'err');
 
     const ids = rawIds.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    if (!confirm(`Eliminare definitivamente ${ids.length} frammenti?`)) return;
+    if (!await confirmDialog(`Eliminare definitivamente ${ids.length} frammenti?`, { title: 'Elimina frammenti', confirmText: 'Elimina', danger: true })) return;
 
     try {
         const res = await callApi('admin_delete_fragments', { ids });

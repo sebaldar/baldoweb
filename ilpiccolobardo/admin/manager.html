@@ -485,6 +485,8 @@
     </div>
 
     <script src="../safe-html.js"></script>
+    <script src="../toast.js"></script>
+    <script src="../confirm-dialog.js"></script>
 <script src="access.js"></script>
 <script>
         let ws = null;
@@ -551,7 +553,7 @@
                 ws.send(JSON.stringify(message));
                 console.log(`→ Inviato: ${action}`, data);
             } else {
-                alert('Non connesso al server!');
+                showToast('Non connesso al server!', 'error');
             }
         }
 
@@ -564,17 +566,17 @@
             } else if (response.action === 'list_characters') {
                 displayCharacters(response.data);
             } else if (response.action === 'fragment_saved' || response.action === 'character_saved') {
-                alert('✓ Salvataggio riuscito!');
+                showToast('Salvataggio riuscito!', 'success', 3000);
                 refreshAll();
             } else if (response.action === 'fragment_deleted' || response.action === 'character_deleted') {
-                alert('✓ Eliminazione riuscita!');
+                showToast('Eliminazione riuscita!', 'success', 3000);
                 refreshAll();
             } else if (response.action === 'model_routing_list') {
                 displayModelRouting(response.data);
             } else if (response.action === 'model_routing_updated') {
                 console.log(`✓ Fase '${response.data.fase}' → ${response.data.provider}`);
             } else if (response.action === 'error') {
-                alert('✗ Errore: ' + (response.message || 'Operazione fallita'));
+                showToast('Errore: ' + (response.message || 'Operazione fallita'), 'error', 8000);
             }
         }
 
@@ -772,7 +774,7 @@
         const setting = document.getElementById('fragmentSetting').value;
 
         if (!id || !text || !setting) {
-            alert('ID, Testo e Ambientazione sono obbligatori!');
+            showToast('ID, Testo e Ambientazione sono obbligatori!', 'warning');
             return;
         }
 
@@ -799,7 +801,7 @@
         const name = document.getElementById('characterName').value;
 
         if (!name) {
-            alert('Il Nome è obbligatorio!');
+            showToast('Il Nome è obbligatorio!', 'warning');
             return;
         }
 
@@ -818,19 +820,19 @@
     }
 
     // Delete Functions
-    function deleteFragment() {
+    async function deleteFragment() {
         if (!selectedFragment) return;
         
-        if (confirm(`Eliminare il frammento "${selectedFragment.id}"?`)) {
+        if (await confirmDialog(`Eliminare il frammento "${selectedFragment.id}"?`, { title: 'Elimina frammento', confirmText: 'Elimina', danger: true })) {
             sendMessage('delete_fragment', { id: selectedFragment.id });
             resetFragmentForm();
         }
     }
 
-    function deleteCharacter() {
+    async function deleteCharacter() {
         if (!selectedCharacter) return;
         
-        if (confirm(`Eliminare il personaggio "${selectedCharacter.name}"?`)) {
+        if (await confirmDialog(`Eliminare il personaggio "${selectedCharacter.name}"?`, { title: 'Elimina personaggio', confirmText: 'Elimina', danger: true })) {
             sendMessage('delete_character', { name: selectedCharacter.name });
             resetCharacterForm();
         }

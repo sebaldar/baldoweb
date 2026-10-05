@@ -828,6 +828,8 @@
 
     <!-- Per il pulsante "Stampa PDF": genera il PDF nel browser, niente da installare lato server -->
     <script src="safe-html.js"></script>
+    <script src="toast.js"></script>
+    <script src="confirm-dialog.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
 
     <script>
@@ -992,7 +994,7 @@ if (response.ok) {
                 ws.send(JSON.stringify(message));
                 console.log(`→ Inviato: ${action}`);
             } else {
-                alert('Non connesso al server! Riprova tra qualche secondo.');
+                showToast('Non connesso al server! Riprova tra qualche secondo.', 'error');
             }
         }
 
@@ -1021,7 +1023,7 @@ if (response.ok) {
                 const illustrateBtn = document.getElementById('illustrateBtn');
                 illustrateBtn.disabled = false;
                 illustrateBtn.textContent = '🎨 Crea Illustrazione';
-                alert('Si è verificato un errore: ' + (response.message || 'errore sconosciuto'));
+                showToast('Si è verificato un errore: ' + (response.message || 'errore sconosciuto'), 'error');
             }
             // Nuovi messaggi dal server
             else if (response.action === 'user_status') {
@@ -1134,13 +1136,13 @@ if (response.ok) {
         // Generate Story
 		function generateStory() {
 			if (!selectedAge) {
-				alert('Seleziona prima l\'età del bambino! 🎂');
+				showToast('Seleziona prima l\'età del bambino! 🎂', 'warning');
 				return;
 			}
 
 			const prompt = document.getElementById('userPrompt').value;
 			if (!prompt.trim()) {
-				alert('Scrivi cosa vuoi nella favola! 💭');
+				showToast('Scrivi cosa vuoi nella favola! 💭', 'warning');
 				return;
 			}
 
@@ -1237,7 +1239,7 @@ if (response.ok) {
         // Illustration Generation
         function generateIllustration() {
             if (!ILLUSTRAZIONE_DISPONIBILE) {
-                alert('La creazione di illustrazioni sarà disponibile per gli utenti registrati. Per ora è disattivata in questa versione demo.');
+                showToast('La creazione di illustrazioni sarà disponibile per gli utenti registrati. Per ora è disattivata in questa versione demo.', 'info', 7000);
                 return;
             }
 
@@ -1338,7 +1340,7 @@ if (response.ok) {
 
         async function printStory() {
             if (!currentStory || !currentStory.text) {
-                alert('Non c\'è ancora una storia da stampare!');
+                showToast('Non c\'è ancora una storia da stampare!', 'warning');
                 return;
             }
 
@@ -1437,7 +1439,7 @@ if (response.ok) {
 
             } catch (e) {
                 console.error('Errore nella creazione del PDF:', e);
-                alert('Non sono riuscito a creare il PDF. Riprova tra poco.');
+                showToast('Non sono riuscito a creare il PDF. Riprova tra poco.', 'error');
             } finally {
                 printBtn.disabled = false;
                 printBtn.textContent = testoOriginaleBtn;
@@ -1526,8 +1528,8 @@ if (response.ok) {
             document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
         }
 
-        function deleteFavorite(index) {
-            if (confirm('Vuoi davvero eliminare questa favola dai preferiti?')) {
+        async function deleteFavorite(index) {
+            if (await confirmDialog('Vuoi davvero eliminare questa favola dai preferiti?', { title: 'Elimina favola', confirmText: 'Elimina', danger: true })) {
                 favorites.splice(index, 1);
                 saveFavorites();
                 displayFavorites();
@@ -1623,12 +1625,12 @@ if (response.ok) {
         }
 
         function login() {
-            alert("Funzionalità di login in arrivo! Per ora le favole sono salvate solo localmente.");
+            showToast("Funzionalità di login in arrivo! Per ora le favole sono salvate solo localmente.", 'info', 7000);
             closeAccountModal();
         }
 
-        function logout() {
-            if (confirm("Vuoi uscire dall'account? Le favole preferite rimarranno salvate localmente.")) {
+        async function logout() {
+            if (await confirmDialog("Vuoi uscire dall'account? Le favole preferite rimarranno salvate localmente.", { title: 'Esci', confirmText: 'Esci' })) {
                 currentUser = null;
                 updateAccountButton();
                 closeAccountModal();

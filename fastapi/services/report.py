@@ -8,7 +8,9 @@ token consumati e frammenti/personaggi impiegati. Pensato per il debug e
 il controllo qualità/costi senza dover incrociare i log applicativi.
 """
 
+import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,6 +24,47 @@ logger = logging.getLogger(__name__)
 # modello di ./fastapi/logs:/app/logs, così i report sopravvivono a un
 # rebuild del container invece di restare nel filesystem effimero.
 DIRECTORY_STORIE = Path(__file__).resolve().parent.parent / "stories"
+
+
+# Prezzi in USD per milione di token, per nome esatto del modello:
+# {"nome-modello": {"input": 1.0, "output": 5.0}}. Non sono inclusi di default
+# perché cambiano: si configurano in config_data/llm_prices.json (o con la
+# variabile LLM_PRICES_FILE). Senza prezzo il costo resta None, mai inventato.
+PREZZI_FILE = Path(os.getenv("LLM_PRICES_FILE") or Path(__file__).resolve().parent.parent / "config_data" / "llm_prices.json")
+
+
+def _carica_prezzi() -> dict:
+    try:
+        with open(PREZZI_FILE, encoding="utf-8") as f:
+            prezzi = json.load(f)
+        return prezzi if isinstance(prezzi, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def stima_costo_usd(llm_usage: list, prezzi: dict | None = None) -> float | None:
+    """Costo stimato della storia; None se manca il prezzo di un modello usato."""
+    prezzi = _carica_prezzi() if prezzi is None else prezzi
+    totale = 0.0
+    for uso in llm_usage or []:
+        prezzo = prezzi.get(uso.get("modello"))
+        if not isinstance(prezzo, dict) or "input" not in prezzo or "output" not in prezzo:
+            return None
+        totale += (uso.get("token_input", 0) * prezzo["input"] + uso.get("token_output", 0) * prezzo["output"]) / 1_000_000
+    return round(totale, 6)
+
+
+def aggrega_per_nodo(llm_usage: list) -> dict:
+    """Chiamate, token e secondi per nodo: mostra dove va il tempo e il costo."""
+    nodi: dict = {}
+    for uso in llm_usage or []:
+        riga = nodi.setdefault(uso.get("nodo") or "sconosciuto",
+                               {"chiamate": 0, "token_input": 0, "token_output": 0, "durata_secondi": 0.0})
+        riga["chiamate"] += 1
+        riga["token_input"] += uso.get("token_input", 0)
+        riga["token_output"] += uso.get("token_output", 0)
+        riga["durata_secondi"] = round(riga["durata_secondi"] + uso.get("durata_secondi", 0), 2)
+    return nodi
 
 
 def _aggrega_uso_llm(llm_usage: list) -> dict:
@@ -42,6 +85,8 @@ def _aggrega_uso_llm(llm_usage: list) -> dict:
         # rifinisci, per quanto osservato finora: la latenza segue i token
         # di output, non quelli di input).
         "durata_secondi_llm": round(sum(u.get("durata_secondi", 0) for u in llm_usage), 2),
+        "per_nodo": aggrega_per_nodo(llm_usage),
+        "costo_stimato_usd": stima_costo_usd(llm_usage),
         "dettaglio_chiamate": llm_usage,
     }
 
@@ -85,6 +130,8 @@ def salva_report_storia(state: dict, tempo_elaborazione_secondi: float) -> None:
             "token_input": uso["token_input"],
             "token_output": uso["token_output"],
             "durata_secondi_llm": uso["durata_secondi_llm"],
+            "costo_stimato_usd": uso["costo_stimato_usd"],
+            "uso_per_nodo": uso["per_nodo"],
             "dettaglio_chiamate_llm": uso["dettaglio_chiamate"],
             "frammenti_usati": state.get("frammenti_usati") or [],
             "personaggi": state.get("personaggi") or [],

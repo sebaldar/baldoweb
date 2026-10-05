@@ -1,6 +1,6 @@
 // Avvio del frontend e collegamento dei comandi della pagina.
 import { connect } from './connection.js';
-import { deleteFavorite, displayFavorites, exportFavorites, forgetProfile, importFavorites, loadFavorite, loadFavorites, loadProfile, toggleFavorite } from './favorites.js';
+import { deleteFavorite, displayFavorites, exportFavorites, forgetProfile, importFavorites, loadFavorites, loadProfile, toggleFavorite } from './favorites.js';
 import { changeTextSize, exitReadingMode, listenStory, loadTextSize, stopReading, togglePause, toggleReadingMode } from './reading.js';
 import { ILLUSTRAZIONE_DISPONIBILE, generateIllustration } from './illustrations.js';
 import { closeAccountModal, login, logout, openAccountModal, updateAccountButton } from './account.js';
@@ -9,9 +9,15 @@ import { installApp } from './pwa.js';
 import { switchTab, toggleNightMode } from './ui.js';
 import { generateStory, newStory, pickChip, regenerateStory, selectAge } from './generation.js';
 import { printStory } from './pdf.js';
+import { bindActions } from './actions.js';
 
-Object.assign(window, {
-    openAccountModal, installApp, toggleNightMode, exitReadingMode, switchTab, forgetProfile, selectAge, pickChip, generateStory, changeTextSize, toggleReadingMode, toggleFavorite, listenStory, generateIllustration, printStory, togglePause, stopReading, regenerateStory, newStory, displayFavorites, exportFavorites, importFavorites, closeAccountModal, deleteFavorite, login, logout, loadFavorite
+bindActions({
+    openAccountModal, installApp, toggleNightMode, exitReadingMode, switchTab, forgetProfile, selectAge, pickChip,
+    generateStory, changeTextSize, toggleReadingMode, toggleFavorite, listenStory, generateIllustration, printStory,
+    togglePause, stopReading, regenerateStory, newStory, displayFavorites, exportFavorites, closeAccountModal,
+    deleteFavorite, login, logout,
+    importFavorites: (arg, input) => importFavorites(input),
+    openImportPicker: () => document.getElementById('importFavorites').click(),
 });
 
 // Initialize

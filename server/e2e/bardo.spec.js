@@ -97,3 +97,35 @@ test('the story can be saved among the favorites and survives a reload', async (
     await expect(page.locator('#connectionStatus')).toContainText('Connesso');
     expect(await favorites()).toHaveLength(1);
 });
+
+test('tabs, text size and favorites commands work through real clicks', async ({ page }) => {
+    await openApp(page);
+    await page.locator('.age-btn', { hasText: '4 anni' }).click();
+    await chip(page, 'genre', 'avventura').click();
+    await page.click('#generateBtn');
+    await expect(page.locator('#favoriteBtn')).toBeEnabled();
+    await page.click('#favoriteBtn');
+
+    await page.click('#tab-favorites');
+    await expect(page.locator('#favorites-tab')).toBeVisible();
+    await expect(page.locator('.favorite-card')).toHaveCount(1);
+    // Il pulsante elimina non deve aprire la favola.
+    await page.locator('.delete-btn').click();
+    await expect(page.locator('#favorites-tab')).toBeVisible();
+    await page.locator('dialog.confirm-dialog .confirm-ok').click();
+    await expect(page.locator('.favorite-card')).toHaveCount(0);
+    await expect(page.locator('#favorites-tab')).toBeVisible();
+
+    await page.click('#tab-create');
+    await expect(page.locator('#create-tab')).toBeVisible();
+    const size = () => page.evaluate(() => getComputedStyle(document.getElementById('storyDisplay')).fontSize);
+    const before = parseFloat(await size());
+    await page.click('#sizeUp');
+    expect(parseFloat(await size())).toBeGreaterThan(before);
+});
+
+test('the page uses no inline handlers and exposes no command globals', async ({ page }) => {
+    await openApp(page);
+    expect(await page.locator('[onclick], [onchange], [oninput]').count()).toBe(0);
+    expect(await page.evaluate(() => ['generateStory', 'pickChip', 'switchTab'].map(name => typeof window[name]))).toEqual(['undefined', 'undefined', 'undefined']);
+});

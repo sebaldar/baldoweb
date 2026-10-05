@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { contextFor } from './helpers/browser-context.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 function fillForm(browser) {
     browser.run("appState.selectedAge = 4; appState.chosen.genres = ['amicizia']; appState.chosen.settingKeys = ['bosco'];");
@@ -132,7 +132,7 @@ for (const response of [
         for (const id of ['readBtn', 'illustrateBtn', 'printBtn']) assert.equal(browser.elements.get(id).disabled, true);
         const html = browser.elements.get('storyDisplay').innerHTML;
         assert.ok(!html.includes('<img'));
-        assert.equal(html.includes('onclick="regenerateStory()"'), !response.errore);
+        assert.equal(html.includes('data-on-click="regenerateStory"'), !response.errore);
     });
 }
 
@@ -396,7 +396,36 @@ test('every native module and the stylesheet are included in the offline shell',
     for (const id of browser.modules.keys()) assert.ok(serviceWorker.includes(`'${new URL(id).pathname.split('/ilpiccolobardo')[1]}'`), id);
     assert.ok(serviceWorker.includes("'/js/theme-init.js'"));
     assert.ok(serviceWorker.includes("'/styles/app.css'"));
-    for (const name of ['generateStory', 'toggleFavorite', 'listenStory', 'printStory', 'openAccountModal']) assert.equal(typeof browser.context.window[name], 'function');
+});
+
+test('the page declares its commands without inline handlers or globals', async () => {
+    const site = new URL('../../ilpiccolobardo/', import.meta.url);
+    const sources = ['index.html', ...readdirSync(new URL('js/', site)).map(file => `js/${file}`)]
+        .map(file => [file, readFileSync(new URL(file, site), 'utf8')]);
+    for (const [file, source] of sources) assert.ok(!/\son(click|change|input|keydown|submit)\s*=\s*"/.test(source), `${file}: handler inline`);
+
+    const app = readFileSync(new URL('js/app.js', site), 'utf8');
+    const block = app.match(/bindActions\(\{([\s\S]*?)\n\}\);/)[1];
+    const bound = new Set([...block.matchAll(/^\s*(?:(\w+):|([\w, ]+),?$)/gm)].flatMap(m => (m[1] ?? m[2]).split(',').map(name => name.trim())).filter(Boolean));
+    const used = new Set(sources.flatMap(([, source]) => [...source.matchAll(/data-on-(?:click|change|input)="(\w+)"/g)].map(m => m[1])));
+    assert.ok(used.size > 20);
+    for (const name of used) assert.ok(bound.has(name), `azione non collegata: ${name}`);
+    assert.ok(!/Object\.assign\(window/.test(app));
+});
+
+test('actions are dispatched from delegated events with a parsed argument', async () => {
+    const calls = [];
+    const listeners = new Map();
+    const context = { console, document: { addEventListener: (type, fn) => listeners.set(type, fn) } };
+    const { bindActions } = await import('../../ilpiccolobardo/js/actions.js');
+    globalThis.document = context.document;
+    bindActions({ go: (arg, element) => calls.push([arg, element.id]) });
+    const target = (attribute, id, arg) => ({ target: { closest: selector => selector === `[${attribute}]` ? { id, dataset: { arg }, getAttribute: () => 'go' } : null } });
+    listeners.get('click')(target('data-on-click', 'a', '3'));
+    listeners.get('click')(target('data-on-click', 'b', 'genre'));
+    listeners.get('change')(target('data-on-click', 'c', '1'));
+    delete globalThis.document;
+    assert.deepEqual(calls, [[3, 'a'], ['genre', 'b']]);
 });
 
 function chip(browser, group, key) {

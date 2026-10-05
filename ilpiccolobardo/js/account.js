@@ -15,14 +15,14 @@ export function openAccountModal() {
             <p><strong>Email:</strong> ${escapeHTML(appState.currentUser.email)}</p>
             ${appState.currentUser.childName ? `<p><strong>Bambino:</strong> ${escapeHTML(appState.currentUser.childName)}</p>` : ''}
             <br>
-            <button class="btn-danger" onclick="logout()" style="width:100%; padding:15px;">Esci</button>
+            <button class="btn-danger" data-on-click="logout" style="width:100%; padding:15px;">Esci</button>
         `;
     } else {
         title.textContent = "Accedi";
         body.innerHTML = `
             <p>Per salvare le favole preferite nel cloud e sincronizzarle tra dispositivi, accedi al tuo account.</p>
             <br>
-            <button class="btn-primary" onclick="login()" style="width:100%; padding:15px;">Accedi / Registrati</button>
+            <button class="btn-primary" data-on-click="login" style="width:100%; padding:15px;">Accedi / Registrati</button>
             <p style="margin-top:20px; font-size:0.9em; color:#666;">Funzionalità in arrivo!</p>
         `;
     }

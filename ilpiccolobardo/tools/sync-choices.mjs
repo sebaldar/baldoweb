@@ -14,7 +14,7 @@ const jsKey = key => (/^[a-z_$][\w$]*$/i.test(key) ? key : json(key));
 const jsString = text => `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
 const chips = group => choices[group].map(({ key, label }) =>
-    `<button class="chip" aria-pressed="false" data-key="${htmlEscape(key)}" onclick="pickChip('${group}', this)">${htmlEscape(label)}</button>`);
+    `<button class="chip" aria-pressed="false" data-key="${htmlEscape(key)}" data-on-click="pickChip" data-arg="${group}">${htmlEscape(label)}</button>`);
 
 const phrases = (name, group) => [
     `export const ${name} = {`,

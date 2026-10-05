@@ -188,3 +188,10 @@ Node e simulano errori di spazio, disconnessioni e risposte audio tardive.
 - **Fonte unica:** generi e ambientazioni stanno in `choices.json`. Dopo averlo modificato, esegui `node ilpiccolobardo/tools/sync-choices.mjs`: rigenera i chip di `index.html`, `js/choices.js` e `fastapi/services/story_choices.py`. `npm test` (in `server/`) fallisce se i tre file sono fuori sincronia.
 - **Test end-to-end:** `npm run test:e2e` (in `server/`) apre l'app in Chromium, desktop e mobile, con backend simulato. Prima volta: `npx playwright install chromium`.
 - **Sicurezza contenuti:** `fastapi/services/content_safety.py` blocca termini inequivocabili nell'input (anche nome, colore e animale) e nel racconto finale, oltre al giudice LLM.
+
+## Comandi della pagina, streaming e costi
+
+- **Comandi:** niente `onclick` inline. Gli elementi dichiarano `data-on-click`, `data-on-change` o `data-on-input` (più `data-arg`); `js/actions.js` li smista e `js/app.js` elenca le azioni disponibili. Un test controlla che ogni azione usata in HTML sia collegata.
+- **Streaming:** di default il testo grezzo non viene mostrato mentre si genera: la favola arriva intera dopo i controlli di sicurezza. Con `STREAM_DRAFT_TOKENS=1` si riattiva lo streaming della bozza.
+- **Costi e tempi:** ogni report in `fastapi/stories/` riporta tempi e token per nodo (`uso_per_nodo`) e `costo_stimato_usd`. Il costo compare solo se `fastapi/config_data/llm_prices.json` contiene i prezzi (USD per milione di token) di tutti i modelli usati: `{"nome-modello": {"input": 1.0, "output": 5.0}}`. Riepilogo: `python fastapi/tools/stories_stats.py [--json]`.
+- **CI:** il job `e2e` di `.github/workflows/checks.yml` esegue i test Playwright.

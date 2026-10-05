@@ -18,19 +18,19 @@
     <script src="/js/theme-init.js"></script>
     <!-- Header bar con account e toggle notte -->
     <div class="header-bar">
-        <button class="account-btn" onclick="openAccountModal()" id="accountBtn" title="Account" aria-label="Account" aria-haspopup="dialog">
+        <button class="account-btn" data-on-click="openAccountModal" id="accountBtn" title="Account" aria-label="Account" aria-haspopup="dialog">
             👤
             <span class="account-name" id="accountName" style="display:none;"></span>
         </button>
 
-        <button class="install-btn" id="installBtn" onclick="installApp()" hidden>📲 Installa l'app</button>
-        <button class="nightmode-toggle" onclick="toggleNightMode()" title="Modalità buonanotte" aria-label="Attiva la modalità buonanotte" aria-pressed="false">🌙</button>
+        <button class="install-btn" id="installBtn" data-on-click="installApp" hidden>📲 Installa l'app</button>
+        <button class="nightmode-toggle" data-on-click="toggleNightMode" title="Modalità buonanotte" aria-label="Attiva la modalità buonanotte" aria-pressed="false">🌙</button>
     </div>
 
     <!-- Spazio per evitare sovrapposizione con header fisso -->
     <div style="height: calc(80px + env(safe-area-inset-top));"></div>
 
-    <button id="exitReadingBtn" class="reading-exit" onclick="exitReadingMode()" hidden>✕ Esci dalla lettura serale</button>
+    <button id="exitReadingBtn" class="reading-exit" data-on-click="exitReadingMode" hidden>✕ Esci dalla lettura serale</button>
 
     <div id="offlineBanner" class="offline-banner" role="status" aria-live="polite" hidden>📡 Sei offline: le favole preferite restano leggibili, per crearne una nuova serve la connessione.</div>
 
@@ -43,9 +43,9 @@
 
 
         <div class="tabs" role="tablist" aria-label="Sezioni">
-            <button class="tab active" role="tab" id="tab-create" aria-selected="true" aria-controls="create-tab" onclick="switchTab('create')"><span class="tab-icon" aria-hidden="true">✨</span><span class="tab-label">Crea Favola</span></button>
-            <button class="tab" role="tab" id="tab-favorites" aria-selected="false" aria-controls="favorites-tab" tabindex="-1" onclick="switchTab('favorites')"><span class="tab-icon" aria-hidden="true">❤️</span><span class="tab-label">Le Mie <span class="tab-long">Preferite</span></span></button>
-            <button class="tab" role="tab" id="tab-chi_sono" aria-selected="false" aria-controls="chi_sono-tab" tabindex="-1" onclick="switchTab('chi_sono')"><span class="tab-icon" aria-hidden="true">ℹ️</span><span class="tab-label">Info</span></button>
+            <button class="tab active" role="tab" id="tab-create" aria-selected="true" aria-controls="create-tab" data-on-click="switchTab" data-arg="create"><span class="tab-icon" aria-hidden="true">✨</span><span class="tab-label">Crea Favola</span></button>
+            <button class="tab" role="tab" id="tab-favorites" aria-selected="false" aria-controls="favorites-tab" tabindex="-1" data-on-click="switchTab" data-arg="favorites"><span class="tab-icon" aria-hidden="true">❤️</span><span class="tab-label">Le Mie <span class="tab-long">Preferite</span></span></button>
+            <button class="tab" role="tab" id="tab-chi_sono" aria-selected="false" aria-controls="chi_sono-tab" tabindex="-1" data-on-click="switchTab" data-arg="chi_sono"><span class="tab-icon" aria-hidden="true">ℹ️</span><span class="tab-label">Info</span></button>
         </div>
 
         <!-- TAB: CREA FAVOLA -->
@@ -66,16 +66,16 @@
                             <li>Su questo dispositivo restano salvati nome, età e favole preferite, finché non li cancelli.</li>
                         </ul>
                     </details>
-                    <p class="field-hint" id="profileHint" hidden>Nome ed età restano salvati solo su questo dispositivo. <button type="button" class="link-btn" onclick="forgetProfile()">Dimentica</button></p>
+                    <p class="field-hint" id="profileHint" hidden>Nome ed età restano salvati solo su questo dispositivo. <button type="button" class="link-btn" data-on-click="forgetProfile">Dimentica</button></p>
                 </div>
 
                 <div class="form-group">
                     <label id="ageLabel">🎂 Età del Bambino</label>
                     <div class="age-selector" role="group" aria-labelledby="ageLabel">
-                        <button class="age-btn" aria-pressed="false" onclick="selectAge(3, this)">3 anni</button>
-                        <button class="age-btn" aria-pressed="false" onclick="selectAge(4, this)">4 anni</button>
-                        <button class="age-btn" aria-pressed="false" onclick="selectAge(5, this)">5 anni</button>
-                        <button class="age-btn" aria-pressed="false" onclick="selectAge(6, this)">6 anni</button>
+                        <button class="age-btn" aria-pressed="false" data-on-click="selectAge" data-arg="3">3 anni</button>
+                        <button class="age-btn" aria-pressed="false" data-on-click="selectAge" data-arg="4">4 anni</button>
+                        <button class="age-btn" aria-pressed="false" data-on-click="selectAge" data-arg="5">5 anni</button>
+                        <button class="age-btn" aria-pressed="false" data-on-click="selectAge" data-arg="6">6 anni</button>
                     </div>
                 </div>
 
@@ -84,12 +84,12 @@
                     <p class="field-hint" id="genreHint">Puoi scegliere più opzioni.</p>
                     <div class="chip-group" id="genreChips" role="group" aria-labelledby="genreLabel" aria-describedby="genreHint">
                         <!-- choices:genre:start -->
-                        <button class="chip" aria-pressed="false" data-key="amicizia" onclick="pickChip('genre', this)">🤝 Amicizia</button>
-                        <button class="chip" aria-pressed="false" data-key="avventura" onclick="pickChip('genre', this)">🗺️ Avventura</button>
-                        <button class="chip" aria-pressed="false" data-key="coraggio" onclick="pickChip('genre', this)">🦁 Coraggio</button>
-                        <button class="chip" aria-pressed="false" data-key="nanna" onclick="pickChip('genre', this)">🌙 Per addormentarsi</button>
-                        <button class="chip" aria-pressed="false" data-key="magia" onclick="pickChip('genre', this)">✨ Magia e sogni</button>
-                        <button class="chip" aria-pressed="false" data-key="divertente" onclick="pickChip('genre', this)">😄 Divertente</button>
+                        <button class="chip" aria-pressed="false" data-key="amicizia" data-on-click="pickChip" data-arg="genre">🤝 Amicizia</button>
+                        <button class="chip" aria-pressed="false" data-key="avventura" data-on-click="pickChip" data-arg="genre">🗺️ Avventura</button>
+                        <button class="chip" aria-pressed="false" data-key="coraggio" data-on-click="pickChip" data-arg="genre">🦁 Coraggio</button>
+                        <button class="chip" aria-pressed="false" data-key="nanna" data-on-click="pickChip" data-arg="genre">🌙 Per addormentarsi</button>
+                        <button class="chip" aria-pressed="false" data-key="magia" data-on-click="pickChip" data-arg="genre">✨ Magia e sogni</button>
+                        <button class="chip" aria-pressed="false" data-key="divertente" data-on-click="pickChip" data-arg="genre">😄 Divertente</button>
                         <!-- choices:genre:end -->
                     </div>
                 </div>
@@ -99,13 +99,13 @@
                     <p class="field-hint" id="settingHint">Puoi scegliere più opzioni: il Bardo le combinerà nella storia.</p>
                     <div class="chip-group" id="settingChips" role="group" aria-labelledby="settingLabel" aria-describedby="settingHint">
                         <!-- choices:setting:start -->
-                        <button class="chip" aria-pressed="false" data-key="bosco" onclick="pickChip('setting', this)">🌲 Bosco magico</button>
-                        <button class="chip" aria-pressed="false" data-key="castello" onclick="pickChip('setting', this)">🏰 Castello</button>
-                        <button class="chip" aria-pressed="false" data-key="acqua" onclick="pickChip('setting', this)">🌊 Mare e fiume</button>
-                        <button class="chip" aria-pressed="false" data-key="montagna" onclick="pickChip('setting', this)">⛰️ Montagna</button>
-                        <button class="chip" aria-pressed="false" data-key="nuvole" onclick="pickChip('setting', this)">☁️ Tra le nuvole</button>
-                        <button class="chip" aria-pressed="false" data-key="cielo" onclick="pickChip('setting', this)">🌌 Cielo e stelle</button>
-                        <button class="chip" aria-pressed="false" data-key="giardino" onclick="pickChip('setting', this)">🏡 Giardino o casa</button>
+                        <button class="chip" aria-pressed="false" data-key="bosco" data-on-click="pickChip" data-arg="setting">🌲 Bosco magico</button>
+                        <button class="chip" aria-pressed="false" data-key="castello" data-on-click="pickChip" data-arg="setting">🏰 Castello</button>
+                        <button class="chip" aria-pressed="false" data-key="acqua" data-on-click="pickChip" data-arg="setting">🌊 Mare e fiume</button>
+                        <button class="chip" aria-pressed="false" data-key="montagna" data-on-click="pickChip" data-arg="setting">⛰️ Montagna</button>
+                        <button class="chip" aria-pressed="false" data-key="nuvole" data-on-click="pickChip" data-arg="setting">☁️ Tra le nuvole</button>
+                        <button class="chip" aria-pressed="false" data-key="cielo" data-on-click="pickChip" data-arg="setting">🌌 Cielo e stelle</button>
+                        <button class="chip" aria-pressed="false" data-key="giardino" data-on-click="pickChip" data-arg="setting">🏡 Giardino o casa</button>
                         <!-- choices:setting:end -->
                     </div>
                 </div>
@@ -130,7 +130,7 @@
                 </div>
 
                 <div class="btn-group">
-                    <button class="btn-primary" id="generateBtn" onclick="generateStory()">✨ Crea la Favola</button>
+                    <button class="btn-primary" id="generateBtn" data-on-click="generateStory">✨ Crea la Favola</button>
                 </div>
             </div>
 
@@ -138,14 +138,14 @@
                 <h2>📖 La Tua Favola Magica</h2>
 
                 <div class="reading-tools" role="toolbar" aria-label="Comfort di lettura">
-                    <button class="chip" id="sizeDown" onclick="changeTextSize(-1)" aria-label="Riduci il testo">A−</button>
-                    <button class="chip" id="sizeUp" onclick="changeTextSize(1)" aria-label="Ingrandisci il testo">A+</button>
-                    <button class="chip" id="readingModeBtn" aria-pressed="false" onclick="toggleReadingMode()">🌙 Lettura serale</button>
+                    <button class="chip" id="sizeDown" data-on-click="changeTextSize" data-arg="-1" aria-label="Riduci il testo">A−</button>
+                    <button class="chip" id="sizeUp" data-on-click="changeTextSize" data-arg="1" aria-label="Ingrandisci il testo">A+</button>
+                    <button class="chip" id="readingModeBtn" aria-pressed="false" data-on-click="toggleReadingMode">🌙 Lettura serale</button>
                 </div>
 
                 <img id="storyIllustration" class="story-illustration" style="display: none;">
                 <div class="story-display" id="storyDisplay">
-                    <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn" aria-label="Aggiungi ai preferiti" aria-pressed="false">🤍</button>
+                    <button class="favorite-btn" data-on-click="toggleFavorite" id="favoriteBtn" aria-label="Aggiungi ai preferiti" aria-pressed="false">🤍</button>
                     <div class="loading" id="loadingIndicator">
                         <div class="loading-spinner"></div>
                         <p>Il Piccolo Bardo sta creando la tua favola magica...</p>
@@ -162,16 +162,16 @@
                       ⏳ Il Bardo sta preparando la voce magica...<br>
                       <small>Attendi qualche secondo ✨</small>
                     </div>
-                    <button class="btn-success" onclick="listenStory()" id="readBtn" disabled>🔊 Leggi ad Alta Voce</button>
-                    <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled hidden title="Disponibile per gli utenti registrati">🎨 Crea Illustrazione 🔒</button>
-                    <button class="btn-primary" onclick="printStory()" id="printBtn" disabled>🖨️ Stampa PDF</button>
-                    <button class="btn-warning" onclick="togglePause()" id="pauseBtn" style="display: none;">⏸️ Pausa</button>
-                    <button class="btn-danger" onclick="stopReading()" id="stopBtn" style="display: none;">⏹️ Ferma Lettura</button>
+                    <button class="btn-success" data-on-click="listenStory" id="readBtn" disabled>🔊 Leggi ad Alta Voce</button>
+                    <button class="btn-warning" data-on-click="generateIllustration" id="illustrateBtn" disabled hidden title="Disponibile per gli utenti registrati">🎨 Crea Illustrazione 🔒</button>
+                    <button class="btn-primary" data-on-click="printStory" id="printBtn" disabled>🖨️ Stampa PDF</button>
+                    <button class="btn-warning" data-on-click="togglePause" id="pauseBtn" style="display: none;">⏸️ Pausa</button>
+                    <button class="btn-danger" data-on-click="stopReading" id="stopBtn" style="display: none;">⏹️ Ferma Lettura</button>
                 </div>
 
                 <div class="btn-group next-actions" id="nextActions" hidden>
-                    <button class="btn-primary" id="regenerateBtn" onclick="regenerateStory()">🔁 Un'altra simile</button>
-                    <button class="btn-success" id="newStoryBtn" onclick="newStory()">✨ Nuova favola</button>
+                    <button class="btn-primary" id="regenerateBtn" data-on-click="regenerateStory">🔁 Un'altra simile</button>
+                    <button class="btn-success" id="newStoryBtn" data-on-click="newStory">✨ Nuova favola</button>
                 </div>
             </div>
         </div>
@@ -181,17 +181,17 @@
             <div class="card">
                 <h2>❤️ Le Mie Favole Preferite</h2>
                 <div class="favorites-tools" id="favoritesTools" hidden>
-                    <input type="search" id="favoritesSearch" placeholder="🔎 Cerca tra le favole" aria-label="Cerca tra le favole preferite" oninput="displayFavorites()">
-                    <select id="favoritesSort" aria-label="Ordina le favole" onchange="displayFavorites()">
+                    <input type="search" id="favoritesSearch" placeholder="🔎 Cerca tra le favole" aria-label="Cerca tra le favole preferite" data-on-input="displayFavorites">
+                    <select id="favoritesSort" aria-label="Ordina le favole" data-on-change="displayFavorites">
                         <option value="recent">Più recenti</option>
                         <option value="old">Più vecchie</option>
                         <option value="title">Titolo A-Z</option>
                     </select>
                 </div>
                 <div class="favorites-backup">
-                    <button class="chip" onclick="exportFavorites()">⬇️ Esporta</button>
-                    <button class="chip" onclick="document.getElementById('importFavorites').click()">⬆️ Importa</button>
-                    <input type="file" id="importFavorites" accept="application/json,.json" hidden onchange="importFavorites(this)">
+                    <button class="chip" data-on-click="exportFavorites">⬇️ Esporta</button>
+                    <button class="chip" data-on-click="openImportPicker">⬆️ Importa</button>
+                    <input type="file" id="importFavorites" accept="application/json,.json" hidden data-on-change="importFavorites">
                 </div>
                 <p class="field-hint">Le favole sono salvate solo su questo dispositivo: usa Esporta per farne una copia.</p>
                 <div class="favorites-section" id="favoritesContainer">
@@ -256,7 +256,7 @@
     <!-- Modale Account -->
     <div class="modal" id="accountModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-content">
-            <button class="close-modal" onclick="closeAccountModal()" aria-label="Chiudi">×</button>
+            <button class="close-modal" data-on-click="closeAccountModal" aria-label="Chiudi">×</button>
             <h2 id="modalTitle">Accedi</h2>
             <div id="modalBody">
                 <!-- Contenuto dinamico: login o impostazioni -->

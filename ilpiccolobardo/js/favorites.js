@@ -207,7 +207,7 @@ export function displayFavorites() {
         card.setAttribute('role', 'button');
         card.tabIndex = 0;
         card.innerHTML = `
-            <button class="delete-btn" aria-label="Elimina questa favola" onclick="deleteFavorite(${index}); event.stopPropagation();">×</button>
+            <button class="delete-btn" aria-label="Elimina questa favola" data-on-click="deleteFavorite" data-arg="${index}">×</button>
             <h3>${escapeHTML(favoriteTitle(fav))}</h3>
             <p class="favorite-meta" style="font-size: 0.85em; margin-bottom: 10px;">
                 📅 ${new Date(fav.timestamp).toLocaleDateString('it-IT')} |
@@ -215,7 +215,7 @@ export function displayFavorites() {
             </p>
             <p>${escapeHTML(fav.text.substring(0, 150))}...</p>
         `;
-        card.onclick = () => loadFavorite(index);
+        card.onclick = (e) => { if (!e.target.closest('.delete-btn')) loadFavorite(index); };
         card.addEventListener('keydown', (e) => {
             if (e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); loadFavorite(index); }
         });

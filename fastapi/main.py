@@ -4,6 +4,7 @@ Baldo - Sistema Agentico per Racconto Astronomico & Meteorologico
 Entrypoint FastAPI con supporto a Geocoding, Meteo e Astronomia.
 """
 
+import os
 import logging
 import json
 import httpx
@@ -189,6 +190,11 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
     # quindi non c'è continuità da preservare tra una storia e l'altra.
     config = {"configurable": {"thread_id": f"racconto_{uuid.uuid4().hex}"}}
 
+    # I token grezzi (bozza e rifiniture) arrivano al bambino prima dei
+    # controlli di sicurezza finali: di default restano trattenuti e il
+    # racconto viene inviato intero solo nell'evento 'fine'.
+    STREAM_DRAFT_TOKENS = os.getenv("STREAM_DRAFT_TOKENS", "0") == "1"
+
     NODI_INTERNI = {"LangGraph", "", "_route_valuta_prompt", "_route_dopo_neo4j", 
                     "_route_valuta_frammenti", "_route_valuta_draft"}
 
@@ -219,7 +225,7 @@ async def genera_racconto_stream(request: Request, body: StoryStreamRequest):
                         }
                         yield f"data: {json.dumps(payload)}\n\n"
 
-                elif event_type == "on_chat_model_stream":
+                elif event_type == "on_chat_model_stream" and STREAM_DRAFT_TOKENS:
                     chunk = event["data"]["chunk"]
                     token = chunk.content if hasattr(chunk, "content") else ""
                     if token:

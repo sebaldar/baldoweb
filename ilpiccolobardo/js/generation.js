@@ -76,7 +76,7 @@ export function failGeneration(message, retry = true) {
     document.getElementById('storyDisplay').innerHTML = `
         <div class="loading" role="alert">
             <p>${escapeHTML(message)}</p>
-            ${retry ? '<button class="btn-primary" onclick="regenerateStory()">🔁 Riprova</button>' : ''}
+            ${retry ? '<button class="btn-primary" data-on-click="regenerateStory">🔁 Riprova</button>' : ''}
         </div>
     `;
 }
@@ -212,7 +212,7 @@ export function displayStory(story) {
 
     const display = document.getElementById('storyDisplay');
     display.innerHTML = `
-        <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
+        <button class="favorite-btn" data-on-click="toggleFavorite" id="favoriteBtn">🤍</button>
         ${escapeHTML(story).replace(/\n/g, '<br>')}
     `;
 

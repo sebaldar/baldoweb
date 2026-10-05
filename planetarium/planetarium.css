@@ -40,7 +40,7 @@ body {
     border-radius: 4px;
     color: #fff;
     font-weight: bold;
-    font-size: 12px;
+    font-size: 14px;
     padding: 2px 6px;
     outline: none;
     cursor: pointer;
@@ -87,10 +87,10 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
 #controls button {
     background: #4a9eff; border: none; color: white;
     padding: 8px 16px; margin: 5px; border-radius: 5px;
-    cursor: pointer; font-size: 12px; transition: background .3s;
+    cursor: pointer; font-size: 14px; transition: background .3s;
 }
 #controls button:hover { background: #357abd; }
-#controls label { display: block; margin: 10px 0 5px; font-size: 12px; color: #aaa; }
+#controls label { display: block; margin: 10px 0 5px; font-size: 14px; color: #aaa; }
 #controls input[type="range"] { width: 200px; }
 
 /* ── Console log ────────────────────────────────── */
@@ -100,7 +100,7 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255,255,255,.1);
     width: 533px; max-height: 300px; overflow-y: auto;
-    font-family: 'Courier New', monospace; font-size: 11px;
+    font-family: 'Courier New', monospace; font-size: 14px;
     display: none;
     z-index: 1000;
 }
@@ -111,14 +111,14 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
 .console-message.success { color: #4caf50; }
 .console-message.warning { color: #ff9800; }
 .console-message.error   { color: #f44336; }
-.console-timestamp { color: #888; font-size: 10px; margin-right: 8px; }
+.console-timestamp { color: #888; font-size: 14px; margin-right: 8px; }
 
 /* ── Command input ──────────────────────────────── */
 #command-input {
     flex: 1; background: rgba(255,255,255,.1);
     border: 1px solid rgba(255,255,255,.2); color: white;
     padding: 6px 10px; border-radius: 4px;
-    font-family: 'Courier New', monospace; font-size: 12px; outline: none;
+    font-family: 'Courier New', monospace; font-size: 14px; outline: none;
 }
 #command-input:focus { border-color: #4a9eff; background: rgba(255,255,255,.15); }
 
@@ -128,7 +128,7 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
     background: rgba(0,0,0,.9); padding: 20px; border-radius: 10px;
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255,255,255,.1);
-    max-width: 380px; font-size: 12px;
+    max-width: 380px; font-size: 14px;
 }
 #keyboard-help h3 { margin: 0 0 15px; color: #4a9eff; border-bottom: 1px solid rgba(255,255,255,.2); padding-bottom: 10px; }
 #keyboard-help .kb-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 15px; line-height: 1.6; align-items: center; }
@@ -153,7 +153,7 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
     transform: translateY(0);
     background: rgba(74, 158, 255, 0.5);
 }
-#keyboard-help .kb-note { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.1); color: #aaa; font-size: 11px; }
+#keyboard-help .kb-note { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.1); color: #aaa; font-size: 14px; }
 
 /* ── Dialog Popup ───────────────────────────────── */
 #dialog-popup {
@@ -290,7 +290,7 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
     display: flex; justify-content: space-between; align-items: center;
     padding: 10px 14px; background: rgba(74, 158, 255, 0.08);
     border-bottom: 1px solid rgba(74, 158, 255, 0.2);
-    font-size: 13px; font-weight: bold; color: #4a9eff; flex-shrink: 0;
+    font-size: 14px; font-weight: bold; color: #4a9eff; flex-shrink: 0;
 }
 
 #chatbot-popup-close {
@@ -315,7 +315,7 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
     margin-left: 0 !important;   
     padding: 10px 14px;          
     border-radius: 12px;
-    font-size: 13.5px;           
+    font-size: 14px;           
     line-height: 1.55;
     word-wrap: break-word;
     animation: chatbot-bubble-in 0.18s ease;
@@ -421,7 +421,7 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
 }
 .chatbot-suggestion-btn {
     background: rgba(10, 12, 24, 0.85); border: 1px solid rgba(74, 158, 255, 0.35);
-    color: #dde8ff; padding: 6px 14px; border-radius: 20px; font-size: 13px;
+    color: #dde8ff; padding: 6px 14px; border-radius: 20px; font-size: 14px;
     cursor: pointer; backdrop-filter: blur(8px); transition: all 0.2s ease;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
@@ -440,12 +440,12 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
     display: flex; align-items: center; gap: 8px;
     backdrop-filter: blur(10px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    font-size: 13px; color: #4a9eff;
+    font-size: 14px; color: #4a9eff;
     transition: border-color 0.2s;
 }
 #provider-container:hover { border-color: rgba(74,158,255,0.8); }
 #provider-container select {
-    background: transparent; border: none; color: #e8f0ff; font-size: 13px;
+    background: transparent; border: none; color: #e8f0ff; font-size: 14px;
     outline: none; cursor: pointer; font-weight: bold;
 }
 #provider-container select option { background: #0a0c18; color: #e8f0ff; }
@@ -531,3 +531,177 @@ input[type="time"].value-input::-webkit-calendar-picker-indicator {
 .help-body ul { margin: 0 0 15px 20px; padding: 0; }
 .help-body li { margin-bottom: 6px; }
 .help-body p { margin-bottom: 10px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   ── UI v2: barra superiore, ricerca, dock, etichette, mobile ──── */
+
+:focus-visible { outline: 2px solid #ffb74d; outline-offset: 2px; }
+
+/* Barra in alto a destra: ricerca, provider AI, guida, stato connessione */
+#top-bar {
+    position: absolute; top: 20px; right: 20px; z-index: 9999;
+    display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 360px);
+}
+#top-bar > #provider-container,
+#top-bar > #help-btn,
+#top-bar > #connection-status { position: static; }
+#top-bar > #provider-container { right: auto; top: auto; }
+#top-bar > #help-btn { right: auto; top: auto; flex-shrink: 0; }
+
+/* Stato connessione: pallino con tooltip */
+#top-bar > #connection-status {
+    width: 14px; height: 14px; padding: 0; border-radius: 50%; flex-shrink: 0;
+    box-shadow: 0 0 0 3px rgba(0,0,0,.45);
+}
+#connection-status.connected    { background: #4caf50; }
+#connection-status.disconnected { background: #f44336; }
+#connection-status.connecting   { background: #ff9800; animation: conn-pulse 1s infinite; }
+@keyframes conn-pulse { 50% { opacity: .35; } }
+
+/* Ricerca oggetti */
+#search-box { position: relative; }
+#sky-search {
+    width: 240px; background: rgba(10,12,24,.8); color: #e8f0ff;
+    border: 1px solid rgba(74,158,255,.4); border-radius: 8px;
+    padding: 8px 12px; font-size: 14px; outline: none; backdrop-filter: blur(10px);
+}
+#sky-search:focus { border-color: #4a9eff; box-shadow: 0 0 8px rgba(74,158,255,.4); }
+#sky-search::placeholder { color: rgba(170,190,255,.55); }
+#sky-search-results {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; list-style: none;
+    margin: 0; padding: 4px; max-height: 280px; overflow-y: auto;
+    background: rgba(10,12,24,.97); border: 1px solid rgba(74,158,255,.4);
+    border-radius: 8px; backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0,0,0,.6);
+}
+#sky-search-results[hidden] { display: none; }
+#sky-search-results li {
+    padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; color: #e8f0ff;
+    display: flex; justify-content: space-between; gap: 10px;
+}
+#sky-search-results li small { color: #8fa3cc; font-size: 14px; }
+#sky-search-results li[aria-selected="true"], #sky-search-results li:hover { background: rgba(74,158,255,.25); }
+
+/* Striscia sempre visibile: data, ora, luogo, direzione di vista */
+#status-strip {
+    position: absolute; top: 68px; right: 20px;
+    z-index: 900; display: flex; gap: 8px; align-items: center; white-space: nowrap;
+    background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 20px; padding: 6px 16px; font-size: 14px; color: #dde8ff;
+    backdrop-filter: blur(8px); pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+.strip-sep { opacity: .4; }
+
+/* Dock strumenti */
+#controls {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    max-width: calc(50vw - 280px); min-width: 0; padding: 8px 10px;
+}
+#controls button { margin: 0; display: inline-flex; align-items: center; gap: 6px; }
+#controls button[aria-pressed="true"], #controls button.active { background: #ff9800; }
+#controls .dock-zoom { display: inline-flex; margin: 0 0 0 6px; gap: 4px; }
+#controls input[type="range"] { width: 110px; }
+#keyboard-help { bottom: 76px; }
+@media (min-width: 1101px) and (max-width: 1699px) { #controls .dock-text { display: none; } }
+
+/* Etichette sul cielo */
+#sky-labels { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+#sky-labels .sky-label {
+    position: absolute; transform: translate(10px, -50%); white-space: nowrap;
+    font-size: 14px; color: #fff; text-shadow: 0 0 4px #000, 0 0 8px #000;
+}
+
+/* Console */
+.console-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.2);
+}
+.console-header h3 { margin: 0; font-size: 14px; }
+.console-actions { display: flex; gap: 8px; }
+.console-clear, .console-close {
+    border: none; color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 14px; min-height: 28px;
+}
+.console-clear { background: #f44336; }
+.console-close { background: rgba(255,255,255,.1); font-size: 18px; line-height: 1; min-width: 28px; }
+.console-input-row { display: flex; align-items: center; margin-top: 10px; }
+.console-prompt { color: #4a9eff; font-weight: bold; margin-right: 8px; font-size: 14px; }
+
+/* Modalità giroscopio: nasconde l'interfaccia di contorno */
+body.gyro-active #top-bar, body.gyro-active #status-strip, body.gyro-active #controls,
+body.gyro-active #sky-labels { display: none !important; }
+
+#canvas-container canvas { touch-action: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    #connection-status.connecting, .chatbot-dot, #chatbot-popup, .chatbot-bubble { animation: none; }
+}
+
+/* Tablet stretto */
+@media (max-width: 1100px) {
+    #status-strip .strip-view { display: none; }
+    #top-bar { max-width: calc(100vw - 340px); }
+    #sky-search { width: 180px; }
+    #controls { bottom: 130px; max-width: calc(100vw - 40px); }
+    #keyboard-help { bottom: 190px; }
+}
+
+/* ── Smartphone ── */
+@media (max-width: 768px) {
+    #info-panel { top: 52px; left: 10px; max-width: calc(100vw - 20px); right: 10px; padding: 12px; }
+    #info-panel-content { max-height: 55vh; overflow-y: auto; }
+
+    #top-bar {
+        top: auto; right: 10px; left: 10px; bottom: 150px; max-width: none;
+        justify-content: flex-end; flex-wrap: wrap;
+    }
+    /* la barra va in basso sopra la chat: ricerca a tutta larghezza, risultati verso l'alto */
+    #search-box { flex: 1 1 100%; order: -1; }
+    #sky-search { width: 100%; }
+    #sky-search-results { top: auto; bottom: calc(100% + 4px); }
+    #provider-container { margin-right: auto; }
+    #help-btn { width: 44px; height: 44px; }
+
+    #status-strip { top: 10px; left: 10px; right: 10px; transform: none;
+        justify-content: center; font-size: 14px; padding: 6px 10px; overflow: hidden; }
+    #strip-place { overflow: hidden; text-overflow: ellipsis; }
+
+    #controls {
+        left: 10px; right: 10px; bottom: 76px; max-width: none; justify-content: space-between;
+        padding: 6px 8px;
+    }
+    #controls button { padding: 10px 12px; min-height: 44px; }
+    #controls .dock-text { display: none; }
+    #controls input[type="range"] { flex: 1; min-width: 70px; width: auto; }
+    #keyboard-help { left: 10px; right: 10px; bottom: 140px; max-width: none; max-height: 45vh; overflow-y: auto; }
+
+    #console-log { width: auto; left: 10px; right: 10px; bottom: 140px; max-height: 45vh; }
+    #console-messages { max-height: 25vh; }
+
+    #chatbot-widget { bottom: 10px; max-width: calc(100vw - 20px); }
+    #chatbot-popup { max-height: 50vh; }
+
+    #dialog-popup { max-width: calc(100vw - 20px); }
+    .location-dialog-content { width: 96%; padding: 14px; }
+    #location-map { height: 260px !important; }
+    .input-group { flex-direction: column; align-items: stretch; gap: 4px; }
+    .input-group label { min-width: 0; }
+    .help-content { width: 96%; }
+}
+
+/* ── Rifiniture dopo la verifica visiva ── */
+/* Pannello dati chiuso: solo l'intestazione, senza riquadro vuoto sotto */
+#info-panel:has(#info-panel-content.collapsed) #info-panel-header {
+    margin-bottom: 0; padding-bottom: 0; border-bottom: none;
+}
+/* Aiuto tastiera a destra, sotto la striscia di stato: non copre il pannello dati */
+@media (min-width: 769px) {
+    #keyboard-help { left: auto; right: 20px; bottom: auto; top: 112px; max-height: calc(100vh - 340px); overflow-y: auto; }
+    #console-log { width: min(533px, calc(50vw - 280px)); min-width: 320px; }
+}
+@media (min-width: 769px) and (max-width: 1100px) {
+    #console-log { bottom: 190px; width: min(533px, calc(100vw - 40px)); }
+    #keyboard-help { max-height: calc(100vh - 460px); }
+}
+@media (max-width: 768px) {
+    #keyboard-help, #console-log { bottom: 270px; max-height: 38vh; }
+}

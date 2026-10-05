@@ -163,6 +163,7 @@ const controls = {
                 logToPage(`💡 luce ambiente: ${this._ambientLight ? 'on' : 'off'}`, 'info');
                 break;
             case 67: e.preventDefault(); toggleConsole();              break;
+            case 84: e.preventDefault(); if (window.skyUI) skyUI.cycleLabels(); break;
             case 82: e.preventDefault(); this._send('default');       logToPage('🔄 reset',    'info'); break;
         }
     },

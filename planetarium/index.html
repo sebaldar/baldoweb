@@ -14,7 +14,7 @@
             border: 1px solid rgba(74, 158, 255, 0.4);
             border-radius: 6px;
             color: #4a9eff;
-            font-size: 13px;
+            font-size: 14px;
             cursor: pointer;
             transition: background 0.2s, border-color 0.2s;
             text-align: center;
@@ -127,7 +127,7 @@
             border: none;
             border-radius: 20px;
             color: #fff;
-            font-size: 13px;
+            font-size: 14px;
             cursor: pointer;
             box-shadow: 0 2px 10px rgba(0,0,0,0.4);
         }
@@ -157,7 +157,14 @@
 <body>
     <div id="canvas-container"></div>
     
-	<div id="provider-container">
+    <div id="top-bar">
+        <div id="search-box" role="search">
+            <input type="search" id="sky-search" placeholder="🔎 Cerca: Luna, Sirio, Orione…"
+                   aria-label="Cerca un oggetto celeste" autocomplete="off" role="combobox"
+                   aria-expanded="false" aria-controls="sky-search-results" aria-autocomplete="list">
+            <ul id="sky-search-results" role="listbox" hidden></ul>
+        </div>
+        <div id="provider-container">
         <label for="ai-provider">🤖 AI:</label>
         <select id="ai-provider" title="Scegli l'intelligenza artificiale">
             <option value="ionos" selected>Ionos (Veloce)</option>
@@ -167,6 +174,18 @@
         </select>
     </div>
     
+        <button id="help-btn" onclick="toggleHelpModal()" title="Guida all'uso" aria-label="Guida all'uso">?</button>
+        <div id="connection-status" class="disconnected" role="status" aria-label="Disconnesso" title="Disconnesso"></div>
+    </div>
+
+    <div id="status-strip" aria-live="off">
+        <span id="strip-datetime">--</span>
+        <span class="strip-sep">·</span>
+        <span id="strip-place">--</span>
+        <span class="strip-sep strip-view">·</span>
+        <span id="strip-view" class="strip-view">--</span>
+    </div>
+
     <div id="info-panel">
         <div id="info-panel-header">
             <h2>📡 Dati Simulazione</h2>
@@ -204,8 +223,6 @@
         </div>
     </div>
 
-    <div id="connection-status" class="disconnected">⚫ Disconnesso</div>
-
     <!-- Gyro Mode HUD overlay -->
     <div id="gyro-hud" style="display:none;">
         <div id="gyro-hud-inner">
@@ -232,12 +249,15 @@
         ✕ Esci
     </button>
 
-    <div id="controls">
-        <button id="toggle-console">📋 Console</button>
-        <button id="toggle-help">❓ Tastiera</button>
-        <label>Zoom: <span id="zoom-value">1.0</span></label>
-        <input type="range" id="zoom-slider" min="0.1" max="3" step="0.1" value="1.0">
+    <div id="controls" role="toolbar" aria-label="Strumenti">
+        <button id="toggle-labels" aria-label="Etichette sul cielo" aria-pressed="false" title="Etichette sul cielo (T)">🏷️ <span class="dock-text">Etichette</span></button>
+        <button id="toggle-help" aria-label="Comandi da tastiera" aria-controls="keyboard-help" title="Comandi da tastiera">⌨️ <span class="dock-text">Tastiera</span></button>
+        <button id="toggle-console" aria-label="Console" aria-controls="console-log" title="Console (C)">📋 <span class="dock-text">Console</span></button>
+        <label for="zoom-slider" class="dock-zoom">🔍 <span id="zoom-value">1.0</span></label>
+        <input type="range" id="zoom-slider" min="0.1" max="3" step="0.1" value="1.0" aria-label="Zoom">
     </div>
+
+    <div id="sky-labels" aria-hidden="true"></div>
 
     <div id="keyboard-help">
         <h3>⌨️ Comandi Tastiera</h3>
@@ -321,16 +341,16 @@
     </div>
 
     <div id="console-log">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.2);padding-bottom:8px;">
-            <h3 style="margin:0;font-size:14px;">📋 Console</h3>
-            <div style="display:flex;gap:8px;">
-                <button onclick="clearConsole()" style="background:#f44336;border:none;color:white;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;">Pulisci</button>
-                <button onclick="toggleConsole()" style="background:rgba(255,255,255,0.1);border:none;color:white;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:16px;line-height:1;width:24px;height:24px;">×</button>
+        <div class="console-header">
+            <h3>📋 Console</h3>
+            <div class="console-actions">
+                <button class="console-clear" onclick="clearConsole()">Pulisci</button>
+                <button class="console-close" onclick="toggleConsole()" aria-label="Chiudi console">×</button>
             </div>
         </div>
         <div id="console-messages"></div>
-        <div style="display:flex;align-items:center;margin-top:10px;">
-            <span style="color:#4a9eff;font-weight:bold;margin-right:8px;font-size:14px;">&gt;</span>
+        <div class="console-input-row">
+            <span class="console-prompt">&gt;</span>
             <input type="text" id="command-input" placeholder="Invia comando al server..."
                    onkeypress="if(event.key==='Enter') sendCommandToServer()">
         </div>
@@ -377,8 +397,6 @@
         </div>   
     </div>
 
-    <button id="help-btn" onclick="toggleHelpModal()" title="Guida all'uso">?</button>
-
     <div id="help-modal" style="display:none;">
         <div class="help-content">
             <div class="help-header">
@@ -390,7 +408,9 @@
                 <h4>🖱️ Navigazione Base</h4>
                 <ul>
                     <li><strong>Trascina</strong> il mouse (o il dito) per ruotare la visuale.</li>
-                    <li><strong>Scorri la rotellina</strong> (o usa il pinch) per fare Zoom.</li>
+                    <li><strong>Scorri la rotellina</strong> (o usa il pinch con due dita) per fare Zoom.</li>
+                    <li>Usa la <strong>barra di ricerca</strong> in alto per andare a Luna, pianeti, stelle e costellazioni.</li>
+                    <li>Il pulsante <strong>🏷️ Etichette</strong> (o il tasto <strong>T</strong>) mostra i nomi degli oggetti sul cielo.</li>
                     <li><strong>Doppio click</strong> su un astro o una stella per centrare la telecamera.</li>
                 </ul>
 
@@ -419,6 +439,7 @@
     <script src="planetarium-state.js"></script>
     <script src="planetarium-webgl.js"></script>
     <script src="planetarium-controls.js"></script>
+    <script src="planetarium-ui.js"></script>
 
     <script>
         // ── Configurazione ────────────────────────────────────────────────────
@@ -865,7 +886,9 @@
         function updateConnectionStatus(status, text) {
             const el = document.getElementById('connection-status');
             el.className = status;
-            el.textContent = text;
+            el.textContent = '';
+            el.title = text;
+            el.setAttribute('aria-label', text);
         }
 
         // ── Geolocalizzazione ─────────────────────────────────────────────────
@@ -1457,6 +1480,7 @@
         }
 
         function _showGyroUI() {
+            document.body.classList.add('gyro-active');
             document.getElementById('gyro-hud').style.display         = 'block';
             document.getElementById('gyro-crosshair').style.display   = 'block';
             document.getElementById('gyro-shutter-btn').style.display = 'flex';
@@ -1489,6 +1513,7 @@
         }
 
         function _hideGyroUI() {
+            document.body.classList.remove('gyro-active');
             document.getElementById('gyro-hud').style.display         = 'none';
             document.getElementById('gyro-crosshair').style.display   = 'none';
             document.getElementById('gyro-shutter-btn').style.display = 'none';

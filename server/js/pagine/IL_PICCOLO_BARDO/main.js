@@ -494,7 +494,8 @@ async function exe(server, ws, message) {
               const speech_generated = await manager.synthesizeSpeech(text);
               response = {
                 action: 'speech_generated',
-                audioUrl: speech_generated
+                audioUrl: speech_generated,
+                requestId: message.data.requestId
               };
             }
               break;
@@ -559,6 +560,8 @@ async function exe(server, ws, message) {
 
         const errorResponse = {
             action: 'error',
+            requestAction: message.action,
+            requestId: message.data?.requestId,
             message: error.message || 'Errore sconosciuto',
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         };

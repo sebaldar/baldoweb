@@ -1,9 +1,23 @@
 /* Service worker di Il Piccolo Bardo.
  * Mette in cache solo la "shell" statica (pagina, script, font, icone).
  * Non tocca mai /api, /ws, /admin, /loader, né immagini e audio generati. */
-const CACHE = 'bardo-shell-v8';
+const CACHE = 'bardo-shell-v11';
 const SHELL = [
     '/',
+    '/styles/app.css',
+    '/js/theme-init.js',
+    '/js/app.js',
+    '/js/state.js',
+    '/js/choices.js',
+    '/js/connection.js',
+    '/js/generation.js',
+    '/js/favorites.js',
+    '/js/reading.js',
+    '/js/pdf.js',
+    '/js/illustrations.js',
+    '/js/account.js',
+    '/js/ui.js',
+    '/js/pwa.js',
     '/safe-html.js',
     '/toast.js',
     '/confirm-dialog.js',

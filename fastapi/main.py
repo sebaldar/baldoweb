@@ -24,6 +24,7 @@ from services.astronomy import AstronomyClient
 from services.weather import WeatherClient    # <--- NUOVO
 from services.geo_service import GeoService  # <--- NUOVO
 from services.report import salva_report_storia
+from services.story_choices import GENERI_AMMESSI, AMBIENTAZIONI_AMMESSE, normalizza_scelte
 
 from routers.admin import router as admin_router
 
@@ -90,10 +91,6 @@ app.include_router(admin_router)
 # ---------------------------------------------------------------------------
 # Modelli Pydantic
 # ---------------------------------------------------------------------------
-GENERI_AMMESSI = {"amicizia", "avventura", "coraggio", "nanna", "magia"}
-AMBIENTAZIONI_AMMESSE = {"bosco", "castello", "acqua", "montagna", "nuvole", "cielo", "giardino"}
-
-
 class StoryStreamRequest(BaseModel):
     prompt:      str = Field(min_length=1, max_length=8000)
     lingua:      str = "it"
@@ -111,20 +108,20 @@ class StoryStreamRequest(BaseModel):
     nome:              Optional[str] = None
     colore_preferito:  Optional[str] = None
     animale_preferito: Optional[str] = None
-    # Scelte a chip del form (genere e ambientazione): valori fuori elenco
-    # vengono scartati invece di far fallire la richiesta.
+    # Scelte a chip, anche multiple separate da virgole. I valori fuori
+    # elenco vengono scartati invece di far fallire la richiesta.
     genere:        Optional[str] = None
     ambientazione: Optional[str] = None
 
     @field_validator("genere")
     @classmethod
     def _genere_valido(cls, v):
-        return v if v in GENERI_AMMESSI else None
+        return normalizza_scelte(v, GENERI_AMMESSI)
 
     @field_validator("ambientazione")
     @classmethod
     def _ambientazione_valida(cls, v):
-        return v if v in AMBIENTAZIONI_AMMESSE else None
+        return normalizza_scelte(v, AMBIENTAZIONI_AMMESSE)
 
 class StoryResponse(BaseModel):
     racconto:        str

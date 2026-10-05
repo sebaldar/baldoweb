@@ -134,6 +134,37 @@ Il modello riportato è quello **effettivamente risposto** per ogni chiamata (le
 
 ---
 
+## Frontend
+
+Il sito viene servito come file statici, senza un passaggio di build. `index.html`
+contiene la struttura; `styles/app.css` contiene gli stili. `js/app.js` carica
+moduli ES nativi dedicati a connessione, generazione, preferiti, lettura, PDF,
+account, illustrazioni, tema e PWA. `js/state.js` contiene lo stato condiviso.
+L'entry point espone su `window` i comandi richiamati dai pulsanti della pagina.
+`js/theme-init.js` applica il tema prima di mostrare il contenuto.
+
+Temi e ambientazioni sono selezioni multiple indipendenti. `js/choices.js`
+normalizza sia le nuove liste sia i vecchi preferiti a scelta singola. Il prompt
+combina tutti gli elementi e dà al tono "Per addormentarsi" un ritmo rilassante.
+Le liste restano nei preferiti e nei backup; i metadati dell'API mantengono il
+formato testuale, con più valori separati da virgole.
+
+I preferiti vengono aggiornati in memoria solo dopo una scrittura riuscita nel
+browser. Se l'archivio non è leggibile, viene conservato finché l'utente non
+importa un backup. La preparazione audio consente una richiesta alla volta,
+può essere annullata e scade dopo 120 secondi. Il server restituisce il
+`requestId` anche negli errori: le risposte di richieste già annullate vengono
+ignorate. La modifica del protocollo audio richiede di aggiornare anche il
+servizio Node, oltre ai file statici.
+
+La shell offline in `sw.js` include CSS e tutti i moduli. Quando si aggiunge
+un file necessario al frontend, aggiungerlo a `SHELL` e aggiornare la versione
+della cache.
+
+Eseguire `npm test` dalla cartella `server` per verificare i flussi. I test
+frontend caricano gli stessi moduli ES della pagina tramite i moduli VM di
+Node e simulano errori di spazio, disconnessioni e risposte audio tardive.
+
 ## 🚦 Installazione e Avvio
 
 1. **Clona il repository:**

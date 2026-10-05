@@ -4,7 +4,7 @@ function showToast(message, type = 'info', duration = 5000) {
         const style = document.createElement('style');
         style.id = 'toast-style';
         style.textContent = `
-            #toastContainer { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 3000;
+            #toastContainer { position: fixed; top: calc(20px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 3000;
                 display: flex; flex-direction: column; gap: 10px; width: min(92vw, 460px); pointer-events: none; }
             .toast { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-radius: 14px;
                 background: #fff; color: #2c3e50; border-left: 6px solid #667eea; box-shadow: 0 10px 30px rgba(0,0,0,.3);

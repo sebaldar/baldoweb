@@ -2,7 +2,15 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#667eea">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Piccolo Bardo">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="/public/icons/icon.svg">
+    <link rel="apple-touch-icon" href="/public/icons/apple-touch-icon.png">
     <title>Il Piccolo Bardo - Crea la Tua Favola</title>
     <style>
         * {
@@ -25,7 +33,12 @@
             font-family: 'Comic Sans MS', 'Segoe UI', Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            min-height: 100dvh;
             padding: 20px;
+            padding-top: calc(20px + env(safe-area-inset-top));
+            padding-right: calc(20px + env(safe-area-inset-right));
+            padding-bottom: calc(20px + env(safe-area-inset-bottom));
+            padding-left: calc(20px + env(safe-area-inset-left));
             transition: background 0.5s ease;
         }
 
@@ -471,6 +484,34 @@
             display: block;
         }
 
+        /* Focus ben visibile da tastiera */
+        button:focus-visible, [role="button"]:focus-visible, a:focus-visible, .tab:focus-visible {
+            outline: 3px solid var(--warning);
+            outline-offset: 2px;
+        }
+        .close-modal, .delete-btn { min-width: 44px; min-height: 44px; }
+        .delete-btn { width: 44px; height: 44px; top: 4px; right: 4px; }
+        .tab-icon { margin-right: 6px; }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+        .offline-banner {
+            position: fixed; left: 0; right: 0; z-index: 1000;
+            top: calc(70px + env(safe-area-inset-top));
+            margin: 0 auto; width: fit-content; max-width: calc(100vw - 32px);
+            background: var(--warning); color: #fff; font-weight: 700;
+            padding: 8px 18px; border-radius: 20px; box-shadow: 0 2px 10px rgba(0,0,0,.25);
+            text-align: center;
+        }
+        .offline-banner[hidden] { display: none; }
+
         @media (max-width: 768px) {
             h1 { font-size: 2em; }
             .age-selector { flex-direction: column; }
@@ -525,6 +566,9 @@
             justify-content: space-between;
             align-items: center;
             padding: 15px 20px;
+            padding-top: calc(15px + env(safe-area-inset-top));
+            padding-left: calc(20px + env(safe-area-inset-left));
+            padding-right: calc(20px + env(safe-area-inset-right));
             position: fixed;
             top: 0;
             left: 0;
@@ -648,21 +692,54 @@
         }
 
         
+
+        /* Smartphone: le schede diventano una barra in basso, raggiungibile col pollice */
+        @media (max-width: 768px) {
+            body { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
+            .tabs {
+                position: fixed; left: 0; right: 0; bottom: 0; z-index: 998; margin: 0; gap: 0;
+                border: none; background: rgba(255,255,255,0.96); backdrop-filter: blur(10px);
+                box-shadow: 0 -2px 12px rgba(0,0,0,0.18);
+                padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            }
+            body.nightmode .tabs { background: rgba(26,26,46,0.96); }
+            .tab, body.nightmode .tab, body.nightmode .tab:hover {
+                flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                gap: 2px; min-height: 60px; padding: 6px 4px; border-radius: 0; background: transparent;
+                font-size: 0.85em; color: #555;
+            }
+            body.nightmode .tab, body.nightmode .tab:hover { color: #cfd8e3; }
+            .tab-icon { margin: 0; font-size: 1.5em; line-height: 1; }
+            .tab-long { display: none; }
+            .tab.active, body.nightmode .tab.active { background: transparent; color: var(--primary); box-shadow: inset 0 3px 0 var(--primary); }
+            body.nightmode .tab.active { color: #f39c12; box-shadow: inset 0 3px 0 #f39c12; }
+        }
     </style>
 </head>
 <body>
+    <script>
+        // Tema scuro: scelta salvata, altrimenti quella del dispositivo. Applicato prima del rendering per evitare lampi.
+        (function () {
+            let saved = null;
+            try { saved = localStorage.getItem('bardo_theme'); } catch (e) {}
+            const dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (dark) document.body.classList.add('nightmode');
+        })();
+    </script>
     <!-- Header bar con account e toggle notte -->
     <div class="header-bar">
-        <button class="account-btn" onclick="openAccountModal()" id="accountBtn" title="Account">
+        <button class="account-btn" onclick="openAccountModal()" id="accountBtn" title="Account" aria-label="Account" aria-haspopup="dialog">
             👤
             <span class="account-name" id="accountName" style="display:none;"></span>
         </button>
 
-        <button class="nightmode-toggle" onclick="toggleNightMode()" title="Modalità buonanotte">🌙</button>
+        <button class="nightmode-toggle" onclick="toggleNightMode()" title="Modalità buonanotte" aria-label="Attiva la modalità buonanotte" aria-pressed="false">🌙</button>
     </div>
 
     <!-- Spazio per evitare sovrapposizione con header fisso -->
-    <div style="height: 80px;"></div>
+    <div style="height: calc(80px + env(safe-area-inset-top));"></div>
+
+    <div id="offlineBanner" class="offline-banner" role="status" aria-live="polite" hidden>📡 Sei offline: le favole preferite restano leggibili, per crearne una nuova serve la connessione.</div>
 
     <div class="container">
         <header>
@@ -672,10 +749,10 @@
         </header>
 
 
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('create')">✨ Crea Favola</button>
-            <button class="tab" onclick="switchTab('favorites')">❤️ Le Mie Preferite</button>
-            <button class="tab" onclick="switchTab('chi_sono')">Info</button>
+        <div class="tabs" role="tablist" aria-label="Sezioni">
+            <button class="tab active" role="tab" id="tab-create" aria-selected="true" aria-controls="create-tab" onclick="switchTab('create')"><span class="tab-icon" aria-hidden="true">✨</span><span class="tab-label">Crea Favola</span></button>
+            <button class="tab" role="tab" id="tab-favorites" aria-selected="false" aria-controls="favorites-tab" tabindex="-1" onclick="switchTab('favorites')"><span class="tab-icon" aria-hidden="true">❤️</span><span class="tab-label">Le Mie <span class="tab-long">Preferite</span></span></button>
+            <button class="tab" role="tab" id="tab-chi_sono" aria-selected="false" aria-controls="chi_sono-tab" tabindex="-1" onclick="switchTab('chi_sono')"><span class="tab-icon" aria-hidden="true">ℹ️</span><span class="tab-label">Info</span></button>
         </div>
 
         <!-- TAB: CREA FAVOLA -->
@@ -725,7 +802,7 @@
                 
                 <img id="storyIllustration" class="story-illustration" style="display: none;">
                 <div class="story-display" id="storyDisplay">
-                    <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
+                    <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn" aria-label="Aggiungi ai preferiti" aria-pressed="false">🤍</button>
                     <div class="loading" id="loadingIndicator">
                         <div class="loading-spinner"></div>
                         <p>Il Piccolo Bardo sta creando la tua favola magica...</p>
@@ -745,7 +822,8 @@
                     <button class="btn-success" onclick="listenStory()" id="readBtn" disabled>🔊 Leggi ad Alta Voce</button>
                     <button class="btn-warning" onclick="generateIllustration()" id="illustrateBtn" disabled title="Disponibile per gli utenti registrati">🎨 Crea Illustrazione 🔒</button>
                     <button class="btn-primary" onclick="printStory()" id="printBtn" disabled>🖨️ Stampa PDF</button>
-                   <button class="btn-danger" onclick="stopReading()" id="stopBtn" disabled style="display: none;">⏹️ Ferma Lettura</button>
+                    <button class="btn-warning" onclick="togglePause()" id="pauseBtn" style="display: none;">⏸️ Pausa</button>
+                    <button class="btn-danger" onclick="stopReading()" id="stopBtn" style="display: none;">⏹️ Ferma Lettura</button>
                 </div>
             </div>
         </div>
@@ -814,9 +892,9 @@
     </footer>
 
     <!-- Modale Account -->
-    <div class="modal" id="accountModal">
+    <div class="modal" id="accountModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-content" style="position: relative;">
-            <button class="close-modal" onclick="closeAccountModal()">×</button>
+            <button class="close-modal" onclick="closeAccountModal()" aria-label="Chiudi">×</button>
             <h2 id="modalTitle">Accedi</h2>
             <div id="modalBody">
                 <!-- Contenuto dinamico: login o impostazioni -->
@@ -830,7 +908,7 @@
     <script src="safe-html.js"></script>
     <script src="toast.js"></script>
     <script src="confirm-dialog.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
+<script src="/public/vendor/jspdf.umd.min.js"></script>
 
     <script>
         let ws = null;
@@ -840,7 +918,7 @@
         let speechSynthesis = window.speechSynthesis;
         let currentUtterance = null;
         let favorites = [];
-        let isNightMode = false;
+        let isNightMode = document.body.classList.contains('nightmode');
 		let geoCache = null
         // Generazione immagini disattivata in demo: costo per chiamata troppo
         // alto per un pulsante libero senza autenticazione. Riattivare quando
@@ -994,7 +1072,9 @@ if (response.ok) {
                 ws.send(JSON.stringify(message));
                 console.log(`→ Inviato: ${action}`);
             } else {
-                showToast('Non connesso al server! Riprova tra qualche secondo.', 'error');
+                showToast(navigator.onLine === false
+                    ? 'Sei offline: per questa azione serve la connessione.'
+                    : 'Non connesso al server! Riprova tra qualche secondo.', 'error');
             }
         }
 
@@ -1008,8 +1088,7 @@ if (response.ok) {
                 displayIllustration(response.data.imageUrl);
             } else if (response.action === 'speech_generated') {
                 document.getElementById('audioLoading').style.display = 'none';
-                const audio = new Audio(response.audioUrl);
-                audio.play();
+                playNarration(response.audioUrl);
             } else if (response.action === 'image_generated') {
                 displayIllustration(response.img);
             } else if (response.action === 'title_generated') {
@@ -1145,6 +1224,7 @@ if (response.ok) {
 				showToast('Scrivi cosa vuoi nella favola! 💭', 'warning');
 				return;
 			}
+			stopReading();
 
 			const childName = document.getElementById('childName').value;
 			const favoriteAnimal = document.getElementById('favoriteAnimal').value;
@@ -1227,13 +1307,93 @@ if (response.ok) {
         }
 
 
+        // ── Lettura: audio, pausa/ripresa, controlli di sistema, schermo acceso ──
+        let currentAudio = null;
+        let wakeLock = null;
+
+        async function acquireWakeLock() {
+            try {
+                if ('wakeLock' in navigator && !wakeLock) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', () => { wakeLock = null; });
+                }
+            } catch (e) { wakeLock = null; }
+        }
+        function releaseWakeLock() {
+            if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+        }
+        // Il browser rilascia il blocco quando la pagina va in background: lo riprendo al ritorno
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && currentAudio && !currentAudio.paused) acquireWakeLock();
+        });
+
+        function setReadingUI(state) { // 'idle' | 'playing' | 'paused'
+            const active = state !== 'idle';
+            document.getElementById('readBtn').style.display = active ? 'none' : 'block';
+            document.getElementById('pauseBtn').style.display = active ? 'block' : 'none';
+            document.getElementById('stopBtn').style.display = active ? 'block' : 'none';
+            document.getElementById('pauseBtn').textContent = state === 'paused' ? '▶️ Riprendi' : '⏸️ Pausa';
+            document.getElementById('audioVisualizer').classList.toggle('active', state === 'playing');
+        }
+
+        function playNarration(url) {
+            stopReading();
+            const audio = new Audio(url);
+            currentAudio = audio;
+            audio.addEventListener('play', () => { setReadingUI('playing'); acquireWakeLock(); setMediaSessionState('playing'); });
+            audio.addEventListener('pause', () => {
+                if (audio.ended || currentAudio !== audio) return;
+                setReadingUI('paused'); releaseWakeLock(); setMediaSessionState('paused');
+            });
+            audio.addEventListener('ended', () => { if (currentAudio === audio) stopReading(); });
+            audio.addEventListener('error', () => {
+                if (currentAudio !== audio) return;
+                stopReading();
+                showToast('Non riesco a riprodurre l\'audio. Riprova.', 'error');
+            });
+            setupMediaSession();
+            setReadingUI('paused'); // se il browser blocca l'avvio automatico resta "Riprendi"
+            audio.play().catch(() => {});
+        }
+
+        function togglePause() {
+            if (!currentAudio) return;
+            if (currentAudio.paused) currentAudio.play().catch(() => {});
+            else currentAudio.pause();
+        }
+
+        function setupMediaSession() {
+            if (!('mediaSession' in navigator)) return;
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: 'Una favola del Piccolo Bardo',
+                artist: 'Il Piccolo Bardo',
+                artwork: [
+                    { src: '/public/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+                    { src: '/public/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+                ],
+            });
+            navigator.mediaSession.setActionHandler('play', () => currentAudio?.play().catch(() => {}));
+            navigator.mediaSession.setActionHandler('pause', () => currentAudio?.pause());
+            navigator.mediaSession.setActionHandler('stop', () => stopReading());
+        }
+        function setMediaSessionState(state) {
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state;
+        }
+
         function stopReading() {
+            if (currentAudio) {
+                const audio = currentAudio;
+                currentAudio = null;
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+            }
             if (speechSynthesis.speaking) {
                 speechSynthesis.cancel();
             }
-            document.getElementById('readBtn').style.display = 'block';
-            document.getElementById('stopBtn').style.display = 'none';
-            document.getElementById('audioVisualizer').classList.remove('active');
+            releaseWakeLock();
+            setMediaSessionState('none');
+            setReadingUI('idle');
         }
 
         // Illustration Generation
@@ -1472,6 +1632,8 @@ if (response.ok) {
             const isFavorite = favorites.some(f => f.timestamp === currentStory.timestamp);
             btn.textContent = isFavorite ? '❤️' : '🤍';
             btn.classList.toggle('active', isFavorite);
+            btn.setAttribute('aria-pressed', String(isFavorite));
+            btn.setAttribute('aria-label', isFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti');
         }
 
         function displayFavorites() {
@@ -1492,8 +1654,10 @@ if (response.ok) {
             favorites.forEach((fav, index) => {
                 const card = document.createElement('div');
                 card.className = 'favorite-card';
+                card.setAttribute('role', 'button');
+                card.tabIndex = 0;
                 card.innerHTML = `
-                    <button class="delete-btn" onclick="deleteFavorite(${index}); event.stopPropagation();">×</button>
+                    <button class="delete-btn" aria-label="Elimina questa favola" onclick="deleteFavorite(${index}); event.stopPropagation();">×</button>
                     <h3>${fav.childName ? `Favola di ${escapeHTML(fav.childName)}` : 'Favola Magica'}</h3>
                     <p style="font-size: 0.85em; color: #999; margin-bottom: 10px;">
                         📅 ${new Date(fav.timestamp).toLocaleDateString('it-IT')} | 
@@ -1502,17 +1666,21 @@ if (response.ok) {
                     <p>${escapeHTML(fav.text.substring(0, 150))}...</p>
                 `;
                 card.onclick = () => loadFavorite(index);
+                card.addEventListener('keydown', (e) => {
+                    if (e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); loadFavorite(index); }
+                });
                 container.appendChild(card);
             });
         }
 
         function loadFavorite(index) {
+            stopReading();
             currentStory = favorites[index];
             switchTab('create');
             
             document.getElementById('storyCard').style.display = 'block';
             document.getElementById('storyDisplay').innerHTML = `
-                <button class="favorite-btn active" onclick="toggleFavorite()" id="favoriteBtn">❤️</button>
+                <button class="favorite-btn active" onclick="toggleFavorite()" id="favoriteBtn" aria-label="Rimuovi dai preferiti" aria-pressed="true">❤️</button>
                 ${escapeHTML(currentStory.text).replace(/\n/g, '<br>')}
             `;
 
@@ -1537,23 +1705,52 @@ if (response.ok) {
         }
 
         // Night Mode
-        function toggleNightMode() {
-            isNightMode = !isNightMode;
-            document.body.classList.toggle('nightmode');
-            
+        function applyTheme(dark) {
+            isNightMode = dark;
+            document.body.classList.toggle('nightmode', dark);
             const btn = document.querySelector('.nightmode-toggle');
-            btn.textContent = isNightMode ? '☀️' : '🌙';
-            
+            btn.textContent = dark ? '☀️' : '🌙';
+            btn.setAttribute('aria-pressed', String(dark));
+            btn.setAttribute('aria-label', dark ? 'Torna alla modalità giorno' : 'Attiva la modalità buonanotte');
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#1a1a2e' : '#667eea');
         }
+
+        function toggleNightMode() {
+            applyTheme(!isNightMode);
+            try { localStorage.setItem('bardo_theme', isNightMode ? 'dark' : 'light'); } catch (e) {}
+        }
+
+        applyTheme(isNightMode);
+        // Finché l'utente non sceglie, il tema segue quello del dispositivo
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            let saved = null;
+            try { saved = localStorage.getItem('bardo_theme'); } catch (err) {}
+            if (!saved) applyTheme(e.matches);
+        });
 
         // Tab Switching
         function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(tab => {
+                const on = tab.id === `tab-${tabName}`;
+                tab.classList.toggle('active', on);
+                tab.setAttribute('aria-selected', String(on));
+                tab.tabIndex = on ? 0 : -1;
+            });
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
-            event.target.classList.add('active');
             document.getElementById(`${tabName}-tab`).classList.add('active');
+            window.scrollTo({ top: 0 });
         }
+
+        // Frecce sinistra/destra tra le schede, come da pattern WAI-ARIA
+        document.querySelector('.tabs').addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+            const tabs = [...document.querySelectorAll('.tab')];
+            const i = tabs.indexOf(document.activeElement);
+            if (i < 0) return;
+            const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+            next.focus();
+            next.click();
+        });
 
         function listenStory() {
           const storyText = currentStory.text;
@@ -1562,6 +1759,7 @@ if (response.ok) {
             return;
           }
 
+          if (currentAudio) return;
           // Mostra loading
           document.getElementById('audioLoading').style.display = 'block';
 
@@ -1617,12 +1815,38 @@ if (response.ok) {
                 `;
             }
 
+            modalOpener = document.activeElement;
             modal.classList.add('active');
+            setBackgroundInert(true);
+            modal.querySelector('.close-modal').focus();
+        }
+
+        let modalOpener = null;
+        function setBackgroundInert(on) {
+            for (const el of document.body.children) {
+                if (['SCRIPT', 'STYLE', 'LINK'].includes(el.tagName) || el.id === 'accountModal' || el.id === 'toastContainer') continue;
+                el.inert = on;
+            }
         }
 
         function closeAccountModal() {
             document.getElementById('accountModal').classList.remove('active');
+            setBackgroundInert(false);
+            if (modalOpener && document.contains(modalOpener)) modalOpener.focus();
+            modalOpener = null;
         }
+
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('accountModal');
+            if (!modal.classList.contains('active') || document.querySelector('dialog[open]')) return;
+            if (e.key === 'Escape') { closeAccountModal(); return; }
+            if (e.key !== 'Tab') return;
+            const items = [...modal.querySelectorAll('button, a[href], input, select, textarea')].filter(n => !n.disabled);
+            if (!items.length) return;
+            const first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        });
 
         function login() {
             showToast("Funzionalità di login in arrivo! Per ora le favole sono salvate solo localmente.", 'info', 7000);
@@ -1650,6 +1874,33 @@ if (response.ok) {
                 nameSpan.style.display = 'none';
             }
         }
+
+        // ── PWA: service worker, stato rete, riconnessione ───────────────────
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('Service worker non registrato:', e));
+            });
+        }
+
+        function updateOnlineBanner() {
+            document.getElementById('offlineBanner').hidden = navigator.onLine !== false;
+        }
+
+        let reconnecting = false;
+        function reconnectIfNeeded() {
+            if (navigator.onLine === false || reconnecting) return;
+            if (!ws || ws.readyState === WebSocket.CLOSED) {
+                reconnecting = true;
+                connect().finally(() => { reconnecting = false; });
+            }
+        }
+
+        window.addEventListener('online', () => { updateOnlineBanner(); reconnectIfNeeded(); });
+        window.addEventListener('offline', updateOnlineBanner);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reconnectIfNeeded();
+        });
+        updateOnlineBanner();
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {

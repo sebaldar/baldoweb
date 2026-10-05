@@ -401,7 +401,7 @@ test('every native module and the stylesheet are included in the offline shell',
 
 function chip(browser, group, key) {
     const button = browser.context.document.createElement('button');
-    button.dataset[group === 'genre' ? 'value' : 'key'] = key;
+    button.dataset.key = key;
     button.setAttribute('aria-pressed', 'false');
     return button;
 }

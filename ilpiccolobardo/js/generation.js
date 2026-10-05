@@ -7,7 +7,7 @@ import { GENRE_PHRASE, SETTING_PHRASE, normalizeStoryChoices } from './choices.j
 
 export function pickChip(group, btn) {
     const field = group === 'genre' ? 'genres' : 'settingKeys';
-    const key = group === 'genre' ? btn.dataset.value : btn.dataset.key;
+    const key = btn.dataset.key;
     const options = group === 'genre' ? GENRE_PHRASE : SETTING_PHRASE;
     if (!Object.hasOwn(options, key)) return;
     const on = btn.getAttribute('aria-pressed') !== 'true'; // un secondo tocco deseleziona

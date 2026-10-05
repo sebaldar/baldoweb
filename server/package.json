@@ -5,7 +5,8 @@
   "description": "Narratore di racconti per bambini",
   "main": "index.js",
   "scripts": {
-    "test": "node --experimental-vm-modules --test tests/*.test.js"
+    "test": "node --experimental-vm-modules --test tests/*.test.js",
+    "test:e2e": "playwright test"
   },
   "keywords": [],
   "author": "",
@@ -19,5 +20,8 @@
     "node-addon-api": "^8.5.0",
     "openai": "^6.15.0",
     "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }

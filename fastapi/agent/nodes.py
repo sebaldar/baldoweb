@@ -38,6 +38,7 @@ from services.composer import StoryComposer
 from services.story_versions import snapshot
 from services.story_style import detect_refrain, count_similitudes
 from services.narrative_review import REVIEW_CRITERIA, apply_edits
+from services.content_safety import find_inappropriate, parse_verdict
 
 logger = logging.getLogger(__name__)
 
@@ -168,18 +169,32 @@ async def valuta_prompt(state: BaldoState, llm: LLMRouter) -> dict:
 
     Rispondi SOLO JSON: {"chiaro": true/false, "motivo": "..."}"""
 
+    # Filtro deterministico prima del giudice LLM: copre anche i campi liberi
+    # del form (nome, colore, animale) e non dipende dalla risposta del modello.
+    trovato = find_inappropriate(
+        state["prompt_originale"], state.get("personaggi"),
+        state.get("nome"), state.get("colore_preferito"), state.get("animale_preferito"),
+    )
+    if trovato:
+        motivo = "la richiesta contiene contenuti non adatti ai bambini"
+        logger.warning("[SAFETY] prompt respinto dal filtro (termine: %s)", trovato)
+        _emit(state, "valutazione:rifiuto",
+              f"⚠️  Il prompt non è adatto: {motivo}. Prova a riformulare la tua idea.",
+              {"motivo": motivo})
+        return {"prompt_chiaro": False, "motivo_rifiuto": motivo, "llm_usage": []}
+
     risultato = await llm.chiedi(
         system=system,
         user=f"Prompt: {state['prompt_originale']}\nPersonaggi: {state['personaggi']}",
         fase="valuta_prompt",
     )
 
-    try:
-        dati   = json.loads(risultato.testo.strip().strip("```json").strip("```"))
-        chiaro = dati.get("chiaro", True)
-        motivo = dati.get("motivo")
-    except Exception:
-        chiaro, motivo = True, None
+    dati = parse_verdict(risultato.testo)
+    if dati is None:
+        logger.warning("[SAFETY] verdetto del giudice non leggibile: si procede col solo filtro deterministico")
+        dati = {}
+    chiaro = dati.get("chiaro", True)
+    motivo = dati.get("motivo")
 
     if chiaro:
         _emit(state, "valutazione:ok",
@@ -1150,6 +1165,16 @@ async def salva_memoria(state: BaldoState, neo4j: Neo4jClient) -> dict:
 # ---------------------------------------------------------------------------
 # NODE — Errore
 # ---------------------------------------------------------------------------
+async def verifica_sicurezza_output(state: BaldoState) -> dict:
+    """Ultima barriera: un racconto con termini inadatti non arriva al bambino."""
+    trovato = find_inappropriate(state.get("racconto_finale"))
+    if not trovato:
+        return {}
+    logger.warning("[SAFETY] racconto bloccato dal filtro (termine: %s)", trovato)
+    return {"prompt_chiaro": False,
+            "motivo_rifiuto": "il racconto generato conteneva contenuti non adatti ai bambini"}
+
+
 async def nodo_errore(state: BaldoState) -> dict:
     motivo = state.get("motivo_rifiuto", "errore sconosciuto")
 

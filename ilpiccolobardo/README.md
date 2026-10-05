@@ -182,3 +182,9 @@ Node e simulano errori di spazio, disconnessioni e risposte audio tardive.
    ```
 
 4. **Popola la Knowledge Base** caricando un JSON di frammenti dal pannello `/loader/` (credenziali create con `htpasswd`, vedi configurazione Apache).
+
+## Scelte del form e test
+
+- **Fonte unica:** generi e ambientazioni stanno in `choices.json`. Dopo averlo modificato, esegui `node ilpiccolobardo/tools/sync-choices.mjs`: rigenera i chip di `index.html`, `js/choices.js` e `fastapi/services/story_choices.py`. `npm test` (in `server/`) fallisce se i tre file sono fuori sincronia.
+- **Test end-to-end:** `npm run test:e2e` (in `server/`) apre l'app in Chromium, desktop e mobile, con backend simulato. Prima volta: `npx playwright install chromium`.
+- **Sicurezza contenuti:** `fastapi/services/content_safety.py` blocca termini inequivocabili nell'input (anche nome, colore e animale) e nel racconto finale, oltre al giudice LLM.

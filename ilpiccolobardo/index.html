@@ -83,11 +83,14 @@
                     <label id="genreLabel">📚 Che storia vuoi?</label>
                     <p class="field-hint" id="genreHint">Puoi scegliere più opzioni.</p>
                     <div class="chip-group" id="genreChips" role="group" aria-labelledby="genreLabel" aria-describedby="genreHint">
-                        <button class="chip" aria-pressed="false" data-value="amicizia" onclick="pickChip('genre', this)">🤝 Amicizia</button>
-                        <button class="chip" aria-pressed="false" data-value="avventura" onclick="pickChip('genre', this)">🗺️ Avventura</button>
-                        <button class="chip" aria-pressed="false" data-value="coraggio" onclick="pickChip('genre', this)">🦁 Coraggio</button>
-                        <button class="chip" aria-pressed="false" data-value="nanna" onclick="pickChip('genre', this)">🌙 Per addormentarsi</button>
-                        <button class="chip" aria-pressed="false" data-value="magia" onclick="pickChip('genre', this)">✨ Magia e sogni</button>
+                        <!-- choices:genre:start -->
+                        <button class="chip" aria-pressed="false" data-key="amicizia" onclick="pickChip('genre', this)">🤝 Amicizia</button>
+                        <button class="chip" aria-pressed="false" data-key="avventura" onclick="pickChip('genre', this)">🗺️ Avventura</button>
+                        <button class="chip" aria-pressed="false" data-key="coraggio" onclick="pickChip('genre', this)">🦁 Coraggio</button>
+                        <button class="chip" aria-pressed="false" data-key="nanna" onclick="pickChip('genre', this)">🌙 Per addormentarsi</button>
+                        <button class="chip" aria-pressed="false" data-key="magia" onclick="pickChip('genre', this)">✨ Magia e sogni</button>
+                        <button class="chip" aria-pressed="false" data-key="divertente" onclick="pickChip('genre', this)">😄 Divertente</button>
+                        <!-- choices:genre:end -->
                     </div>
                 </div>
 
@@ -95,13 +98,15 @@
                     <label id="settingLabel">🏞️ Dove si svolge?</label>
                     <p class="field-hint" id="settingHint">Puoi scegliere più opzioni: il Bardo le combinerà nella storia.</p>
                     <div class="chip-group" id="settingChips" role="group" aria-labelledby="settingLabel" aria-describedby="settingHint">
-                        <button class="chip" aria-pressed="false" data-value="in un bosco magico" data-key="bosco" onclick="pickChip('setting', this)">🌲 Bosco magico</button>
-                        <button class="chip" aria-pressed="false" data-value="in un castello antico" data-key="castello" onclick="pickChip('setting', this)">🏰 Castello</button>
-                        <button class="chip" aria-pressed="false" data-value="vicino a un fiume incantato, tra acqua e riva" data-key="acqua" onclick="pickChip('setting', this)">🌊 Mare e fiume</button>
-                        <button class="chip" aria-pressed="false" data-value="in un villaggio tra le montagne" data-key="montagna" onclick="pickChip('setting', this)">⛰️ Montagna</button>
-                        <button class="chip" aria-pressed="false" data-value="in una città tra le nuvole" data-key="nuvole" onclick="pickChip('setting', this)">☁️ Tra le nuvole</button>
-                        <button class="chip" aria-pressed="false" data-value="sotto il cielo stellato, osservando le stelle" data-key="cielo" onclick="pickChip('setting', this)">🌌 Cielo e stelle</button>
-                        <button class="chip" aria-pressed="false" data-value="in un giardino segreto" data-key="giardino" onclick="pickChip('setting', this)">🏡 Giardino o casa</button>
+                        <!-- choices:setting:start -->
+                        <button class="chip" aria-pressed="false" data-key="bosco" onclick="pickChip('setting', this)">🌲 Bosco magico</button>
+                        <button class="chip" aria-pressed="false" data-key="castello" onclick="pickChip('setting', this)">🏰 Castello</button>
+                        <button class="chip" aria-pressed="false" data-key="acqua" onclick="pickChip('setting', this)">🌊 Mare e fiume</button>
+                        <button class="chip" aria-pressed="false" data-key="montagna" onclick="pickChip('setting', this)">⛰️ Montagna</button>
+                        <button class="chip" aria-pressed="false" data-key="nuvole" onclick="pickChip('setting', this)">☁️ Tra le nuvole</button>
+                        <button class="chip" aria-pressed="false" data-key="cielo" onclick="pickChip('setting', this)">🌌 Cielo e stelle</button>
+                        <button class="chip" aria-pressed="false" data-key="giardino" onclick="pickChip('setting', this)">🏡 Giardino o casa</button>
+                        <!-- choices:setting:end -->
                     </div>
                 </div>
 

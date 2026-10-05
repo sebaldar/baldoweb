@@ -1,7 +1,9 @@
 """Scelte del form, singole o multiple, nel formato testuale dei report."""
 
-GENERI_AMMESSI = {"amicizia", "avventura", "coraggio", "nanna", "magia"}
+# choices:start
+GENERI_AMMESSI = {"amicizia", "avventura", "coraggio", "nanna", "magia", "divertente"}
 AMBIENTAZIONI_AMMESSE = {"bosco", "castello", "acqua", "montagna", "nuvole", "cielo", "giardino"}
+# choices:end
 
 
 def normalizza_scelte(value, ammesse):

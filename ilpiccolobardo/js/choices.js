@@ -1,10 +1,12 @@
 // Opzioni del racconto e compatibilità con le favole salvate a scelta singola.
+// choices:start
 export const GENRE_PHRASE = {
     amicizia: 'amicizia',
     avventura: 'avventura',
     coraggio: 'coraggio',
     nanna: 'per addormentarsi',
     magia: 'magia e sogni',
+    divertente: 'divertente, con situazioni buffe e tanta allegria',
 };
 
 export const SETTING_PHRASE = {
@@ -16,6 +18,7 @@ export const SETTING_PHRASE = {
     cielo: 'il cielo stellato e l\'osservazione delle stelle',
     giardino: 'un giardino segreto o una casa accogliente',
 };
+// choices:end
 
 function selectedKeys(value, options) {
     const values = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];

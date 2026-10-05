@@ -503,6 +503,32 @@
         .close-modal, .delete-btn { min-width: 44px; min-height: 44px; }
         .delete-btn { width: 44px; height: 44px; top: 4px; right: 4px; }
         .tab-icon { margin-right: 6px; }
+
+        .reading-tools { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
+        .reading-tools .chip { min-width: 44px; }
+        .story-display { font-size: var(--story-size, 1.3em); }
+        .next-actions { margin-top: 20px; }
+        .next-actions[hidden] { display: none; }
+
+        /* Lettura serale: solo la storia, tonalità calde e poco luminose */
+        .reading-exit {
+            position: fixed; z-index: 1100; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+            min-height: 44px; padding: 8px 16px; font-size: 1em; border-radius: 999px;
+            background: rgba(255,214,150,.15); color: #f2d9b0; border: 1px solid rgba(255,214,150,.4);
+        }
+        .reading-exit[hidden] { display: none; }
+        body.reading-mode { background: #0d0a06; }
+        body.reading-mode header, body.reading-mode .tabs, body.reading-mode footer,
+        body.reading-mode .header-bar, body.reading-mode .header-bar + div,
+        body.reading-mode #favorites-tab, body.reading-mode #chi_sono-tab,
+        body.reading-mode #create-tab > .card:not(#storyCard), body.reading-mode .reading-tools,
+        body.reading-mode #storyCard > h2 { display: none; }
+        body.reading-mode #storyCard { background: transparent; box-shadow: none; padding: 48px 0 0; }
+        body.reading-mode .story-display {
+            background: #16110a; color: #e8d3ae; border-color: #3a2e1c; --story-size: 1.7em;
+        }
+        body.reading-mode .favorite-btn { display: none; }
+        body.reading-mode .btn-group button { filter: brightness(.7); }
         .field-hint { margin-top: 6px; font-size: 0.9em; color: #666; }
         .field-hint[hidden] { display: none; }
         body.nightmode .field-hint { color: #bdc3c7; }
@@ -783,6 +809,8 @@
     <!-- Spazio per evitare sovrapposizione con header fisso -->
     <div style="height: calc(80px + env(safe-area-inset-top));"></div>
 
+    <button id="exitReadingBtn" class="reading-exit" onclick="exitReadingMode()" hidden>✕ Esci dalla lettura serale</button>
+
     <div id="offlineBanner" class="offline-banner" role="status" aria-live="polite" hidden>📡 Sei offline: le favole preferite restano leggibili, per crearne una nuova serve la connessione.</div>
 
     <div class="container">
@@ -870,7 +898,13 @@
 
             <div class="card" id="storyCard" style="display: none;">
                 <h2>📖 La Tua Favola Magica</h2>
-                
+
+                <div class="reading-tools" role="toolbar" aria-label="Comfort di lettura">
+                    <button class="chip" id="sizeDown" onclick="changeTextSize(-1)" aria-label="Riduci il testo">A−</button>
+                    <button class="chip" id="sizeUp" onclick="changeTextSize(1)" aria-label="Ingrandisci il testo">A+</button>
+                    <button class="chip" id="readingModeBtn" aria-pressed="false" onclick="toggleReadingMode()">🌙 Lettura serale</button>
+                </div>
+
                 <img id="storyIllustration" class="story-illustration" style="display: none;">
                 <div class="story-display" id="storyDisplay">
                     <button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn" aria-label="Aggiungi ai preferiti" aria-pressed="false">🤍</button>
@@ -895,6 +929,11 @@
                     <button class="btn-primary" onclick="printStory()" id="printBtn" disabled>🖨️ Stampa PDF</button>
                     <button class="btn-warning" onclick="togglePause()" id="pauseBtn" style="display: none;">⏸️ Pausa</button>
                     <button class="btn-danger" onclick="stopReading()" id="stopBtn" style="display: none;">⏹️ Ferma Lettura</button>
+                </div>
+
+                <div class="btn-group next-actions" id="nextActions" hidden>
+                    <button class="btn-primary" onclick="regenerateStory()">🔁 Un'altra simile</button>
+                    <button class="btn-success" onclick="newStory()">✨ Nuova favola</button>
                 </div>
             </div>
         </div>
@@ -1361,6 +1400,8 @@ if (response.ok) {
 			}
 			stopReading();
 			saveProfile();
+			document.getElementById('nextActions').hidden = true;
+			if (readingMode) exitReadingMode();
 
 			const childName = document.getElementById('childName').value;
 			const favoriteAnimal = document.getElementById('favoriteAnimal').value;
@@ -1439,11 +1480,72 @@ if (response.ok) {
             document.getElementById('readBtn').disabled = false;
             document.getElementById('illustrateBtn').disabled = false;
             document.getElementById('printBtn').disabled = false;
+            document.getElementById('nextActions').hidden = false;
 
             // Verifica se è già nei preferiti
             updateFavoriteButton();
         }
 
+
+        // ── Comfort di lettura: dimensione del testo e lettura serale ─────────
+        const TEXT_SIZES = [1.1, 1.3, 1.6, 1.9];
+        let textSizeIdx = 1;
+        let readingMode = false;
+
+        function applyTextSize() {
+            document.documentElement.style.setProperty('--story-size', `${TEXT_SIZES[textSizeIdx]}em`);
+            document.getElementById('sizeDown').disabled = textSizeIdx === 0;
+            document.getElementById('sizeUp').disabled = textSizeIdx === TEXT_SIZES.length - 1;
+        }
+        function changeTextSize(delta) {
+            textSizeIdx = Math.min(TEXT_SIZES.length - 1, Math.max(0, textSizeIdx + delta));
+            applyTextSize();
+            try { localStorage.setItem('bardo_text_size', String(textSizeIdx)); } catch (e) {}
+        }
+        function loadTextSize() {
+            try {
+                const saved = parseInt(localStorage.getItem('bardo_text_size'), 10);
+                if (saved >= 0 && saved < TEXT_SIZES.length) textSizeIdx = saved;
+            } catch (e) {}
+            applyTextSize();
+        }
+
+        function enterReadingMode() {
+            readingMode = true;
+            document.body.classList.add('reading-mode');
+            document.getElementById('readingModeBtn').setAttribute('aria-pressed', 'true');
+            document.getElementById('exitReadingBtn').hidden = false;
+            acquireWakeLock(); // il genitore legge: lo schermo deve restare acceso
+            window.scrollTo({ top: 0 });
+        }
+        function exitReadingMode() {
+            readingMode = false;
+            document.body.classList.remove('reading-mode');
+            document.getElementById('readingModeBtn').setAttribute('aria-pressed', 'false');
+            document.getElementById('exitReadingBtn').hidden = true;
+            if (!currentAudio || currentAudio.paused) releaseWakeLock();
+            document.getElementById('readingModeBtn').focus();
+        }
+        function toggleReadingMode() { readingMode ? exitReadingMode() : enterReadingMode(); }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && readingMode && !document.querySelector('dialog[open]')) exitReadingMode();
+        });
+
+        // ── Dopo la storia: un'altra simile o una nuova ──────────────────────
+        function regenerateStory() {
+            generateStory(); // riusa nome, età, genere, ambientazione e testo già nel form
+        }
+        function newStory() {
+            if (readingMode) exitReadingMode();
+            stopReading();
+            document.getElementById('nextActions').hidden = true;
+            document.getElementById('storyCard').style.display = 'none';
+            document.getElementById('userPrompt').value = '';
+            document.querySelectorAll('#genreChips .chip, #settingChips .chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
+            chosen.genre = chosen.setting = chosen.settingKey = null;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            document.querySelector('#genreChips .chip').focus({ preventScroll: true });
+        }
 
         // ── Lettura: audio, pausa/ripresa, controlli di sistema, schermo acceso ──
         let currentAudio = null;
@@ -1462,8 +1564,10 @@ if (response.ok) {
         }
         // Il browser rilascia il blocco quando la pagina va in background: lo riprendo al ritorno
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && currentAudio && !currentAudio.paused) acquireWakeLock();
+            if (document.visibilityState === 'visible' && (readingMode || (currentAudio && !currentAudio.paused))) acquireWakeLock();
         });
+
+        function releaseWakeLockUnlessNeeded() { if (!readingMode) releaseWakeLock(); }
 
         function setReadingUI(state) { // 'idle' | 'playing' | 'paused'
             const active = state !== 'idle';
@@ -1481,7 +1585,7 @@ if (response.ok) {
             audio.addEventListener('play', () => { setReadingUI('playing'); acquireWakeLock(); setMediaSessionState('playing'); });
             audio.addEventListener('pause', () => {
                 if (audio.ended || currentAudio !== audio) return;
-                setReadingUI('paused'); releaseWakeLock(); setMediaSessionState('paused');
+                setReadingUI('paused'); releaseWakeLockUnlessNeeded(); setMediaSessionState('paused');
             });
             audio.addEventListener('ended', () => { if (currentAudio === audio) stopReading(); });
             audio.addEventListener('error', () => {
@@ -1529,7 +1633,7 @@ if (response.ok) {
             if (speechSynthesis.speaking) {
                 speechSynthesis.cancel();
             }
-            releaseWakeLock();
+            releaseWakeLockUnlessNeeded();
             setMediaSessionState('none');
             setReadingUI('idle');
         }
@@ -1830,6 +1934,7 @@ if (response.ok) {
 
             document.getElementById('readBtn').disabled = false;
             document.getElementById('illustrateBtn').disabled = false;
+            document.getElementById('nextActions').hidden = false;
             
             document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
         }
@@ -1909,6 +2014,7 @@ if (response.ok) {
             connect();
             loadFavorites();
             loadProfile();
+            loadTextSize();
             document.getElementById('illustrateBtn').hidden = !ILLUSTRAZIONE_DISPONIBILE;
             updateAccountButton(); // iniziale
             

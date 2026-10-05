@@ -503,6 +503,9 @@
         .close-modal, .delete-btn { min-width: 44px; min-height: 44px; }
         .delete-btn { width: 44px; height: 44px; top: 4px; right: 4px; }
         .tab-icon { margin-right: 6px; }
+        .privacy-note { margin: 6px 0 0; }
+        .privacy-note ul { padding-left: 22px; line-height: 1.6; font-size: 0.95em; color: #555; }
+        body.nightmode .privacy-note ul { color: #cfd8e3; }
         .install-btn {
             min-height: 44px; padding: 8px 16px; font-size: 1em; border-radius: 999px;
             background: var(--primary); color: white; margin: 0 auto;
@@ -850,6 +853,16 @@
                 <div class="form-group">
                     <label for="childName">👤 Come si chiama il bambino? (opzionale)</label>
                     <input type="text" id="childName" placeholder="es: Giulia" autocomplete="off">
+                    <details class="more-details privacy-note">
+                        <summary>🔒 Privacy: come usiamo il nome</summary>
+                        <ul>
+                            <li>Nome ed età servono solo a scrivere la favola: non serve nessun account.</li>
+                            <li>Per generarla, il testo (nome compreso) viene inviato ai nostri server e a servizi di intelligenza artificiale esterni (Anthropic e OpenAI).</li>
+                            <li>Per meteo e cielo usiamo la posizione del dispositivo, se la consenti; altrimenti quella approssimativa dell'indirizzo IP.</li>
+                            <li>Una copia tecnica della favola, con nome ed età, viene conservata sul server per controllare la qualità.</li>
+                            <li>Su questo dispositivo restano salvati nome, età e favole preferite, finché non li cancelli.</li>
+                        </ul>
+                    </details>
                     <p class="field-hint" id="profileHint" hidden>Nome ed età restano salvati solo su questo dispositivo. <button type="button" class="link-btn" onclick="forgetProfile()">Dimentica</button></p>
                 </div>
 
@@ -1143,11 +1156,10 @@
                     }
                     
                 } else {
-                    console.error(`⚠️ API risposta: ${response.status}`, 'warning');
+                    console.warn(`API risposta: ${response.status}`);
                 }
             } catch (error) {
-                logToPage('⚠️ API non disponibile', 'warning');
-                console.error('API error:', error);
+                console.warn('API non disponibile:', error);
             }
             
             
@@ -1161,13 +1173,6 @@
             
             await initAPI();
             initGeo();
-
-/*
-if (response.ok) {
-    const content = await response.text(); 
-    console.log(content); // Qui vedrai il contenuto come stringa
-}
-*/
 
             ws = new WebSocket('wss://www.ilpiccolobardo.it/ws');
             
@@ -1447,21 +1452,6 @@ if (response.ok) {
 				timestamp: new Date().toISOString(),
 				text: ''
 			};
-
-			// Mostra area storia con stato iniziale
-			document.getElementById('storyCard').style.display = 'block';
-			document.getElementById('storyDisplay').innerHTML = `
-				<button class="favorite-btn" onclick="toggleFavorite()" id="favoriteBtn">🤍</button>
-				<div class="loading" id="loadingIndicator">
-					<div class="loading-spinner"></div>
-					<p id="loadingStatus">Il Piccolo Bardo sta preparando la tua favola magica... ✨</p>
-				</div>
-				<div id="streamingText" style="display:none; white-space: pre-wrap; line-height: 1.8;"></div>
-			`;
-			document.getElementById('readBtn').disabled = true;
-			document.getElementById('illustrateBtn').disabled = true;
-			document.getElementById('storyIllustration').style.display = 'none';
-			document.getElementById('storyCard').scrollIntoView({ behavior: 'smooth' });
 
 			// Prepara il DOM PRIMA di inviare, così loadingStatus esiste
 			// quando arrivano i primi eventi nodo_start dal server
@@ -2132,7 +2122,6 @@ if (response.ok) {
         function listenStory() {
           const storyText = currentStory.text;
           if (!storyText) {
-        //    addLog('Nessun testo da leggere!', 'error');
             return;
           }
 

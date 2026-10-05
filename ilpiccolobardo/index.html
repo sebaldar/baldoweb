@@ -493,6 +493,24 @@
         .delete-btn { width: 44px; height: 44px; top: 4px; right: 4px; }
         .tab-icon { margin-right: 6px; }
 
+        .chip-group { display: flex; flex-wrap: wrap; gap: 10px; }
+        .chip {
+            padding: 10px 16px; min-height: 44px; border: 2px solid var(--primary); background: white;
+            color: var(--dark); border-radius: 999px; font-size: 1em; font-weight: 700;
+        }
+        .chip:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(102,126,234,.3); }
+        .chip[aria-pressed="true"] { background: var(--primary); color: white; }
+        body.nightmode .chip { background: #2c3e50; color: white; }
+        body.nightmode .chip[aria-pressed="true"] { background: var(--primary); }
+
+        .more-details { margin-bottom: 20px; }
+        .more-details summary {
+            cursor: pointer; font-weight: 700; color: var(--primary); min-height: 44px;
+            display: flex; align-items: center; list-style-position: inside;
+        }
+        body.nightmode .more-details summary { color: #f39c12; }
+        .more-details .personalization-grid { margin-top: 10px; }
+
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
                 animation-duration: 0.01ms !important;
@@ -514,7 +532,8 @@
 
         @media (max-width: 768px) {
             h1 { font-size: 2em; }
-            .age-selector { flex-direction: column; }
+            .age-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+            .age-btn { min-width: 0; padding: 14px 10px; }
             .btn-group { flex-direction: column; }
             .btn-group button { width: 100%; }
         }
@@ -760,36 +779,62 @@
             <div class="card">
                 <h2>👶 Personalizza la Tua Favola</h2>
                 
-                <div class="personalization-grid">
-                    <div class="form-group">
-                        <label>🎂 Età del Bambino</label>
-                        <div class="age-selector">
-                            <button class="age-btn" onclick="selectAge(3)">3 anni</button>
-                            <button class="age-btn" onclick="selectAge(4)">4 anni</button>
-                            <button class="age-btn" onclick="selectAge(5)">5 anni</button>
-                            <button class="age-btn" onclick="selectAge(6)">6 anni</button>
-                        </div>
-                    </div>
+                <div class="form-group">
+                    <label for="childName">👤 Come si chiama il bambino? (opzionale)</label>
+                    <input type="text" id="childName" placeholder="es: Giulia" autocomplete="off">
+                </div>
 
-                    <div class="form-group">
-                        <label>👤 Nome del Bambino (opzionale)</label>
-                        <input type="text" id="childName" placeholder="es: Giulia">
-                    </div>
-
-                    <div class="form-group">
-                        <label>🐾 Animale Preferito (opzionale)</label>
-                        <input type="text" id="favoriteAnimal" placeholder="es: Drago, Unicorno, Gattino">
-                    </div>
-
-                    <div class="form-group">
-                        <label>🎨 Colore Preferito (opzionale)</label>
-                        <input type="text" id="favoriteColor" placeholder="es: Blu, Rosa, Arcobaleno">
+                <div class="form-group">
+                    <label id="ageLabel">🎂 Età del Bambino</label>
+                    <div class="age-selector" role="group" aria-labelledby="ageLabel">
+                        <button class="age-btn" aria-pressed="false" onclick="selectAge(3, this)">3 anni</button>
+                        <button class="age-btn" aria-pressed="false" onclick="selectAge(4, this)">4 anni</button>
+                        <button class="age-btn" aria-pressed="false" onclick="selectAge(5, this)">5 anni</button>
+                        <button class="age-btn" aria-pressed="false" onclick="selectAge(6, this)">6 anni</button>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label>💭 Cosa Vuoi nella Favola?</label>
-                    <textarea id="userPrompt" placeholder="Racconta una storia su un drago gentile che aiuta i suoi amici nel bosco magico..."></textarea>
+                    <label id="genreLabel">📚 Che storia vuoi?</label>
+                    <div class="chip-group" id="genreChips" role="group" aria-labelledby="genreLabel">
+                        <button class="chip" aria-pressed="false" data-value="amicizia" onclick="pickChip('genre', this)">🤝 Amicizia</button>
+                        <button class="chip" aria-pressed="false" data-value="avventura" onclick="pickChip('genre', this)">🗺️ Avventura</button>
+                        <button class="chip" aria-pressed="false" data-value="coraggio" onclick="pickChip('genre', this)">🦁 Coraggio</button>
+                        <button class="chip" aria-pressed="false" data-value="nanna" onclick="pickChip('genre', this)">🌙 Per addormentarsi</button>
+                        <button class="chip" aria-pressed="false" data-value="magia" onclick="pickChip('genre', this)">✨ Magia e sogni</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label id="settingLabel">🏞️ Dove si svolge?</label>
+                    <div class="chip-group" id="settingChips" role="group" aria-labelledby="settingLabel">
+                        <button class="chip" aria-pressed="false" data-value="in un bosco magico" onclick="pickChip('setting', this)">🌲 Bosco magico</button>
+                        <button class="chip" aria-pressed="false" data-value="in un castello antico" onclick="pickChip('setting', this)">🏰 Castello</button>
+                        <button class="chip" aria-pressed="false" data-value="vicino a un fiume incantato, tra acqua e riva" onclick="pickChip('setting', this)">🌊 Mare e fiume</button>
+                        <button class="chip" aria-pressed="false" data-value="in un villaggio tra le montagne" onclick="pickChip('setting', this)">⛰️ Montagna</button>
+                        <button class="chip" aria-pressed="false" data-value="in una città tra le nuvole" onclick="pickChip('setting', this)">☁️ Tra le nuvole</button>
+                        <button class="chip" aria-pressed="false" data-value="sotto il cielo stellato, osservando le stelle" onclick="pickChip('setting', this)">🌌 Cielo e stelle</button>
+                        <button class="chip" aria-pressed="false" data-value="in un giardino segreto" onclick="pickChip('setting', this)">🏡 Giardino o casa</button>
+                    </div>
+                </div>
+
+                <details class="more-details">
+                    <summary>➕ Altri dettagli (animale e colore preferiti)</summary>
+                    <div class="personalization-grid">
+                        <div class="form-group">
+                            <label for="favoriteAnimal">🐾 Animale preferito</label>
+                            <input type="text" id="favoriteAnimal" placeholder="es: Drago, Unicorno, Gattino" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="favoriteColor">🎨 Colore preferito</label>
+                            <input type="text" id="favoriteColor" placeholder="es: Blu, Rosa, Arcobaleno" autocomplete="off">
+                        </div>
+                    </div>
+                </details>
+
+                <div class="form-group">
+                    <label for="userPrompt">💭 Vuoi aggiungere qualcosa? (opzionale)</label>
+                    <textarea id="userPrompt" placeholder="Se vuoi, racconta cosa deve succedere: un drago gentile che aiuta i suoi amici nel bosco…"></textarea>
                 </div>
 
                 <div class="btn-group">
@@ -1204,12 +1249,45 @@ if (response.ok) {
         }
 
         // Age Selection
-        function selectAge(age) {
+        // ── Tipo di storia e ambientazione ──────────────────────────────────
+        const chosen = { genre: null, setting: null };
+        const GENRE_PHRASE = {
+            amicizia: "sull'amicizia",
+            avventura: "d'avventura",
+            coraggio: 'sul coraggio',
+            nanna: 'dolce e rilassante, adatta per addormentarsi',
+            magia: 'di magia e di sogni',
+        };
+
+        function pickChip(group, btn) {
+            const on = btn.getAttribute('aria-pressed') !== 'true'; // un secondo tocco deseleziona
+            btn.parentElement.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
+            btn.setAttribute('aria-pressed', String(on));
+            chosen[group] = on ? btn.dataset.value : null;
+        }
+
+        function buildPrompt(freeText) {
+            const text = freeText.trim();
+            const genre = chosen.genre ? GENRE_PHRASE[chosen.genre] : null;
+            const setting = chosen.setting;
+            if (text) {
+                let out = text;
+                if (genre) out += ` Il tono della storia è ${genre}.`;
+                if (setting) out += ` Ambientazione: ${setting}.`;
+                return out;
+            }
+            if (!genre && !setting) return '';
+            return `Racconta una storia ${genre || ''}${setting ? ` ambientata ${setting}` : ''}.`.replace(/\s+/g, ' ');
+        }
+
+        function selectAge(age, btn) {
             selectedAge = age;
-            document.querySelectorAll('.age-btn').forEach(btn => {
-                btn.classList.remove('selected');
+            document.querySelectorAll('.age-btn').forEach(b => {
+                b.classList.remove('selected');
+                b.setAttribute('aria-pressed', 'false');
             });
-            event.target.classList.add('selected');
+            btn.classList.add('selected');
+            btn.setAttribute('aria-pressed', 'true');
         }
 
         // Generate Story
@@ -1219,9 +1297,9 @@ if (response.ok) {
 				return;
 			}
 
-			const prompt = document.getElementById('userPrompt').value;
-			if (!prompt.trim()) {
-				showToast('Scrivi cosa vuoi nella favola! 💭', 'warning');
+			const prompt = buildPrompt(document.getElementById('userPrompt').value);
+			if (!prompt) {
+				showToast('Scegli che storia vuoi, oppure scrivi cosa deve succedere! 💭', 'warning');
 				return;
 			}
 			stopReading();

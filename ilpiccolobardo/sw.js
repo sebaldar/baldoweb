@@ -1,7 +1,7 @@
 /* Service worker di Il Piccolo Bardo.
  * Mette in cache solo la "shell" statica (pagina, script, font, icone).
  * Non tocca mai /api, /ws, /admin, /loader, né immagini e audio generati. */
-const CACHE = 'bardo-shell-v2';
+const CACHE = 'bardo-shell-v4';
 const SHELL = [
     '/',
     '/safe-html.js',

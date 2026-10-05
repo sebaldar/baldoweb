@@ -27,3 +27,19 @@ jobs:
       - run: pip install -r fastapi/requirements.txt -c fastapi/requirements.lock.txt
       - run: python -B -m unittest discover -s tests
         working-directory: fastapi
+  planetarium:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install fastapi httpx langgraph langchain-openai langchain-anthropic langchain-google-genai pydantic-settings -c fastapi-planetarium/requirements.lock.txt
+      - run: python -B -m unittest discover -s tests -v
+        working-directory: fastapi-planetarium
+  native-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: g++ -std=c++17 -fsanitize=address,undefined -g cpp/libPlanetarium/tests/client-lifecycle.cpp -o /tmp/planetarium-client-test
+      - run: /tmp/planetarium-client-test

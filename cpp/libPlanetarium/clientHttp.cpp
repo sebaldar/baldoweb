@@ -40,7 +40,7 @@ void Client::setQueryString( const std::string & query )
     for ( auto it = v.begin(); it != v.end(); ++it ) {
         std::vector < std::string > v1;
         int n = Split ( *it, "=", v1);
-        if (n > 0)
+        if (n > 1)
             query_string.insert ( pairQuery ( v1[0], v1[ 1 ] ) );
     }
 

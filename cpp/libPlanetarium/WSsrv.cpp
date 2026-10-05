@@ -6,6 +6,7 @@
 #include <iostream>
 #include <iterator>
 #include <iomanip>	// setprecision
+#include <memory>
 
 #include "WSsrv.hpp"
 #include "angolo.hpp"
@@ -27,6 +28,7 @@
 
 #include <tcp_client.hpp>
 #include "clientHttp.hpp"
+#include "client-lifecycle.hpp"
 
 WSsrv::WSsrv ( ):
 	geoLoc ( * new TCPClient( "api.geonames.org") )
@@ -48,6 +50,7 @@ WSsrv::WSsrv ( unsigned int /* port */, std::string & /* web_dir */ ):
 WSsrv::~WSsrv ( )
 
 {
+	while (!clients.empty()) unregisterClient(clients.begin()->first);
 	delete moonGrid;
 	delete &geoLoc;
 }
@@ -125,7 +128,9 @@ std::string WSsrv::computeCelestialPositions ( int sockfd, const std::string &js
         if ( date_cmd.find(':') == std::string::npos ) {
             date_cmd += " 00:00:00";
         }
-        handleClient( sockfd, "date " + date_cmd );
+        // A trailing UT token prevents the legacy parser from interpreting EOF
+        // after the time as a missing time and resetting the clock to midnight.
+        handleClient( sockfd, "date " + date_cmd + " UT" );
     }
 
     // --------------------------------------------------------
@@ -499,7 +504,7 @@ std::string WSsrv::computeCelestialPositions ( int sockfd, const std::string &js
     // --------------------------------------------------------
     // 13. Salva su file e restituisce la stringa JSON
     // --------------------------------------------------------
-    {
+    if (json["save_snapshot"] != "0") {
         // Costruisce un nome file univoco per cliente e data
         std::string fname = "celestial_" + std::to_string(sockfd) + "_" + date_str + ".json";
         // Sostituisce spazi e ':' con underscore per sicurezza sul filesystem
@@ -3287,6 +3292,7 @@ std::string WSsrv::strActualDate( int id )
 {
 
 	auto it = clients.find ( id );
+	if (it == clients.end()) return "";
 	Client * client = it->second;
 
 	clientData * data = reinterpret_cast < clientData * > ( client->extra );
@@ -3306,11 +3312,12 @@ std::string  WSsrv::do_sendLoop ( int id  )
 {
 
 	auto it = clients.find ( id );
+	if (it == clients.end()) return "";
 	Client * client = it->second;
 
 	clientData * data = reinterpret_cast < clientData * > ( client->extra );
 
-	if ( !data->executeLoop ) {
+	if ( !data || !data->executeLoop ) {
 //		std::cout << "executeLoop non attivato!" << std::endl;
 		return "";
 	}
@@ -4073,6 +4080,7 @@ std::string WSsrv::render ( int id ) {
 //	int sockfd = id ;
 
 	auto it = clients.find ( id );
+	if (it == clients.end()) return "";
 	Client * client = it->second;
 
 	clientData * data = reinterpret_cast < clientData * > ( client->extra );
@@ -4383,22 +4391,16 @@ std::string WSsrv::timestamp( ) const {
 }
 
 void WSsrv::unregisterClient ( int id ) {
-	auto it = clients.find ( id );
-	if ( it != clients.end() )
-		clients.erase (id);
+	eraseOwnedClient<Client, clientData>(clients, id);
 }
 
 
 std::string WSsrv::registerClient ( int id, const std::string &query  ) {
 
 
-	// verifica se ci sia un altro client con lo stesso id, nel caso lo cancella
-	auto it = clients.find ( id );
-	if ( it != clients.end() )
-		clients.erase (id);
-
-	Client * client = new Client ;
-	clients.insert ( std::pair< int, Client *> ( id, client ) ) ;
+	// Registration owns each allocation until the client is fully initialized.
+	unregisterClient(id);
+	auto client = std::make_unique<Client>();
 
 	client->socket = id;
 	client->setQueryString ( query ) ;
@@ -4419,21 +4421,12 @@ std::string WSsrv::registerClient ( int id, const std::string &query  ) {
 
 	ss << "root =" << document_root << " file=" << file << " system=" << system_data;
 
-	SolarSystem * system  ;
-	try {
-
-		system = new SolarSystem ( system_data ) ;
-
-	} catch ( const std::string & str ) {
-
-		print_log( str );
-
-	}
-
-	clientData * data = new clientData ( this, system, sockfd );
+	auto system = std::make_unique<SolarSystem>(system_data);
+	auto data = std::make_unique<clientData>(this, system.get(), sockfd);
+	system.release(); // clientData owns and destroys the SolarSystem.
 
 	// registra i dati extra per il client
-	client->extra = data ;
+	client->extra = data.get();
 
 
 	try {
@@ -4469,6 +4462,9 @@ std::string WSsrv::registerClient ( int id, const std::string &query  ) {
         "</results>" ;
 
      
+      clients.emplace(id, client.get());
+      data.release();
+      client.release();
       return xml.str();
 
 		}
@@ -4482,13 +4478,14 @@ std::string WSsrv::registerClient ( int id, const std::string &query  ) {
 
           std::cerr << "Catturata un'eccezione sconosciuta o generica." << std::endl;
     }
-
+	throw std::runtime_error("Registrazione client astronomico fallita");
 }
 
 
 class clientData  * WSsrv::client_data ( int sockfd )
 {
   auto it = clients.find ( sockfd );
+  if (it == clients.end()) return nullptr;
   Client * client = it->second;
 
   return reinterpret_cast < clientData * > ( client->extra );
@@ -4502,6 +4499,7 @@ std::string  WSsrv::executeLoop ( int id  )
 	
   
   auto it = clients.find ( id );
+	if (it == clients.end()) return "";
 	Client * client = it->second;
 
 	clientData * data = reinterpret_cast < clientData * > ( client->extra );
@@ -4526,6 +4524,7 @@ std::string  WSsrv::executeLoop ( int id  )
 std::string WSsrv::setLight ( int id ) {
 
 	auto it = clients.find ( id );
+	if (it == clients.end()) return "";
 	Client * client = it->second;
 
 	clientData * data = reinterpret_cast < clientData * > ( client->extra );
@@ -4556,6 +4555,7 @@ std::string WSsrv::setLight ( int id ) {
 std::string WSsrv::setCamera ( int id ) {
 
 	auto it = clients.find ( id );
+	if (it == clients.end()) return "";
 	Client * client = it->second;
 
 	clientData * data = reinterpret_cast < clientData * > ( client->extra );

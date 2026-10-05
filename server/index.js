@@ -45,6 +45,7 @@ class the_server extends Server {
             id: id,
             client_ip: jdata.client_ip,
             query: jdata.query,
+            sessionId: jdata.SESSION,
             intervalId: null  // ← Per cleanup corretto
         };
         

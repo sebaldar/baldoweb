@@ -17,11 +17,17 @@ class SseEmitter:
     def __init__(self):
         self._queue: asyncio.Queue = asyncio.Queue()
         self._loop:  asyncio.AbstractEventLoop | None = None
+        self.cancelled = False
+        self.completed = False
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
 
     def emit_sync(self, tipo: str, **kwargs: Any) -> None:
+        if self.cancelled:
+            return
+        if tipo in ('final', 'error'):
+            self.completed = True
         event = {"tipo": tipo, **kwargs}
         if self._loop and self._loop.is_running():
             self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
@@ -41,14 +47,15 @@ class SseEmitter:
                 pass
 
     async def stream(self) -> AsyncIterator[str]:
-        while True:
-            item = await self._queue.get()
-            if item is SENTINEL:
-                break
-            try:
+        try:
+            while True:
+                item = await self._queue.get()
+                if item is SENTINEL:
+                    break
                 yield json.dumps(item, ensure_ascii=False) + "\n"
-            except Exception as e:
-                logger.error(f"[EMITTER] Serializzazione fallita: {e}")
+        finally:
+            if not self.completed:
+                self.cancelled = True
 
 # ── Helper per i nodi (Sincronizzati con node_classify e node_weather) ────────
 

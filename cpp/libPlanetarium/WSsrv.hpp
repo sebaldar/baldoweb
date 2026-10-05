@@ -50,7 +50,7 @@ public :
 	Client * getClient( int id )  {
     // cerca nei clients
     auto it =  clients.find( id ) ;
-    return it->second;
+    return it == clients.end() ? nullptr : it->second;
   }
 
 	WSsrv ( );

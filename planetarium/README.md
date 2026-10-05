@@ -169,6 +169,36 @@ L'azimut usa `deviceorientationabsolute` (Android Chrome) per riferirsi al **nor
 
 ## Avvio e Deploy
 
+### Stato della simulazione e chat
+
+Posizione, data e ora UTC, direzione e impostazioni della vista sono condivise
+tra renderer e chat. Alla riconnessione WebSocket vengono ripristinati gli ultimi
+valori della simulazione, compresa la posizione scelta sulla mappa.
+
+La chat mostra la risposta progressivamente, accetta una domanda alla volta e
+gestisce errori, disconnessioni e timeout. Lo storico è isolato per sessione:
+massimo otto scambi e 16.000 caratteri, scadenza dopo un'ora di inattività,
+massimo 256 sessioni conservate. Risiede nella memoria del singolo worker Python
+e si perde al riavvio; i checkpoint del grafo vengono rilasciati dopo ogni richiesta.
+I calcoli della chat e dell'API astronomica usano client temporanei con identificativi
+separati dalle connessioni WebSocket e rilasciano le risorse anche in caso di errore.
+
+### Verifica delle modifiche
+
+```bash
+npm test --prefix server
+# Nell'ambiente Python del servizio planetario, dalla directory fastapi-planetarium:
+python -B -m unittest discover -s tests -v
+# Test di rilascio dei client, senza database né asset astronomici:
+g++ -std=c++17 -fsanitize=address,undefined -g cpp/libPlanetarium/tests/client-lifecycle.cpp -o /tmp/planetarium-client-test
+/tmp/planetarium-client-test
+```
+
+I test della chat simulano provider, ricerca vettoriale e meteo e non consumano token.
+Le modifiche a C++ e al binding richiedono una nuova build del servizio `app`;
+quelle Python richiedono una nuova build di `fastapi-planetarium`. Il frontend
+deve includere anche `planetarium-state.js` nella directory servita dal web server.
+
 Il progetto gira interamente in Docker su **baldoweb**:
 
 ```bash

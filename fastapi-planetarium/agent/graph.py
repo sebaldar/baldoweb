@@ -62,6 +62,8 @@ def route_after_classify(state) -> list[str]:
 
 def _make_node(fn, emitter: SseEmitter):
     def wrapped(state) -> dict:
+        if emitter.cancelled:
+            return {}
         # LangGraph passa lo stato come dict — lo accediamo direttamente
         # senza conversione a oggetto, usando get() con default
         if not isinstance(state, dict):
@@ -125,7 +127,7 @@ async def run_graph(
     emitter: SseEmitter,
     checkpointer: MemorySaver,
     session_id: str,
-) -> None:
+) -> dict | None:
     """
     Esegue il grafo in un thread separato (i nodi sono sincroni)
     mentre FastAPI streamma gli eventi SSE in parallelo.
@@ -143,7 +145,7 @@ async def run_graph(
 
     def _run():
         try:
-            graph.invoke(state_input, config=config)
+            return graph.invoke(state_input, config=config)
         except Exception as e:
             import traceback
             logger.error(f"[GRAPH] Errore esecuzione: {e}")
@@ -153,4 +155,4 @@ async def run_graph(
         finally:
             emitter.close_sync()
 
-    await loop.run_in_executor(_executor, _run)
+    return await loop.run_in_executor(_executor, _run)

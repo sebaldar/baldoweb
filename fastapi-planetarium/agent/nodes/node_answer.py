@@ -26,6 +26,7 @@ REGOLE DI RISPOSTA:
 3. EFFETTO GIORNO: Se ti viene indicato che un oggetto è "INVISIBILE per la luce del giorno", significa che il Sole è sorto. Spiega all'utente che l'oggetto è fisicamente sopra l'orizzonte, ma il cielo azzurro diurno ne impedisce totalmente l'osservazione.
 4. L'orario indicato è in UT. Adattalo all'ora locale italiana.
 5. Usa SOLO la rosa dei venti (es. "verso Sud-Ovest"). Evita di nominare la parola "Azimut".
+6. La cronologia serve a capire i riferimenti delle domande successive. Per posizioni e visibilità usa soltanto i dati della simulazione corrente, perché data e luogo possono essere cambiati.
 """
 
 def node_answer(state: PlanetariumState, emitter: SseEmitter) -> dict:
@@ -48,7 +49,7 @@ def node_answer(state: PlanetariumState, emitter: SseEmitter) -> dict:
 
     if data:
         context_parts.append(f"Data simulazione richiesta: {data}")
-    if lat and lon:
+    if lat is not None and lon is not None:
         context_parts.append(f"Posizione osservatore: lat={lat:.2f}°, lon={lon:.2f}°")
 
     # 1. Documenti RAG (Messi per primi così non rubano l'attenzione)
@@ -146,8 +147,11 @@ def node_answer(state: PlanetariumState, emitter: SseEmitter) -> dict:
     try:
         for chunk in llm.stream([
             SystemMessage(content=ANSWER_SYSTEM),
+            *state.get('messages', [])[:-1],
             HumanMessage(content=user_prompt),
         ]):
+            if emitter.cancelled:
+                return {'answer_text': '', 'extra': extra}
             if chunk.content:
                 emit_token(emitter, chunk.content)
                 full_text += chunk.content

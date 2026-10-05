@@ -1,10 +1,28 @@
 #include <node.h>
 #include <iostream>
+#include <exception>
+#include <functional>
 #include "WSsrv.hpp"
 
 using namespace v8;
 
 WSsrv solar;
+
+// Native errors must reach JavaScript; exceptions cannot escape a V8 callback.
+void returnNativeString(const FunctionCallbackInfo<Value>& args,
+                        const std::function<std::string()>& operation) {
+    Isolate* isolate = args.GetIsolate();
+    try {
+        const std::string result = operation();
+        args.GetReturnValue().Set(String::NewFromUtf8(isolate, result.c_str()).ToLocalChecked());
+    } catch (const std::exception& error) {
+        isolate->ThrowException(Exception::Error(String::NewFromUtf8(isolate, error.what()).ToLocalChecked()));
+    } catch (const std::string& error) {
+        isolate->ThrowException(Exception::Error(String::NewFromUtf8(isolate, error.c_str()).ToLocalChecked()));
+    } catch (...) {
+        isolate->ThrowException(Exception::Error(String::NewFromUtf8(isolate, "Errore motore astronomico").ToLocalChecked()));
+    }
+}
 
 // Utility per convertire velocemente argomento stringa
 std::string ToStdString(Isolate* isolate, Local<Value> value) {
@@ -42,11 +60,7 @@ void registerClient(const FunctionCallbackInfo<Value>& args) {
     int socket = args[0]->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
     std::string query = ToStdString(isolate, args[1]);
 
-    std::string xml = solar.registerClient(socket, query);
-
-    args.GetReturnValue().Set(
-        String::NewFromUtf8(isolate, xml.c_str()).ToLocalChecked()
-    );
+    returnNativeString(args, [&] { return solar.registerClient(socket, query); });
 }
 
 void render(const FunctionCallbackInfo<Value>& args) {
@@ -60,11 +74,7 @@ void render(const FunctionCallbackInfo<Value>& args) {
     }
 
     int socket = args[0]->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
-    std::string xml = solar.render(socket);
-
-    args.GetReturnValue().Set(
-        String::NewFromUtf8(isolate, xml.c_str()).ToLocalChecked()
-    );
+    returnNativeString(args, [&] { return solar.render(socket); });
 }
 
 void handleClient(const FunctionCallbackInfo<Value>& args) {
@@ -80,11 +90,7 @@ void handleClient(const FunctionCallbackInfo<Value>& args) {
     int socket = args[0]->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
     std::string buffer = ToStdString(isolate, args[1]);
 
-    std::string xml = solar.handleClient(socket, buffer);
-
-    args.GetReturnValue().Set(
-        String::NewFromUtf8(isolate, xml.c_str()).ToLocalChecked()
-    );
+    returnNativeString(args, [&] { return solar.handleClient(socket, buffer); });
 }
 
 void computeCelestialPositions(const FunctionCallbackInfo<Value>& args) {
@@ -100,11 +106,7 @@ void computeCelestialPositions(const FunctionCallbackInfo<Value>& args) {
     int socket = args[0]->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
     std::string buffer = ToStdString(isolate, args[1]);
 
-    std::string json = solar.computeCelestialPositions(socket, buffer);
-
-    args.GetReturnValue().Set(
-        String::NewFromUtf8(isolate, json.c_str()).ToLocalChecked()
-    );
+    returnNativeString(args, [&] { return solar.computeCelestialPositions(socket, buffer); });
 }
 
 void do_sendLoop(const FunctionCallbackInfo<Value>& args) {
@@ -118,11 +120,7 @@ void do_sendLoop(const FunctionCallbackInfo<Value>& args) {
     }
 
     int socket = args[0]->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
-    std::string xml = solar.do_sendLoop(socket);
-    
-    args.GetReturnValue().Set(
-        String::NewFromUtf8(isolate, xml.c_str()).ToLocalChecked()
-    );
+    returnNativeString(args, [&] { return solar.do_sendLoop(socket); });
 }
 
 void Initialize(Local<Object> exports) {

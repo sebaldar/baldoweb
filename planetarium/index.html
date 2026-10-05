@@ -416,6 +416,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="planetarium-state.js"></script>
     <script src="planetarium-webgl.js"></script>
     <script src="planetarium-controls.js"></script>
 
@@ -427,6 +428,7 @@
         let ws;
         let deviceLatitude  = 45.46;
         let deviceLongitude = 9.19;
+        const simulation = PlanetariumSimulation.create();
 
         // ── API init (per impostare cookies) ─────────────────────────────────
         async function initAPI() {
@@ -478,7 +480,11 @@
                 obj.session = sessionId;
             }
             
-            try { ws.send(JSON.stringify(obj)); }
+            try {
+                ws.send(JSON.stringify(obj));
+                if (obj.pagina === 'PLANETARIUM' && obj.doc === 'command')
+                    simulation.trackCommand(obj.data);
+            }
             catch (e) { logToPage(`❌ Errore invio: ${e.message}`, 'error'); }
         }
 
@@ -736,6 +742,9 @@
                 alert('Inserisci latitudine e longitudine valide');
                 return;
             }
+
+            try { simulation.setLocation(lat, lon); }
+            catch (error) { alert(error.message); return; }
             
             const command = `observe ${lon} ${lat} ${direction}`;
             wsSend({ pagina: "PLANETARIUM", doc: "command", data: command });
@@ -792,7 +801,7 @@
 
                     if (data.startsWith('{')) {
                         const jsonData = JSON.parse(data);
-                        if ( jsonData.action === "chat_result" ) {
+                        if (jsonData.action === 'chat_result' || jsonData.action === 'chat_error') {
                             chatbotReceive(jsonData);
                             return; 
                         }
@@ -811,6 +820,7 @@
 
             function processXmlMessage(xmlString) {
                 const xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
+                simulation.updateFromXml(xmlDoc, window.dateTimeInputsLocked?.());
                 
                 const terminal = xmlDoc.querySelector('terminal');
                 if (terminal && terminal.textContent.trim()) {
@@ -836,6 +846,7 @@
             };
 
             ws.onclose = (event) => {
+                window.chatbotDisconnected?.();
                 let statusText = '⚫ Disconnesso';
                 if (event.code === 1006) statusText = '⚫ Connessione fallita';
                 else if (event.code === 1015) statusText = '⚫ SSL/TLS Error';
@@ -848,17 +859,7 @@
 
         function sendInitializationCommands() {
             logToPage('🔧 Inizializzazione comandi...', 'info');
-            const commands = [
-                { cmd: 'execute_loop off',                               delay:    0 },
-                { cmd: `observe ${deviceLongitude} ${deviceLatitude} N`, delay:  300 },
-                { cmd: 'fov 70',                                          delay:  600 },
-                { cmd: 'horizont true',                                   delay:  900 },
-                { cmd: 'light on',                                        delay: 1200 },
-                { cmd: 'execute_loop on',                                 delay: 1800 },
-            ];
-            commands.forEach(({ cmd, delay }) =>
-                setTimeout(() => sendCommand(cmd), delay)
-            );
+            simulation.restorationCommands().forEach(sendCommand);
         }
 
         function updateConnectionStatus(status, text) {
@@ -876,6 +877,7 @@
                         (pos) => {
                             deviceLatitude  = pos.coords.latitude;
                             deviceLongitude = pos.coords.longitude;
+                            simulation.setLocation(deviceLatitude, deviceLongitude);
                             logToPage(`✅ GPS: ${deviceLatitude.toFixed(4)}°, ${deviceLongitude.toFixed(4)}°`, 'success');
                             resolve();
                         },
@@ -894,6 +896,7 @@
                 .then(d => {
                     deviceLatitude  = d.latitude;
                     deviceLongitude = d.longitude;
+                    simulation.setLocation(deviceLatitude, deviceLongitude);
                     logToPage(`🌐 IP: ${deviceLatitude.toFixed(4)}°, ${deviceLongitude.toFixed(4)}°`, 'success');
                 })
                 .catch(() => {
@@ -1001,16 +1004,16 @@
             sendCommand(`zoom ${zoom}`);
         });
 
+        let orbitResumeRunning = true;
         document.getElementById('orbit-control-toggle').addEventListener('change', (e) => {
             const enabled = e.target.checked;
             controls.setOrbit(enabled);
             if (enabled) {
+                orbitResumeRunning = simulation.snapshot().running;
                 sendCommand('execute_loop off');
             } else {
-                sendCommand('execute_loop off');
-                setTimeout(() => sendCommand(`observe ${deviceLongitude} ${deviceLatitude} N`), 200);
-                setTimeout(() => sendCommand('horizont true'), 400);
-                setTimeout(() => sendCommand('execute_loop on'), 800);
+                simulation.trackCommand(`execute_loop ${orbitResumeRunning ? 'on' : 'off'}`);
+                sendInitializationCommands();
             }
         });
 
@@ -1043,6 +1046,10 @@
             let _popupOpen = false;
             let _lastInputWasVoice = false;
             let _pendingWasVoice = false;
+            let _activeRequest = null;
+            let _requestTimer = null;
+            let _streamBubble = null;
+            let _streamText = '';
 
             function _addMessage(text, role) {
                 const container = document.getElementById('chatbot-messages');
@@ -1056,12 +1063,30 @@
                 bubble.innerHTML = safe;
                 container.appendChild(bubble);
                 container.scrollTop = container.scrollHeight;
+                return bubble;
             }
 
             function _setTyping(visible) {
                 document.getElementById('chatbot-typing').classList.toggle('chatbot-hidden', !visible);
                 document.getElementById('chatbot-messages').scrollTop = 99999;
             }
+
+            function _finishRequest() {
+                clearTimeout(_requestTimer);
+                _requestTimer = null;
+                _activeRequest = null;
+                _streamBubble = null;
+                _streamText = '';
+                _setTyping(false);
+                document.getElementById('chatbot-send-btn').disabled = false;
+                document.getElementById('chatbot-mic-btn').disabled = false;
+            }
+
+            window.chatbotDisconnected = function() {
+                if (!_activeRequest) return;
+                _addMessage('Connessione interrotta. Riprova dopo la riconnessione.', 'server');
+                _finishRequest();
+            };
 
             window.chatbotTogglePopup = function() {
                 _popupOpen = !_popupOpen;
@@ -1092,7 +1117,15 @@
             window.chatbotSend = function() {
                 const input = document.getElementById('chatbot-input');
                 const text  = input.value.trim();
-                if (!text) return;
+                if (!text || _activeRequest) return;
+                if (text.length > 2000) {
+                    _addMessage('La domanda può contenere al massimo 2000 caratteri.', 'server');
+                    return;
+                }
+                if (!wsIsOpen()) {
+                    _addMessage('WebSocket non connesso. Riprova tra un momento.', 'server');
+                    return;
+                }
 
                 _pendingWasVoice = _lastInputWasVoice;
                 _lastInputWasVoice = false;
@@ -1110,15 +1143,13 @@
                 input.value = '';
                 _setTyping(true);
 
-                const simDate = document.getElementById('sim-date')?.value || '';
-                const simTime = document.getElementById('sim-time')?.value || '';
-                const data    = simDate && simTime ? `${simDate}T${simTime}` : simDate || simTime || '';
-
-				if (!wsIsOpen()) {
-                    _setTyping(false);
-                    _addMessage('⚠️ WebSocket non connesso. Riprova tra un momento.', 'server');
-                    return;
-                }
+                _activeRequest = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+                document.getElementById('chatbot-send-btn').disabled = true;
+                document.getElementById('chatbot-mic-btn').disabled = true;
+                _requestTimer = setTimeout(() => {
+                    _addMessage('Tempo di risposta scaduto. Puoi riprovare.', 'server');
+                    _finishRequest();
+                }, 125000);
 
                 const selectedProvider = document.getElementById('ai-provider')?.value || 'ionos';
 
@@ -1127,9 +1158,8 @@
                     text:     text,
                     action:   'CHATBOT',
                     provider: selectedProvider,
-                    data:     data,
-                    lat:      deviceLatitude,
-                    lon:      deviceLongitude
+                    request_id: _activeRequest,
+                    ...simulation.chatContext()
                 });
             };
 			
@@ -1140,15 +1170,35 @@
 			};                
 
             window.chatbotReceive = function(serverMsg) {
-                _setTyping(false);
+                if (!_activeRequest || (serverMsg.request_id && serverMsg.request_id !== _activeRequest)) return;
+                const tipo = serverMsg.action === 'chat_error' ? 'error' : serverMsg.tipo;
+                if (tipo === 'thinking' || tipo === 'rag_result') return;
+                if (tipo === 'cmd') {
+                    if (typeof serverMsg.cmd === 'string' && serverMsg.cmd.trim()) sendCommand(serverMsg.cmd);
+                    return;
+                }
+                if (tipo === 'weather') return;
+                if (tipo === 'token') {
+                    if (!_streamBubble) _streamBubble = _addMessage('', 'server');
+                    _streamText += serverMsg.text || '';
+                    _streamBubble.textContent = _streamText;
+                    document.getElementById('chatbot-messages').scrollTop = 99999;
+                    return;
+                }
+                if (tipo === 'error') {
+                    _addMessage(serverMsg.text || serverMsg.message || 'Errore nella risposta. Riprova.', 'server');
+                    _finishRequest();
+                    return;
+                }
+                if (tipo !== 'final') return;
 
                 if (serverMsg.tipo === "final" ) {
-                    if ( serverMsg.extra?.ra && serverMsg.extra?.dec ) {
+                    if (serverMsg.extra?.ra != null && serverMsg.extra?.dec != null) {
                         sendCommand(`sky ${serverMsg.extra.ra / 15} ${serverMsg.extra.dec}`);
                         sendCommand(`constellation ${serverMsg.extra.target} show`);
                         sendCommand(`asterism ${serverMsg.extra.target} show`);
                     }
-                    else if ( serverMsg.extra?.needs_realtime ) {
+                    else if (serverMsg.extra?.needs_realtime && serverMsg.extra?.target) {
                         sendCommand(`lookat ${serverMsg.extra.target.toLowerCase()}`);
                     }
                     
@@ -1156,16 +1206,14 @@
                     if (textToSpeak && _pendingWasVoice) chatbotSpeak(textToSpeak);
                 }
                 
-                if (serverMsg.tipo === "cmd" || serverMsg.tipo === "rag_result" ) {
-                    sendCommand(`${serverMsg.cmd}`);
-					return;
-				}
                 
                 const msg = (typeof serverMsg === 'string')
                     ? serverMsg
                     : (serverMsg.text || serverMsg.response || JSON.stringify(serverMsg));
                 
+                if (_streamBubble) _streamBubble.remove();
                 _addMessage(msg, 'server');
+                _finishRequest();
                 
                 if (!_popupOpen) {
                     const toggleBtn = document.getElementById('chatbot-toggle-btn');

@@ -48,6 +48,7 @@ REGOLE DI COMPORTAMENTO:
 1. SPOSTAMENTO RELATIVO: Se l'utente specifica GRADI (es. "15 gradi nord"), usa "spostamento": {"alt": 15, "az": 0}.
 2. PUNTAMENTO FISSO: Se chiede una direzione senza gradi (es. "guarda a Nord"), usa "direzione": "N".
 3. CORPI CELESTI: Se l'utente nomina una stella, costellazione o pianeta (es. "Orione", "Sirio", "Luna"), DEVI inserirla nell'array "corpi_celesti".
+4. Usa la cronologia per risolvere riferimenti come "e quando sarà visibile?". Classifica e genera comandi SOLO per l'ultima domanda, senza ripetere azioni precedenti.
 
 Schema JSON RIGOROSO:
 {
@@ -72,10 +73,8 @@ def node_classify(state: PlanetariumState, emitter: SseEmitter) -> dict:
 
     try:
         llm = get_llm(provider, streaming=False)
-        response = llm.invoke([
-            SystemMessage(content=CLASSIFY_SYSTEM),
-            HumanMessage(content=prompt),
-        ])
+        response = llm.invoke([SystemMessage(content=CLASSIFY_SYSTEM),
+            *(state.get('messages') or [HumanMessage(content=prompt)])])
         raw = response.content.strip()
         json_match = re.search(r'\{.*\}', raw, re.DOTALL)
 

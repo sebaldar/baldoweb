@@ -1,8 +1,7 @@
 import 'dotenv/config';
 import { skyDirection } from '../../services/sky-directions.js';
 import { loadSolarModule } from '../../services/native-loader.js';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { computeSnapshot } from '../../services/planetarium-snapshot.js';
 
 
 let solar;
@@ -15,16 +14,6 @@ try {
 
 export default {
     async exe(jdata) {
-        
-        const session_dir = jdata.session_dir;
-        const user_file = path.join(session_dir, 'user.json');
-        const raw_user = await fs.readFile(user_file, 'utf8');
-        const user_data = JSON.parse(raw_user);
-        
-        
-            
-        const id = user_data?.data?.planetarium?.id || 100;
-
         // Dati per il calcolo
         const config = {
             lookfrom: "earth",
@@ -35,9 +24,7 @@ export default {
             date: `${jdata.query.data} ${jdata.query.ora}`
         };
         
-        solar.registerClient(id, "{}");
-        const res_raw = solar.computeCelestialPositions(id, JSON.stringify(config)); 
-        solar.unregisterClient(id);
+        const res_raw = computeSnapshot(solar, config);
 
         // 1. Pulizia NaN e Parsing
         const res_cleaned = res_raw.replace(/-?nan/g, "null");

@@ -22,8 +22,10 @@
       ],
       "cflags_cc": [
         "-std=c++20",
-        "-fPIC"
-      ]
+        "-fPIC",
+        "-fexceptions"
+      ],
+      "cflags_cc!": [ "-fno-exceptions" ]
     }
   ]
 }

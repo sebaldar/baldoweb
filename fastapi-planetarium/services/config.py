@@ -62,6 +62,7 @@ def get_llm(provider: str | None = None, streaming: bool = True):
                 openai_api_base=s.ionos_base_url,
                 streaming=streaming,
                 temperature=0.3,
+                timeout=45, max_retries=1,
             )
 
     if p == "anthropic":
@@ -70,6 +71,7 @@ def get_llm(provider: str | None = None, streaming: bool = True):
             api_key=s.anthropic_api_key,
             streaming=streaming,
             temperature=0.3,
+            timeout=45, max_retries=1,
         )
 
     if p == "openai":
@@ -78,6 +80,7 @@ def get_llm(provider: str | None = None, streaming: bool = True):
             openai_api_key=s.openai_api_key,
             streaming=streaming,
             temperature=0.3,
+            timeout=45, max_retries=1,
         )
 
     if p == "gemini":
@@ -86,6 +89,7 @@ def get_llm(provider: str | None = None, streaming: bool = True):
             google_api_key=s.google_api_key,
             streaming=streaming,
             temperature=0.3,
+            timeout=45, max_retries=1,
         )
 
     raise ValueError(f"Provider sconosciuto: {provider}")
